@@ -112,5 +112,6 @@ def me(user: dict = Depends(get_current_user)):
         "sub": user["sub"],
         "username": user["username"],
         "name": user["name"],
+        "email": user.get("email", ""),
         "avatar_url": user.get("avatar_url"),
     }

@@ -15,6 +15,7 @@ def create_token(user: dict, gitlab_token: str = "") -> str:
         "sub": str(user["id"]),
         "username": user["username"],
         "name": user["name"],
+        "email": user.get("email", ""),
         "avatar_url": user.get("avatar_url"),
         "gitlab_token": gitlab_token,
         "exp": datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS),

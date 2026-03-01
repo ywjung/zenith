@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createTicket, fetchProjects } from '@/lib/api'
 import type { GitLabProject } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
+import { useAuth } from '@/context/AuthContext'
 
 const CATEGORIES = [
   { value: 'hardware', label: '🖥️ 하드웨어 (PC, 프린터, 모니터 등)' },
@@ -23,6 +24,7 @@ const PRIORITIES = [
 
 function NewTicketContent() {
   const router = useRouter()
+  const { user } = useAuth()
   const [projects, setProjects] = useState<GitLabProject[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [form, setForm] = useState({
@@ -34,6 +36,17 @@ function NewTicketContent() {
     employee_email: '',
     project_id: '',
   })
+
+  // 로그인한 사용자 정보로 이름/이메일 자동 채우기
+  useEffect(() => {
+    if (user) {
+      setForm((prev) => ({
+        ...prev,
+        employee_name: prev.employee_name || user.name,
+        employee_email: prev.employee_email || user.email,
+      }))
+    }
+  }, [user])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -203,33 +216,35 @@ function NewTicketContent() {
         <hr />
 
         {/* 신청자 정보 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              이름 <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="employee_name"
-              value={form.employee_name}
-              onChange={handleChange}
-              required
-              placeholder="홍길동"
-              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">신청자 정보</span>
+            <span className="text-xs text-gray-400">GitLab 계정 정보로 자동 입력됩니다</span>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              이메일 <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="employee_email"
-              type="email"
-              value={form.employee_email}
-              onChange={handleChange}
-              required
-              placeholder="hong@company.com"
-              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">이름</label>
+              <input
+                name="employee_name"
+                value={form.employee_name}
+                onChange={handleChange}
+                required
+                placeholder="홍길동"
+                className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">이메일</label>
+              <input
+                name="employee_email"
+                type="email"
+                value={form.employee_email}
+                onChange={handleChange}
+                required
+                placeholder="hong@company.com"
+                className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+              />
+            </div>
           </div>
         </div>
 
