@@ -54,6 +54,23 @@ export async function fetchRating(iid: number): Promise<Rating | null> {
   return data ?? null
 }
 
+export function updateTicket(
+  iid: number,
+  data: { status?: string; priority?: string },
+): Promise<Ticket> {
+  return request<Ticket>(`/tickets/${iid}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
+export function addComment(iid: number, body: string): Promise<Comment> {
+  return request<Comment>(`/tickets/${iid}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  })
+}
+
 export function createRating(iid: number, data: RatingCreate): Promise<Rating> {
   return request<Rating>(`/tickets/${iid}/ratings`, {
     method: 'POST',

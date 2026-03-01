@@ -72,6 +72,29 @@ def add_note(iid: int, body: str) -> dict:
         return resp.json()
 
 
+def update_issue(
+    iid: int,
+    add_labels: list[str] | None = None,
+    remove_labels: list[str] | None = None,
+    state_event: str | None = None,
+) -> dict:
+    payload: dict = {}
+    if add_labels:
+        payload["add_labels"] = ",".join(add_labels)
+    if remove_labels:
+        payload["remove_labels"] = ",".join(remove_labels)
+    if state_event:
+        payload["state_event"] = state_event
+    with httpx.Client(timeout=30) as client:
+        resp = client.put(
+            f"{_base()}/issues/{iid}",
+            headers=_headers(),
+            json=payload,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 def ensure_labels() -> None:
     """GitLab 프로젝트에 필수 라벨을 생성한다 (이미 존재하면 무시)."""
     labels = [

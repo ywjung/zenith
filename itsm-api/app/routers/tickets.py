@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
 from ..auth import get_current_user
-from ..schemas import TicketCreate, TicketResponse, CommentResponse
+from ..schemas import TicketCreate, TicketResponse, CommentResponse, TicketUpdate, CommentCreate
 from .. import gitlab_client
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -111,6 +111,61 @@ def get_ticket(iid: int, _user: dict = Depends(get_current_user)):
     try:
         issue = gitlab_client.get_issue(iid)
         return _issue_to_response(issue)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
+
+
+@router.patch("/{iid}", response_model=dict)
+def update_ticket(iid: int, data: TicketUpdate, _user: dict = Depends(get_current_user)):
+    try:
+        issue = gitlab_client.get_issue(iid)
+        current_labels = issue.get("labels", [])
+
+        add_labels: list[str] = []
+        remove_labels: list[str] = []
+        state_event = None
+
+        if data.status is not None:
+            for label in current_labels:
+                if label.startswith("status::"):
+                    remove_labels.append(label)
+            if data.status == "closed":
+                state_event = "close"
+                add_labels.append("status::resolved")
+            elif data.status == "reopened":
+                state_event = "reopen"
+                add_labels.append("status::open")
+            else:
+                add_labels.append(f"status::{data.status}")
+
+        if data.priority is not None:
+            for label in current_labels:
+                if label.startswith("prio::"):
+                    remove_labels.append(label)
+            add_labels.append(f"prio::{data.priority}")
+
+        updated = gitlab_client.update_issue(
+            iid,
+            add_labels=add_labels or None,
+            remove_labels=remove_labels or None,
+            state_event=state_event,
+        )
+        return _issue_to_response(updated)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
+
+
+@router.post("/{iid}/comments", response_model=dict, status_code=201)
+def add_comment(iid: int, data: CommentCreate, _user: dict = Depends(get_current_user)):
+    try:
+        note = gitlab_client.add_note(iid, data.body)
+        return {
+            "id": note["id"],
+            "body": note["body"],
+            "author_name": note["author"]["name"],
+            "author_avatar": note["author"].get("avatar_url"),
+            "created_at": note["created_at"],
+        }
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
 

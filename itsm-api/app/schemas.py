@@ -36,6 +36,15 @@ class CommentResponse(BaseModel):
     created_at: str
 
 
+class TicketUpdate(BaseModel):
+    status: Optional[str] = Field(default=None, description="open|in_progress|resolved|closed|reopened")
+    priority: Optional[str] = Field(default=None, description="low|medium|high|critical")
+
+
+class CommentCreate(BaseModel):
+    body: str = Field(..., min_length=1, max_length=10000)
+
+
 class RatingCreate(BaseModel):
     employee_name: str = Field(..., min_length=2, max_length=100)
     employee_email: Optional[str] = Field(default=None, max_length=200)
