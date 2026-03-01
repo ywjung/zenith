@@ -13,16 +13,23 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.get("/login")
-def login():
+def login(request: Request):
     settings = get_settings()
-    params = urllib.parse.urlencode({
+    params: dict = {
         "client_id": settings.GITLAB_OAUTH_CLIENT_ID,
         "redirect_uri": settings.GITLAB_OAUTH_REDIRECT_URI,
         "response_type": "code",
         "scope": "read_user read_api",
         "state": secrets.token_urlsafe(16),
-    })
-    return RedirectResponse(f"{settings.GITLAB_EXTERNAL_URL}/oauth/authorize?{params}")
+    }
+    needs_reauth = request.cookies.get("itsm_reauth") == "1"
+    if needs_reauth:
+        params["prompt"] = "login"  # GitLab에 재인증 강제
+
+    response = RedirectResponse(f"{settings.GITLAB_EXTERNAL_URL}/oauth/authorize?{urllib.parse.urlencode(params)}")
+    if needs_reauth:
+        response.delete_cookie("itsm_reauth")
+    return response
 
 
 @router.get("/callback")
@@ -92,6 +99,8 @@ def logout(request: Request):
 
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie("itsm_token")
+    # 다음 로그인 시 GitLab 재인증을 강제하기 위한 단기 쿠키 (5분)
+    response.set_cookie("itsm_reauth", "1", max_age=300, httponly=True, samesite="lax")
     return response
 
 
