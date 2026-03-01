@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .database import engine, Base
-from .routers import auth, tickets, ratings
+from .routers import auth, tickets, ratings, projects
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,6 +55,7 @@ async def log_requests(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(tickets.router)
 app.include_router(ratings.router)
+app.include_router(projects.router)
 
 
 @app.get("/health", tags=["system"])

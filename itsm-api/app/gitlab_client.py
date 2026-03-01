@@ -4,19 +4,53 @@ from typing import Optional
 from .config import get_settings
 
 
-def _base() -> str:
+def _base(project_id: Optional[str] = None) -> str:
     s = get_settings()
-    return f"{s.GITLAB_API_URL}/api/v4/projects/{s.GITLAB_PROJECT_ID}"
+    pid = project_id or s.GITLAB_PROJECT_ID
+    return f"{s.GITLAB_API_URL}/api/v4/projects/{pid}"
 
 
 def _headers() -> dict:
     return {"PRIVATE-TOKEN": get_settings().GITLAB_ADMIN_TOKEN, "Content-Type": "application/json"}
 
 
-def create_issue(title: str, description: str, labels: list[str]) -> dict:
+def get_user_projects(user_id: str) -> list[dict]:
+    """사용자가 접근 가능한 GitLab 프로젝트 목록 반환.
+
+    Admin token으로 전체 프로젝트를 조회한 후, 해당 사용자가 멤버인 프로젝트만 반환.
+    멤버십 정보가 없으면 전체 프로젝트를 반환.
+    """
+    with httpx.Client(timeout=30) as client:
+        resp = client.get(
+            f"{get_settings().GITLAB_API_URL}/api/v4/projects",
+            headers=_headers(),
+            params={"per_page": 100, "simple": True, "order_by": "name", "sort": "asc"},
+        )
+        resp.raise_for_status()
+        all_projects = resp.json()
+
+        # 사용자 멤버십 조회 (GET /api/v4/users/{user_id}/memberships)
+        try:
+            membership_resp = client.get(
+                f"{get_settings().GITLAB_API_URL}/api/v4/users/{user_id}/memberships",
+                headers=_headers(),
+                params={"type": "Project", "per_page": 100},
+            )
+            if membership_resp.is_success:
+                memberships = membership_resp.json()
+                member_project_ids = {str(m["source_id"]) for m in memberships if m.get("source_type") == "Project"}
+                if member_project_ids:
+                    return [p for p in all_projects if str(p["id"]) in member_project_ids]
+        except Exception:
+            pass
+
+        return all_projects
+
+
+def create_issue(title: str, description: str, labels: list[str], project_id: Optional[str] = None) -> dict:
     with httpx.Client(timeout=30) as client:
         resp = client.post(
-            f"{_base()}/issues",
+            f"{_base(project_id)}/issues",
             headers=_headers(),
             json={"title": title, "description": description, "labels": ",".join(labels)},
         )
@@ -28,6 +62,7 @@ def get_issues(
     state: str = "all",
     labels: Optional[str] = None,
     search: Optional[str] = None,
+    project_id: Optional[str] = None,
 ) -> list[dict]:
     params: dict = {"per_page": 100, "order_by": "created_at", "sort": "desc"}
     if state != "all":
@@ -38,22 +73,22 @@ def get_issues(
         params["search"] = search
 
     with httpx.Client(timeout=30) as client:
-        resp = client.get(f"{_base()}/issues", headers=_headers(), params=params)
+        resp = client.get(f"{_base(project_id)}/issues", headers=_headers(), params=params)
         resp.raise_for_status()
         return resp.json()
 
 
-def get_issue(iid: int) -> dict:
+def get_issue(iid: int, project_id: Optional[str] = None) -> dict:
     with httpx.Client(timeout=30) as client:
-        resp = client.get(f"{_base()}/issues/{iid}", headers=_headers())
+        resp = client.get(f"{_base(project_id)}/issues/{iid}", headers=_headers())
         resp.raise_for_status()
         return resp.json()
 
 
-def get_notes(iid: int) -> list[dict]:
+def get_notes(iid: int, project_id: Optional[str] = None) -> list[dict]:
     with httpx.Client(timeout=30) as client:
         resp = client.get(
-            f"{_base()}/issues/{iid}/notes",
+            f"{_base(project_id)}/issues/{iid}/notes",
             headers=_headers(),
             params={"per_page": 100, "sort": "asc"},
         )
@@ -61,10 +96,10 @@ def get_notes(iid: int) -> list[dict]:
         return resp.json()
 
 
-def add_note(iid: int, body: str) -> dict:
+def add_note(iid: int, body: str, project_id: Optional[str] = None) -> dict:
     with httpx.Client(timeout=30) as client:
         resp = client.post(
-            f"{_base()}/issues/{iid}/notes",
+            f"{_base(project_id)}/issues/{iid}/notes",
             headers=_headers(),
             json={"body": body},
         )
@@ -72,9 +107,9 @@ def add_note(iid: int, body: str) -> dict:
         return resp.json()
 
 
-def delete_issue(iid: int) -> None:
+def delete_issue(iid: int, project_id: Optional[str] = None) -> None:
     with httpx.Client(timeout=30) as client:
-        resp = client.delete(f"{_base()}/issues/{iid}", headers=_headers())
+        resp = client.delete(f"{_base(project_id)}/issues/{iid}", headers=_headers())
         resp.raise_for_status()
 
 
@@ -83,6 +118,7 @@ def update_issue(
     add_labels: list[str] | None = None,
     remove_labels: list[str] | None = None,
     state_event: str | None = None,
+    project_id: Optional[str] = None,
 ) -> dict:
     payload: dict = {}
     if add_labels:
@@ -93,7 +129,7 @@ def update_issue(
         payload["state_event"] = state_event
     with httpx.Client(timeout=30) as client:
         resp = client.put(
-            f"{_base()}/issues/{iid}",
+            f"{_base(project_id)}/issues/{iid}",
             headers=_headers(),
             json=payload,
         )

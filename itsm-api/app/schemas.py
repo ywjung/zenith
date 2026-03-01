@@ -10,6 +10,7 @@ class TicketCreate(BaseModel):
     priority: str = Field(default="medium", description="low|medium|high|critical")
     employee_name: str = Field(..., min_length=2, max_length=100, description="신청자 이름")
     employee_email: str = Field(..., max_length=200, description="신청자 이메일")
+    project_id: Optional[str] = Field(default=None, description="GitLab 프로젝트 ID")
 
 
 class TicketResponse(BaseModel):

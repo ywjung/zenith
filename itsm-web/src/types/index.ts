@@ -12,6 +12,7 @@ export interface Ticket {
   category?: string
   priority?: string
   status?: string
+  project_id?: string
 }
 
 export interface TicketCreate {
@@ -21,6 +22,7 @@ export interface TicketCreate {
   priority: string
   employee_name: string
   employee_email: string
+  project_id?: string
 }
 
 export interface Comment {
@@ -45,4 +47,11 @@ export interface RatingCreate {
   employee_email?: string
   score: number
   comment?: string
+}
+
+export interface GitLabProject {
+  id: string
+  name: string
+  name_with_namespace: string
+  path_with_namespace: string
 }

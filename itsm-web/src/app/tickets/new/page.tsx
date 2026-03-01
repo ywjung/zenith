@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createTicket } from '@/lib/api'
+import { createTicket, fetchProjects } from '@/lib/api'
+import type { GitLabProject } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
 
 const CATEGORIES = [
@@ -22,6 +23,8 @@ const PRIORITIES = [
 
 function NewTicketContent() {
   const router = useRouter()
+  const [projects, setProjects] = useState<GitLabProject[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(true)
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -29,9 +32,22 @@ function NewTicketContent() {
     priority: 'medium',
     employee_name: '',
     employee_email: '',
+    project_id: '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchProjects()
+      .then((list) => {
+        setProjects(list)
+        if (list.length > 0) {
+          setForm((prev) => ({ ...prev, project_id: list[0].id }))
+        }
+      })
+      .catch(() => {/* 프로젝트 목록 로드 실패 시 무시 */})
+      .finally(() => setProjectsLoading(false))
+  }, [])
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -44,8 +60,13 @@ function NewTicketContent() {
     setSubmitting(true)
     setError(null)
     try {
-      const ticket = await createTicket(form)
-      router.push(`/tickets/${ticket.iid}`)
+      const payload = {
+        ...form,
+        project_id: form.project_id || undefined,
+      }
+      const ticket = await createTicket(payload)
+      const qs = ticket.project_id ? `?project_id=${ticket.project_id}` : ''
+      router.push(`/tickets/${ticket.iid}${qs}`)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '등록에 실패했습니다.')
       setSubmitting(false)
@@ -65,6 +86,36 @@ function NewTicketContent() {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-lg border shadow-sm p-6 space-y-5">
+        {/* 프로젝트 선택 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            프로젝트 <span className="text-red-500">*</span>
+          </label>
+          {projectsLoading ? (
+            <div className="w-full border rounded-md px-3 py-2 text-sm text-gray-400 bg-gray-50">
+              프로젝트 목록 불러오는 중...
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="w-full border rounded-md px-3 py-2 text-sm text-red-500 bg-red-50">
+              접근 가능한 프로젝트가 없습니다.
+            </div>
+          ) : (
+            <select
+              name="project_id"
+              value={form.project_id}
+              onChange={handleChange}
+              required
+              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name_with_namespace}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
         {/* 제목 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -191,7 +242,7 @@ function NewTicketContent() {
         <div className="flex gap-3 pt-2">
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || projectsLoading || projects.length === 0}
             className="flex-1 bg-blue-600 text-white py-2.5 rounded-md font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {submitting ? '등록 중...' : '티켓 등록'}

@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { fetchTicket, fetchComments, fetchRating, updateTicket, addComment, deleteTicket } from '@/lib/api'
 import type { Ticket, Comment, Rating } from '@/types'
@@ -37,7 +37,9 @@ const PRIORITY_OPTIONS = [
 function TicketDetailContent() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const iid = Number(params.id)
+  const projectId = searchParams.get('project_id') || undefined
 
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
@@ -53,7 +55,7 @@ function TicketDetailContent() {
 
   useEffect(() => {
     if (!iid) return
-    Promise.all([fetchTicket(iid), fetchComments(iid), fetchRating(iid)])
+    Promise.all([fetchTicket(iid, projectId), fetchComments(iid, projectId), fetchRating(iid)])
       .then(([t, c, r]) => {
         setTicket(t)
         setComments(c)
@@ -61,14 +63,14 @@ function TicketDetailContent() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [iid])
+  }, [iid, projectId])
 
   async function handleStatusChange(newStatus: string) {
     if (!ticket) return
     setUpdating(true)
     setActionError(null)
     try {
-      const updated = await updateTicket(iid, { status: newStatus })
+      const updated = await updateTicket(iid, { status: newStatus }, projectId)
       setTicket(updated)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '상태 변경 실패')
@@ -82,7 +84,7 @@ function TicketDetailContent() {
     setUpdating(true)
     setActionError(null)
     try {
-      const updated = await updateTicket(iid, { priority: newPriority })
+      const updated = await updateTicket(iid, { priority: newPriority }, projectId)
       setTicket(updated)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '우선순위 변경 실패')
@@ -95,7 +97,7 @@ function TicketDetailContent() {
     setDeleting(true)
     setActionError(null)
     try {
-      await deleteTicket(iid)
+      await deleteTicket(iid, projectId)
       router.push('/')
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '티켓 삭제 실패')
@@ -110,7 +112,7 @@ function TicketDetailContent() {
     setCommenting(true)
     setActionError(null)
     try {
-      const comment = await addComment(iid, newComment.trim())
+      const comment = await addComment(iid, newComment.trim(), projectId)
       setComments((prev) => [...prev, comment])
       setNewComment('')
     } catch (err) {
@@ -159,6 +161,10 @@ function TicketDetailContent() {
   } else {
     statusActions.push({ label: '티켓 재개', status: 'reopened', color: 'bg-yellow-500 hover:bg-yellow-600 text-white' })
   }
+
+  const rateHref = projectId
+    ? `/tickets/${ticket.iid}/rate?project_id=${projectId}`
+    : `/tickets/${ticket.iid}/rate`
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -352,7 +358,7 @@ function TicketDetailContent() {
               </p>
               {canRate && (
                 <Link
-                  href={`/tickets/${ticket.iid}/rate`}
+                  href={rateHref}
                   className="shrink-0 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold px-5 py-2 rounded-md text-sm transition-colors"
                 >
                   ⭐ 만족도 평가하기
@@ -369,7 +375,9 @@ function TicketDetailContent() {
 export default function TicketDetailPage() {
   return (
     <RequireAuth>
-      <TicketDetailContent />
+      <Suspense fallback={<div className="text-center py-16 text-gray-500">불러오는 중...</div>}>
+        <TicketDetailContent />
+      </Suspense>
     </RequireAuth>
   )
 }

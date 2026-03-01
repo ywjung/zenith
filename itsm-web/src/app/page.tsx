@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { fetchTickets } from '@/lib/api'
-import type { Ticket } from '@/types'
+import { fetchTickets, fetchProjects } from '@/lib/api'
+import type { Ticket, GitLabProject } from '@/types'
 import { StatusBadge, PriorityBadge, CategoryBadge } from '@/components/StatusBadge'
 import RequireAuth from '@/components/RequireAuth'
 
@@ -33,6 +33,20 @@ function HomeContent() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
 
+  const [projects, setProjects] = useState<GitLabProject[]>([])
+  const [selectedProject, setSelectedProject] = useState('')
+
+  useEffect(() => {
+    fetchProjects()
+      .then((list) => {
+        setProjects(list)
+        if (list.length > 0) {
+          setSelectedProject(list[0].id)
+        }
+      })
+      .catch(() => {/* 프로젝트 목록 로드 실패 시 무시 */})
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -41,6 +55,7 @@ function HomeContent() {
         state: state || undefined,
         category: category || undefined,
         search: search || undefined,
+        project_id: selectedProject || undefined,
       })
       setTickets(data)
     } catch (e: unknown) {
@@ -48,11 +63,13 @@ function HomeContent() {
     } finally {
       setLoading(false)
     }
-  }, [state, category, search])
+  }, [state, category, search, selectedProject])
 
   useEffect(() => {
-    load()
-  }, [load])
+    if (selectedProject !== undefined) {
+      load()
+    }
+  }, [load, selectedProject])
 
   const stats = {
     all: tickets.length,
@@ -79,7 +96,25 @@ function HomeContent() {
       </div>
 
       {/* 필터 */}
-      <div className="bg-white rounded-lg border p-4 mb-6 shadow-sm">
+      <div className="bg-white rounded-lg border p-4 mb-6 shadow-sm space-y-3">
+        {/* 프로젝트 선택 */}
+        {projects.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500 shrink-0">프로젝트:</span>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="border rounded-md px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 max-w-xs"
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name_with_namespace}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-3 items-center">
           {/* 상태 탭 */}
           <div className="flex gap-1 rounded-md border overflow-hidden">
@@ -171,31 +206,36 @@ function HomeContent() {
             </div>
           ) : (
             <div className="space-y-3">
-              {tickets.map((ticket) => (
-                <Link
-                  key={ticket.iid}
-                  href={`/tickets/${ticket.iid}`}
-                  className="block bg-white rounded-lg border hover:border-blue-300 hover:shadow-md transition-all p-4"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-gray-400 text-sm font-mono">#{ticket.iid}</span>
-                        <StatusBadge status={ticket.status} />
-                        <PriorityBadge priority={ticket.priority} />
-                        <CategoryBadge category={ticket.category} />
+              {tickets.map((ticket) => {
+                const ticketHref = ticket.project_id
+                  ? `/tickets/${ticket.iid}?project_id=${ticket.project_id}`
+                  : `/tickets/${ticket.iid}`
+                return (
+                  <Link
+                    key={`${ticket.project_id}-${ticket.iid}`}
+                    href={ticketHref}
+                    className="block bg-white rounded-lg border hover:border-blue-300 hover:shadow-md transition-all p-4"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="text-gray-400 text-sm font-mono">#{ticket.iid}</span>
+                          <StatusBadge status={ticket.status} />
+                          <PriorityBadge priority={ticket.priority} />
+                          <CategoryBadge category={ticket.category} />
+                        </div>
+                        <p className="font-medium text-gray-900 truncate">{ticket.title}</p>
+                        {ticket.employee_name && (
+                          <p className="text-sm text-gray-500 mt-1">신청자: {ticket.employee_name}</p>
+                        )}
                       </div>
-                      <p className="font-medium text-gray-900 truncate">{ticket.title}</p>
-                      {ticket.employee_name && (
-                        <p className="text-sm text-gray-500 mt-1">신청자: {ticket.employee_name}</p>
-                      )}
+                      <div className="text-xs text-gray-400 whitespace-nowrap shrink-0">
+                        {formatDate(ticket.created_at)}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-400 whitespace-nowrap shrink-0">
-                      {formatDate(ticket.created_at)}
-                    </div>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                )
+              })}
             </div>
           )}
           <p className="text-center text-sm text-gray-400 mt-4">총 {tickets.length}건</p>

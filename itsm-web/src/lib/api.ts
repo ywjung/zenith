@@ -1,4 +1,4 @@
-import type { Ticket, TicketCreate, Comment, Rating, RatingCreate } from '@/types'
+import type { Ticket, TicketCreate, Comment, Rating, RatingCreate, GitLabProject } from '@/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost/api'
 
@@ -20,29 +20,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json()
 }
 
+export function fetchProjects(): Promise<GitLabProject[]> {
+  return request<GitLabProject[]>('/projects/')
+}
+
 export function fetchTickets(params?: {
   state?: string
   category?: string
   search?: string
+  project_id?: string
 }): Promise<Ticket[]> {
   const qs = new URLSearchParams()
   if (params?.state) qs.set('state', params.state)
   if (params?.category) qs.set('category', params.category)
   if (params?.search) qs.set('search', params.search)
+  if (params?.project_id) qs.set('project_id', params.project_id)
   const query = qs.toString() ? `?${qs}` : ''
   return request<Ticket[]>(`/tickets/${query}`)
 }
 
-export function fetchTicket(iid: number): Promise<Ticket> {
-  return request<Ticket>(`/tickets/${iid}`)
+export function fetchTicket(iid: number, projectId?: string): Promise<Ticket> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<Ticket>(`/tickets/${iid}${qs}`)
 }
 
 export function createTicket(data: TicketCreate): Promise<Ticket> {
   return request<Ticket>('/tickets/', { method: 'POST', body: JSON.stringify(data) })
 }
 
-export function fetchComments(iid: number): Promise<Comment[]> {
-  return request<Comment[]>(`/tickets/${iid}/comments`)
+export function fetchComments(iid: number, projectId?: string): Promise<Comment[]> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<Comment[]>(`/tickets/${iid}/comments${qs}`)
 }
 
 export async function fetchRating(iid: number): Promise<Rating | null> {
@@ -54,8 +62,9 @@ export async function fetchRating(iid: number): Promise<Rating | null> {
   return data ?? null
 }
 
-export async function deleteTicket(iid: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/tickets/${iid}`, {
+export async function deleteTicket(iid: number, projectId?: string): Promise<void> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  const res = await fetch(`${API_BASE}/tickets/${iid}${qs}`, {
     method: 'DELETE',
     credentials: 'include',
   })
@@ -72,15 +81,18 @@ export async function deleteTicket(iid: number): Promise<void> {
 export function updateTicket(
   iid: number,
   data: { status?: string; priority?: string },
+  projectId?: string,
 ): Promise<Ticket> {
-  return request<Ticket>(`/tickets/${iid}`, {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<Ticket>(`/tickets/${iid}${qs}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   })
 }
 
-export function addComment(iid: number, body: string): Promise<Comment> {
-  return request<Comment>(`/tickets/${iid}/comments`, {
+export function addComment(iid: number, body: string, projectId?: string): Promise<Comment> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<Comment>(`/tickets/${iid}/comments${qs}`, {
     method: 'POST',
     body: JSON.stringify({ body }),
   })

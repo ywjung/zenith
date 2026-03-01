@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 from ..auth import get_current_user
 from ..schemas import TicketCreate, TicketResponse, CommentResponse, TicketUpdate, CommentCreate
@@ -71,6 +71,7 @@ def _issue_to_response(issue: dict) -> dict:
         "category": label_info["category"],
         "priority": label_info["priority"],
         "status": status,
+        "project_id": str(issue.get("project_id", "")),
     }
 
 
@@ -79,12 +80,13 @@ def list_tickets(
     state: str = "all",
     category: Optional[str] = None,
     search: Optional[str] = None,
+    project_id: Optional[str] = Query(default=None),
     _user: dict = Depends(get_current_user),
 ):
     try:
         gl_state = {"open": "opened", "closed": "closed"}.get(state, "all")
         labels = f"cat::{category}" if category else None
-        issues = gitlab_client.get_issues(state=gl_state, labels=labels, search=search)
+        issues = gitlab_client.get_issues(state=gl_state, labels=labels, search=search, project_id=project_id)
         return [_issue_to_response(i) for i in issues]
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
@@ -100,33 +102,46 @@ def create_ticket(data: TicketCreate, _user: dict = Depends(get_current_user)):
         f"{data.description}"
     )
     try:
-        issue = gitlab_client.create_issue(data.title, description, labels)
+        issue = gitlab_client.create_issue(data.title, description, labels, project_id=data.project_id)
         return _issue_to_response(issue)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
 
 
 @router.get("/{iid}", response_model=dict)
-def get_ticket(iid: int, _user: dict = Depends(get_current_user)):
+def get_ticket(
+    iid: int,
+    project_id: Optional[str] = Query(default=None),
+    _user: dict = Depends(get_current_user),
+):
     try:
-        issue = gitlab_client.get_issue(iid)
+        issue = gitlab_client.get_issue(iid, project_id=project_id)
         return _issue_to_response(issue)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
 
 
 @router.delete("/{iid}", status_code=204)
-def delete_ticket(iid: int, _user: dict = Depends(get_current_user)):
+def delete_ticket(
+    iid: int,
+    project_id: Optional[str] = Query(default=None),
+    _user: dict = Depends(get_current_user),
+):
     try:
-        gitlab_client.delete_issue(iid)
+        gitlab_client.delete_issue(iid, project_id=project_id)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
 
 
 @router.patch("/{iid}", response_model=dict)
-def update_ticket(iid: int, data: TicketUpdate, _user: dict = Depends(get_current_user)):
+def update_ticket(
+    iid: int,
+    data: TicketUpdate,
+    project_id: Optional[str] = Query(default=None),
+    _user: dict = Depends(get_current_user),
+):
     try:
-        issue = gitlab_client.get_issue(iid)
+        issue = gitlab_client.get_issue(iid, project_id=project_id)
         current_labels = issue.get("labels", [])
 
         add_labels: list[str] = []
@@ -157,6 +172,7 @@ def update_ticket(iid: int, data: TicketUpdate, _user: dict = Depends(get_curren
             add_labels=add_labels or None,
             remove_labels=remove_labels or None,
             state_event=state_event,
+            project_id=project_id,
         )
         return _issue_to_response(updated)
     except Exception as e:
@@ -164,9 +180,14 @@ def update_ticket(iid: int, data: TicketUpdate, _user: dict = Depends(get_curren
 
 
 @router.post("/{iid}/comments", response_model=dict, status_code=201)
-def add_comment(iid: int, data: CommentCreate, _user: dict = Depends(get_current_user)):
+def add_comment(
+    iid: int,
+    data: CommentCreate,
+    project_id: Optional[str] = Query(default=None),
+    _user: dict = Depends(get_current_user),
+):
     try:
-        note = gitlab_client.add_note(iid, data.body)
+        note = gitlab_client.add_note(iid, data.body, project_id=project_id)
         return {
             "id": note["id"],
             "body": note["body"],
@@ -179,9 +200,13 @@ def add_comment(iid: int, data: CommentCreate, _user: dict = Depends(get_current
 
 
 @router.get("/{iid}/comments", response_model=list[dict])
-def get_comments(iid: int, _user: dict = Depends(get_current_user)):
+def get_comments(
+    iid: int,
+    project_id: Optional[str] = Query(default=None),
+    _user: dict = Depends(get_current_user),
+):
     try:
-        notes = gitlab_client.get_notes(iid)
+        notes = gitlab_client.get_notes(iid, project_id=project_id)
         # 시스템 노트 제외, 사람이 작성한 노트만 반환
         return [
             {
