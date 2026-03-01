@@ -14,13 +14,13 @@ interface User {
 interface AuthContextType {
   user: User | null
   loading: boolean
-  logout: () => void
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  logout: () => {},
+  logout: async () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -35,13 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
-  const logout = () => {
-    // form submit으로 POST → 백엔드가 GitLab sign_out으로 303 리다이렉트하면 브라우저가 따라감
-    const form = document.createElement('form')
-    form.method = 'POST'
-    form.action = `${API_BASE}/auth/logout`
-    document.body.appendChild(form)
-    form.submit()
+  const logout = async () => {
+    await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' })
+    setUser(null)
+    window.location.href = '/login'
   }
 
   return <AuthContext.Provider value={{ user, loading, logout }}>{children}</AuthContext.Provider>

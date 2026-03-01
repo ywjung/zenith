@@ -90,7 +90,7 @@ def logout(request: Request):
         except (JWTError, Exception):
             pass  # 토큰 무효·revoke 실패 시 무시하고 진행
 
-    response = RedirectResponse(f"{settings.GITLAB_EXTERNAL_URL}/users/sign_out", status_code=303)
+    response = RedirectResponse("/login", status_code=303)
     response.delete_cookie("itsm_token")
     return response
 
