@@ -9,13 +9,14 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 8
 
 
-def create_token(user: dict) -> str:
+def create_token(user: dict, gitlab_token: str = "") -> str:
     settings = get_settings()
     payload = {
         "sub": str(user["id"]),
         "username": user["username"],
         "name": user["name"],
         "avatar_url": user.get("avatar_url"),
+        "gitlab_token": gitlab_token,
         "exp": datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)

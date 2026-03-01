@@ -18,7 +18,7 @@ def login():
         "client_id": settings.GITLAB_OAUTH_CLIENT_ID,
         "redirect_uri": settings.GITLAB_OAUTH_REDIRECT_URI,
         "response_type": "code",
-        "scope": "read_user",
+        "scope": "read_user read_api",
         "state": secrets.token_urlsafe(16),
     })
     return RedirectResponse(f"{settings.GITLAB_EXTERNAL_URL}/oauth/authorize?{params}")
@@ -54,7 +54,7 @@ def callback(code: str = "", error: str = ""):
 
         user = user_resp.json()
 
-    token = create_token(user)
+    token = create_token(user, gitlab_token=access_token)
     response = RedirectResponse("/")
     response.set_cookie(
         "itsm_token",

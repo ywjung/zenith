@@ -14,6 +14,19 @@ def _headers() -> dict:
     return {"PRIVATE-TOKEN": get_settings().GITLAB_ADMIN_TOKEN, "Content-Type": "application/json"}
 
 
+def get_user_accessible_projects(user_token: str) -> list[dict]:
+    """사용자 본인의 OAuth 토큰으로 접근 가능한 프로젝트 목록 반환."""
+    headers = {"Authorization": f"Bearer {user_token}", "Content-Type": "application/json"}
+    with httpx.Client(timeout=30) as client:
+        resp = client.get(
+            f"{get_settings().GITLAB_API_URL}/api/v4/projects",
+            headers=headers,
+            params={"membership": True, "per_page": 100, "simple": True, "order_by": "name", "sort": "asc"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 def get_user_projects(user_id: str) -> list[dict]:
     """사용자가 접근 가능한 GitLab 프로젝트 목록 반환.
 
