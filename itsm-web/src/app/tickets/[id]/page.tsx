@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { fetchTicket, fetchComments, fetchRating, updateTicket, addComment } from '@/lib/api'
+import { fetchTicket, fetchComments, fetchRating, updateTicket, addComment, deleteTicket } from '@/lib/api'
 import type { Ticket, Comment, Rating } from '@/types'
 import { StatusBadge, PriorityBadge, CategoryBadge } from '@/components/StatusBadge'
 import RequireAuth from '@/components/RequireAuth'
@@ -36,6 +36,7 @@ const PRIORITY_OPTIONS = [
 
 function TicketDetailContent() {
   const params = useParams()
+  const router = useRouter()
   const iid = Number(params.id)
 
   const [ticket, setTicket] = useState<Ticket | null>(null)
@@ -44,6 +45,8 @@ function TicketDetailContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [commenting, setCommenting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -85,6 +88,19 @@ function TicketDetailContent() {
       setActionError(err instanceof Error ? err.message : '우선순위 변경 실패')
     } finally {
       setUpdating(false)
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    setActionError(null)
+    try {
+      await deleteTicket(iid)
+      router.push('/')
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '티켓 삭제 실패')
+      setDeleting(false)
+      setConfirmDelete(false)
     }
   }
 
@@ -220,6 +236,34 @@ function TicketDetailContent() {
           {actionError && (
             <p className="text-sm text-red-600">⚠️ {actionError}</p>
           )}
+
+          <div className="flex justify-end pt-1">
+            {confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-red-600">정말 삭제하시겠습니까?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="text-sm px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50"
+                >
+                  {deleting ? '삭제 중...' : '삭제 확인'}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-sm px-3 py-1 border rounded-md text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  취소
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="text-sm px-3 py-1 border border-red-300 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+              >
+                🗑️ 티켓 삭제
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

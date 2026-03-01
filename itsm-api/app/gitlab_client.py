@@ -72,6 +72,12 @@ def add_note(iid: int, body: str) -> dict:
         return resp.json()
 
 
+def delete_issue(iid: int) -> None:
+    with httpx.Client(timeout=30) as client:
+        resp = client.delete(f"{_base()}/issues/{iid}", headers=_headers())
+        resp.raise_for_status()
+
+
 def update_issue(
     iid: int,
     add_labels: list[str] | None = None,

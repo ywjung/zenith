@@ -115,6 +115,14 @@ def get_ticket(iid: int, _user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
 
 
+@router.delete("/{iid}", status_code=204)
+def delete_ticket(iid: int, _user: dict = Depends(get_current_user)):
+    try:
+        gitlab_client.delete_issue(iid)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
+
+
 @router.patch("/{iid}", response_model=dict)
 def update_ticket(iid: int, data: TicketUpdate, _user: dict = Depends(get_current_user)):
     try:
