@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
+from ..auth import get_current_user
 from ..database import get_db
 from ..models import Rating
 from ..schemas import RatingCreate, RatingResponse
@@ -10,7 +11,7 @@ router = APIRouter(tags=["ratings"])
 
 
 @router.post("/tickets/{iid}/ratings", response_model=RatingResponse, status_code=201)
-def create_rating(iid: int, data: RatingCreate, db: Session = Depends(get_db)):
+def create_rating(iid: int, data: RatingCreate, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     existing = db.query(Rating).filter(Rating.gitlab_issue_iid == iid).first()
     if existing:
         raise HTTPException(status_code=409, detail="이미 평가가 완료된 티켓입니다.")

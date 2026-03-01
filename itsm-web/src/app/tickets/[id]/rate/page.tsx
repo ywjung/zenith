@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createRating } from '@/lib/api'
+import RequireAuth from '@/components/RequireAuth'
 
 const SCORE_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
 
-export default function RatePage() {
+function RateContent() {
   const params = useParams()
   const router = useRouter()
   const iid = Number(params.id)
@@ -149,5 +150,13 @@ export default function RatePage() {
         </div>
       </form>
     </div>
+  )
+}
+
+export default function RatePage() {
+  return (
+    <RequireAuth>
+      <RateContent />
+    </RequireAuth>
   )
 }

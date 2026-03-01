@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
+from ..auth import get_current_user
 from ..schemas import TicketCreate, TicketResponse, CommentResponse
 from .. import gitlab_client
 
@@ -78,6 +79,7 @@ def list_tickets(
     state: str = "all",
     category: Optional[str] = None,
     search: Optional[str] = None,
+    _user: dict = Depends(get_current_user),
 ):
     try:
         gl_state = {"open": "opened", "closed": "closed"}.get(state, "all")
@@ -89,7 +91,7 @@ def list_tickets(
 
 
 @router.post("/", response_model=dict, status_code=201)
-def create_ticket(data: TicketCreate):
+def create_ticket(data: TicketCreate, _user: dict = Depends(get_current_user)):
     labels = [f"cat::{data.category}", f"prio::{data.priority}", "status::open"]
     description = (
         f"**신청자:** {data.employee_name}\n"
@@ -105,7 +107,7 @@ def create_ticket(data: TicketCreate):
 
 
 @router.get("/{iid}", response_model=dict)
-def get_ticket(iid: int):
+def get_ticket(iid: int, _user: dict = Depends(get_current_user)):
     try:
         issue = gitlab_client.get_issue(iid)
         return _issue_to_response(issue)
@@ -114,7 +116,7 @@ def get_ticket(iid: int):
 
 
 @router.get("/{iid}/comments", response_model=list[dict])
-def get_comments(iid: int):
+def get_comments(iid: int, _user: dict = Depends(get_current_user)):
     try:
         notes = gitlab_client.get_notes(iid)
         # 시스템 노트 제외, 사람이 작성한 노트만 반환

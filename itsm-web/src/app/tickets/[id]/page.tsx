@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { fetchTicket, fetchComments, fetchRating } from '@/lib/api'
 import type { Ticket, Comment, Rating } from '@/types'
 import { StatusBadge, PriorityBadge, CategoryBadge } from '@/components/StatusBadge'
+import RequireAuth from '@/components/RequireAuth'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('ko-KR', {
@@ -26,7 +27,7 @@ function StarDisplay({ score }: { score: number }) {
   )
 }
 
-export default function TicketDetailPage() {
+function TicketDetailContent() {
   const params = useParams()
   const iid = Number(params.id)
 
@@ -192,5 +193,13 @@ export default function TicketDetailPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function TicketDetailPage() {
+  return (
+    <RequireAuth>
+      <TicketDetailContent />
+    </RequireAuth>
   )
 }

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .database import engine, Base
-from .routers import tickets, ratings
+from .routers import auth, tickets, ratings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,6 +52,7 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+app.include_router(auth.router)
 app.include_router(tickets.router)
 app.include_router(ratings.router)
 

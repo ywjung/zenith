@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { fetchTickets } from '@/lib/api'
 import type { Ticket } from '@/types'
 import { StatusBadge, PriorityBadge, CategoryBadge } from '@/components/StatusBadge'
+import RequireAuth from '@/components/RequireAuth'
 
 const CATEGORIES = [
   { value: '', label: '전체 카테고리' },
@@ -23,7 +24,7 @@ function formatDate(iso: string) {
   })
 }
 
-export default function HomePage() {
+function HomeContent() {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -201,5 +202,13 @@ export default function HomePage() {
         </>
       )}
     </div>
+  )
+}
+
+export default function HomePage() {
+  return (
+    <RequireAuth>
+      <HomeContent />
+    </RequireAuth>
   )
 }

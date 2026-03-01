@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createTicket } from '@/lib/api'
+import RequireAuth from '@/components/RequireAuth'
 
 const CATEGORIES = [
   { value: 'hardware', label: '🖥️ 하드웨어 (PC, 프린터, 모니터 등)' },
@@ -19,7 +20,7 @@ const PRIORITIES = [
   { value: 'critical', label: '긴급', desc: '업무 불가 / 즉시 조치 필요' },
 ]
 
-export default function NewTicketPage() {
+function NewTicketContent() {
   const router = useRouter()
   const [form, setForm] = useState({
     title: '',
@@ -204,5 +205,13 @@ export default function NewTicketPage() {
         </div>
       </form>
     </div>
+  )
+}
+
+export default function NewTicketPage() {
+  return (
+    <RequireAuth>
+      <NewTicketContent />
+    </RequireAuth>
   )
 }

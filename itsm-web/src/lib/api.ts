@@ -7,7 +7,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init?.headers },
     cache: 'no-store',
+    credentials: 'include',
   })
+  if (res.status === 401) {
+    window.location.href = '/login'
+    throw new Error('로그인이 필요합니다.')
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || `HTTP ${res.status}`)
