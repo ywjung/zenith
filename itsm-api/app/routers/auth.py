@@ -2,11 +2,12 @@ import secrets
 import urllib.parse
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 
-from ..auth import TOKEN_EXPIRE_HOURS, create_token, get_current_user
+from ..auth import TOKEN_EXPIRE_HOURS, ALGORITHM, create_token, get_current_user
 from ..config import get_settings
+from jose import jwt as jose_jwt, JWTError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -67,8 +68,29 @@ def callback(code: str = "", error: str = ""):
 
 
 @router.post("/logout")
-def logout():
-    response = RedirectResponse("/login", status_code=303)
+def logout(request: Request):
+    settings = get_settings()
+    # JWT에서 gitlab_token 추출하여 OAuth 토큰 revoke
+    token = request.cookies.get("itsm_token")
+    if token:
+        try:
+            payload = jose_jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+            gitlab_token = payload.get("gitlab_token", "")
+            if gitlab_token:
+                import httpx as _httpx
+                with _httpx.Client(timeout=5) as client:
+                    client.post(
+                        f"{settings.GITLAB_API_URL}/oauth/revoke",
+                        data={
+                            "client_id": settings.GITLAB_OAUTH_CLIENT_ID,
+                            "client_secret": settings.GITLAB_OAUTH_CLIENT_SECRET,
+                            "token": gitlab_token,
+                        },
+                    )
+        except (JWTError, Exception):
+            pass  # 토큰 무효·revoke 실패 시 무시하고 진행
+
+    response = RedirectResponse(f"{settings.GITLAB_EXTERNAL_URL}/users/sign_out", status_code=303)
     response.delete_cookie("itsm_token")
     return response
 

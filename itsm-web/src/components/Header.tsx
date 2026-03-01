@@ -18,6 +18,14 @@ export default function Header() {
               <Link href="/" className="hover:underline opacity-90">
                 티켓 목록
               </Link>
+              <a
+                href={process.env.NEXT_PUBLIC_GITLAB_URL || 'http://localhost:8929'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline opacity-90"
+              >
+                GitLab ↗
+              </a>
               <Link
                 href="/tickets/new"
                 className="bg-white text-blue-700 px-4 py-1.5 rounded-md font-semibold hover:bg-blue-50 transition-colors"
