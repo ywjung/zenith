@@ -1,0 +1,27 @@
+# 환경 변수 (시크릿 포함)
+.env
+
+# macOS
+.DS_Store
+
+# 도구 캐시
+.playwright-mcp/
+.serena/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node.js
+node_modules/
+.next/
+coverage/
+
+# 빌드 아티팩트
+*.egg-info/
+dist/
+build/

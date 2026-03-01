@@ -1,0 +1,10 @@
+node_modules
+.next
+.env.local
+.env*.local
+coverage
+__tests__
+*.test.ts
+*.test.tsx
+jest.config.js
+jest.setup.ts

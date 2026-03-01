@@ -1,0 +1,57 @@
+import type { Ticket, TicketCreate, Comment, Rating, RatingCreate } from '@/types'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost/api'
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export function fetchTickets(params?: {
+  state?: string
+  category?: string
+  search?: string
+}): Promise<Ticket[]> {
+  const qs = new URLSearchParams()
+  if (params?.state) qs.set('state', params.state)
+  if (params?.category) qs.set('category', params.category)
+  if (params?.search) qs.set('search', params.search)
+  const query = qs.toString() ? `?${qs}` : ''
+  return request<Ticket[]>(`/tickets/${query}`)
+}
+
+export function fetchTicket(iid: number): Promise<Ticket> {
+  return request<Ticket>(`/tickets/${iid}`)
+}
+
+export function createTicket(data: TicketCreate): Promise<Ticket> {
+  return request<Ticket>('/tickets/', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export function fetchComments(iid: number): Promise<Comment[]> {
+  return request<Comment[]>(`/tickets/${iid}/comments`)
+}
+
+export async function fetchRating(iid: number): Promise<Rating | null> {
+  const res = await fetch(`${API_BASE}/tickets/${iid}/ratings`, {
+    cache: 'no-store',
+  })
+  if (res.status === 404 || !res.ok) return null
+  const data = await res.json()
+  return data ?? null
+}
+
+export function createRating(iid: number, data: RatingCreate): Promise<Rating> {
+  return request<Rating>(`/tickets/${iid}/ratings`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}

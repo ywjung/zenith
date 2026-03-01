@@ -1,0 +1,16 @@
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+dist/
+build/
+.venv
+venv
+.env
+tests/
+*.db
+alembic/versions/*.py
+!alembic/versions/0001_initial_schema.py
