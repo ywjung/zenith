@@ -15,14 +15,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.get("/login")
 def login(request: Request):
     settings = get_settings()
+    needs_reauth = request.cookies.get("itsm_reauth") == "1"
+    # prompt=login은 OIDC 흐름에서만 동작하므로 reauth 시 openid 스코프 추가
+    scope = "openid read_user read_api" if needs_reauth else "read_user read_api"
     params: dict = {
         "client_id": settings.GITLAB_OAUTH_CLIENT_ID,
         "redirect_uri": settings.GITLAB_OAUTH_REDIRECT_URI,
         "response_type": "code",
-        "scope": "read_user read_api",
+        "scope": scope,
         "state": secrets.token_urlsafe(16),
     }
-    needs_reauth = request.cookies.get("itsm_reauth") == "1"
     if needs_reauth:
         params["prompt"] = "login"  # GitLab에 재인증 강제
 
