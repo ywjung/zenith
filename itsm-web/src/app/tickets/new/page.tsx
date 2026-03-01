@@ -227,10 +227,8 @@ function NewTicketContent() {
               <input
                 name="employee_name"
                 value={form.employee_name}
-                onChange={handleChange}
-                required
-                placeholder="홍길동"
-                className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                readOnly
+                className="w-full border rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-600 cursor-not-allowed"
               />
             </div>
             <div>
@@ -239,10 +237,8 @@ function NewTicketContent() {
                 name="employee_email"
                 type="email"
                 value={form.employee_email}
-                onChange={handleChange}
-                required
-                placeholder="hong@company.com"
-                className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                readOnly
+                className="w-full border rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-600 cursor-not-allowed"
               />
             </div>
           </div>
