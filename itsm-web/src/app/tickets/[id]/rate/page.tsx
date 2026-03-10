@@ -1,42 +1,55 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createRating } from '@/lib/api'
+import { createRating, updateRating, getMyRating } from '@/lib/api'
 import RequireAuth from '@/components/RequireAuth'
+import { useAuth } from '@/context/AuthContext'
 
 const SCORE_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
 
 function RateContent() {
   const params = useParams()
   const router = useRouter()
+  const { user } = useAuth()
   const iid = Number(params.id)
 
-  const [form, setForm] = useState({
-    employee_name: '',
-    employee_email: '',
-    score: 0,
-    comment: '',
-  })
+  const [score, setScore] = useState(0)
+  const [comment, setComment] = useState('')
+  const [isEdit, setIsEdit] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // 기존 평가 로드
+  useEffect(() => {
+    getMyRating(iid)
+      .then((existing) => {
+        if (existing) {
+          setScore(existing.score)
+          setComment(existing.comment ?? '')
+          setIsEdit(true)
+        }
+      })
+      .catch(() => {/* 평가 없음 — 무시 */})
+      .finally(() => setLoading(false))
+  }, [iid])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (form.score === 0) {
+    if (score === 0) {
       setError('별점을 선택해주세요.')
       return
     }
     setSubmitting(true)
     setError(null)
     try {
-      await createRating(iid, {
-        employee_name: form.employee_name,
-        employee_email: form.employee_email || undefined,
-        score: form.score,
-        comment: form.comment || undefined,
-      })
+      if (isEdit) {
+        await updateRating(iid, { score, comment: comment || undefined })
+      } else {
+        await createRating(iid, { score, comment: comment || undefined })
+      }
       router.push(`/tickets/${iid}`)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '평가 제출에 실패했습니다.')
@@ -44,15 +57,23 @@ function RateContent() {
     }
   }
 
+  if (loading) {
+    return <div className="text-center py-12 text-gray-400">로딩 중...</div>
+  }
+
   return (
-    <div className="max-w-lg mx-auto">
+    <div>
       <div className="mb-6">
         <Link href={`/tickets/${iid}`} className="text-blue-600 hover:underline text-sm">
           ← 티켓으로 돌아가기
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 mt-2">만족도 평가</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mt-2">
+          {isEdit ? '만족도 평가 수정' : '만족도 평가'}
+        </h1>
         <p className="text-gray-500 text-sm mt-1">
-          IT 서비스 개선을 위해 솔직한 의견을 남겨주세요.
+          {isEdit
+            ? '이전에 남긴 평가를 수정할 수 있습니다.'
+            : 'IT 서비스 개선을 위해 솔직한 의견을 남겨주세요.'}
         </p>
       </div>
 
@@ -67,18 +88,18 @@ function RateContent() {
               <button
                 key={n}
                 type="button"
-                onClick={() => setForm((prev) => ({ ...prev, score: n }))}
+                onClick={() => setScore(n)}
                 className={`text-4xl transition-transform hover:scale-110 focus:outline-none ${
-                  form.score >= n ? 'text-yellow-400' : 'text-gray-200'
+                  score >= n ? 'text-yellow-400' : 'text-gray-200'
                 }`}
               >
                 ★
               </button>
             ))}
           </div>
-          {form.score > 0 && (
+          {score > 0 && (
             <p className="text-center text-sm text-gray-600 mt-2">
-              {form.score}점 · {SCORE_LABELS[form.score]}
+              {score}점 · {SCORE_LABELS[score]}
             </p>
           )}
         </div>
@@ -89,8 +110,8 @@ function RateContent() {
             추가 의견 <span className="text-gray-400 font-normal">(선택)</span>
           </label>
           <textarea
-            value={form.comment}
-            onChange={(e) => setForm((prev) => ({ ...prev, comment: e.target.value }))}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
             rows={4}
             placeholder="서비스에 대한 의견을 자유롭게 작성해주세요."
             className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -99,32 +120,13 @@ function RateContent() {
 
         <hr />
 
-        {/* 신청자 정보 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              이름 <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={form.employee_name}
-              onChange={(e) => setForm((prev) => ({ ...prev, employee_name: e.target.value }))}
-              required
-              placeholder="홍길동"
-              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              이메일 <span className="text-gray-400 font-normal">(선택)</span>
-            </label>
-            <input
-              type="email"
-              value={form.employee_email}
-              onChange={(e) => setForm((prev) => ({ ...prev, employee_email: e.target.value }))}
-              placeholder="hong@company.com"
-              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+        {/* 평가자 정보 */}
+        <div className="bg-gray-50 rounded-md p-3 text-sm text-gray-600">
+          <span className="font-medium text-gray-700">평가자:</span>{' '}
+          {user?.name || user?.username}
+          {user?.email && (
+            <span className="text-gray-400 ml-2">({user.email})</span>
+          )}
         </div>
 
         {error && (
@@ -139,7 +141,7 @@ function RateContent() {
             disabled={submitting}
             className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2.5 rounded-md transition-colors disabled:opacity-50"
           >
-            {submitting ? '제출 중...' : '⭐ 평가 제출'}
+            {submitting ? '제출 중...' : isEdit ? '✏️ 평가 수정' : '⭐ 평가 제출'}
           </button>
           <Link
             href={`/tickets/${iid}`}

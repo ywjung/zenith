@@ -1,3 +1,137 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* =========================================================
+   모바일 반응형 유틸리티
+   ========================================================= */
+
+/* 모바일에서 테이블을 카드형으로 표시 */
+@media (max-width: 640px) {
+  .mobile-card-table thead {
+    display: none;
+  }
+  .mobile-card-table tbody tr {
+    display: block;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    background: white;
+  }
+  .mobile-card-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+    border: none;
+    font-size: 0.875rem;
+  }
+  .mobile-card-table tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #6b7280;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+    margin-right: 0.5rem;
+  }
+}
+
+/* 헤더 모바일 — 네비게이션 줄바꿈 방지 */
+@media (max-width: 768px) {
+  .header-nav-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .header-nav-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* 모바일 하단 고정 액션 버튼 */
+.mobile-fab {
+  display: none;
+}
+@media (max-width: 640px) {
+  .mobile-fab {
+    display: flex;
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 40;
+  }
+}
+
+/* 티켓 상세 - 모바일에서 사이드바를 하단으로 */
+@media (max-width: 1024px) {
+  .ticket-layout {
+    flex-direction: column;
+  }
+  .ticket-sidebar {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* 터치 영역 최소 크기 보장 (WCAG 2.5.5) */
+@media (max-width: 768px) {
+  button, a[role="button"], [role="tab"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* TipTap editor content styles */
+.ProseMirror {
+  outline: none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #9ca3af;
+  pointer-events: none;
+  height: 0;
+}
+
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid #e5e7eb;
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+}
+
+.ProseMirror th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.ProseMirror pre {
+  background: #1f2937;
+  color: #f9fafb;
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid #d1d5db;
+  margin-left: 0;
+  padding-left: 1rem;
+  color: #6b7280;
+}
+
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.25rem;
+}

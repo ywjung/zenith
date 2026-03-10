@@ -36,12 +36,15 @@ afterEach(() => {
   jest.resetAllMocks()
 })
 
+const MOCK_LIST_RESPONSE = { tickets: [MOCK_TICKET], total: 1, page: 1, per_page: 20 }
+
 describe('fetchTickets', () => {
   it('calls /tickets/ endpoint', async () => {
-    mockFetch([MOCK_TICKET])
-    const tickets = await fetchTickets()
-    expect(tickets).toHaveLength(1)
-    expect(tickets[0].iid).toBe(1)
+    mockFetch(MOCK_LIST_RESPONSE)
+    const result = await fetchTickets()
+    expect(result.tickets).toHaveLength(1)
+    expect(result.tickets[0].iid).toBe(1)
+    expect(result.total).toBe(1)
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/tickets/'),
       expect.any(Object),
@@ -49,14 +52,14 @@ describe('fetchTickets', () => {
   })
 
   it('passes state query param', async () => {
-    mockFetch([])
+    mockFetch({ tickets: [], total: 0, page: 1, per_page: 20 })
     await fetchTickets({ state: 'open' })
     const url = (global.fetch as jest.Mock).mock.calls[0][0] as string
     expect(url).toContain('state=open')
   })
 
   it('passes category query param', async () => {
-    mockFetch([])
+    mockFetch({ tickets: [], total: 0, page: 1, per_page: 20 })
     await fetchTickets({ category: 'hardware' })
     const url = (global.fetch as jest.Mock).mock.calls[0][0] as string
     expect(url).toContain('category=hardware')
