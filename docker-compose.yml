@@ -24,7 +24,8 @@ services:
       start_period: 300s
 
   postgres:
-    image: postgres:16
+    image: postgres:17
+    container_name: itsm-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -39,10 +40,30 @@ services:
       retries: 5
 
   redis:
-    image: redis:7
+    image: redis:7.4-alpine
     restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
     volumes:
       - itsm_redis:/data
+
+  # ClamAV 바이러스 스캔 데몬 (파일 업로드 보안)
+  # ARM64(Apple Silicon) 환경: platform linux/amd64 → Rosetta 에뮬레이션
+  # CLAMAV_ENABLED=false 환경변수로 비활성화 가능 (fail-open)
+  clamav:
+    image: clamav/clamav:1.4
+    platform: linux/amd64
+    restart: unless-stopped
+    volumes:
+      - itsm_clamav:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | nc -w 3 localhost 3310 | grep -q PONG || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
 
   itsm-api:
     build: ./itsm-api
@@ -51,21 +72,48 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       GITLAB_API_URL: http://gitlab:8929
       GITLAB_PROJECT_ID: ${GITLAB_PROJECT_ID}
-      GITLAB_ADMIN_TOKEN: ${GITLAB_ADMIN_TOKEN}
+      GITLAB_PROJECT_TOKEN: ${GITLAB_PROJECT_TOKEN}
+      GITLAB_GROUP_ID: ${GITLAB_GROUP_ID:-}
+      GITLAB_GROUP_TOKEN: ${GITLAB_GROUP_TOKEN:-}
       GITLAB_OAUTH_CLIENT_ID: ${GITLAB_OAUTH_CLIENT_ID}
       GITLAB_OAUTH_CLIENT_SECRET: ${GITLAB_OAUTH_CLIENT_SECRET}
       GITLAB_OAUTH_REDIRECT_URI: ${GITLAB_OAUTH_REDIRECT_URI}
       SECRET_KEY: ${SECRET_KEY}
-      ENVIRONMENT: development
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      GITLAB_WEBHOOK_SECRET: ${GITLAB_WEBHOOK_SECRET:-}
+      ITSM_WEBHOOK_URL: ${ITSM_WEBHOOK_URL:-http://itsm-api:8000/webhooks/gitlab}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-ITSM Portal <noreply@company.com>}
+      SMTP_TLS: ${SMTP_TLS:-true}
+      NOTIFICATION_ENABLED: ${NOTIFICATION_ENABLED:-false}
+      IT_TEAM_EMAIL: ${IT_TEAM_EMAIL:-}
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      CLAMAV_ENABLED: ${CLAMAV_ENABLED:-true}
+    volumes:
+      - gitlab_data:/gitlab_data:ro
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
+      clamav:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
 
   itsm-web:
     build:
@@ -85,12 +133,82 @@ services:
     image: nginx:latest
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${APP_PORT:-8111}:80"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
       - itsm-web
       - itsm-api
+
+  # Prometheus 메트릭 수집 (항상 활성화)
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - itsm_prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Grafana 대시보드 (항상 활성화)
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+      GF_AUTH_BASIC_ENABLED: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/01-itsm-operations.json
+    volumes:
+      - itsm_grafana:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # PostgreSQL 자동 백업 (24시간 주기, 7일 이상 삭제)
+  pg-backup:
+    image: postgres:17
+    profiles: ["backup"]
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - itsm_backups:/backups
+    entrypoint: >
+      /bin/sh -c "
+        while true; do
+          FILENAME=/backups/itsm_$$(date +%Y%m%d_%H%M%S).sql.gz
+          pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > $$FILENAME
+          echo \"Backup created: $$FILENAME\"
+          find /backups -name 'itsm_*.sql.gz' -mtime +7 -delete
+          sleep 86400
+        done
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   gitlab_config:
@@ -98,3 +216,7 @@ volumes:
   gitlab_data:
   itsm_pgdata:
   itsm_redis:
+  itsm_backups:
+  itsm_prometheus:
+  itsm_grafana:
+  itsm_clamav:

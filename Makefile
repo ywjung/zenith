@@ -33,8 +33,17 @@ migrate: ## Run Alembic migrations (requires running postgres)
 migrate-create: ## Create a new migration (usage: make migrate-create MSG="your message")
 	docker compose exec itsm-api alembic revision --autogenerate -m "$(MSG)"
 
-build: ## Build Docker images
+build: ## Build and redeploy all services
 	docker compose build
+	docker compose up -d
+
+build-api: ## Build and redeploy backend only
+	docker compose build itsm-api
+	docker compose up -d itsm-api
+
+build-web: ## Build and redeploy frontend only
+	docker compose build itsm-web
+	docker compose up -d itsm-web
 
 install: ## Install all dependencies
 	cd itsm-api && pip install -r requirements-dev.txt

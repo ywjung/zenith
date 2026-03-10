@@ -1,35 +1,73 @@
+import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
 from ..auth import get_current_user
 from ..database import get_db
 from ..models import Rating
-from ..schemas import RatingCreate, RatingResponse
+from ..schemas import RatingCreate, RatingUpdate, RatingResponse
 from .. import gitlab_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ratings"])
 
 
-@router.post("/tickets/{iid}/ratings", response_model=RatingResponse, status_code=201)
-def create_rating(iid: int, data: RatingCreate, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
-    existing = db.query(Rating).filter(Rating.gitlab_issue_iid == iid).first()
-    if existing:
-        raise HTTPException(status_code=409, detail="이미 평가가 완료된 티켓입니다.")
+def _get_my_rating(iid: int, username: str, db: Session) -> Optional[Rating]:
+    return (
+        db.query(Rating)
+        .filter(Rating.gitlab_issue_iid == iid, Rating.username == username)
+        .first()
+    )
 
-    # 티켓이 닫혀 있는지 확인
+
+def _assert_ratable(iid: int):
+    """처리완료(resolved) 또는 종료(closed) 상태인지 확인."""
     try:
         issue = gitlab_client.get_issue(iid)
-        if issue["state"] != "closed":
-            raise HTTPException(status_code=400, detail="완료된 티켓만 평가할 수 있습니다.")
+        labels = issue.get("labels", [])
+        is_resolved = "status::resolved" in labels
+        if issue["state"] != "closed" and not is_resolved:
+            raise HTTPException(status_code=400, detail="처리완료 또는 종료된 티켓만 평가할 수 있습니다.")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
 
+
+@router.get("/tickets/{iid}/ratings/me", response_model=Optional[RatingResponse])
+def get_my_rating(
+    iid: int,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """현재 사용자의 해당 티켓 평가 조회."""
+    return _get_my_rating(iid, user.get("username", ""), db)
+
+
+@router.post("/tickets/{iid}/ratings", response_model=RatingResponse, status_code=201)
+def create_rating(
+    iid: int,
+    data: RatingCreate,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    username = user.get("username", "")
+    existing = _get_my_rating(iid, username, db)
+    if existing:
+        raise HTTPException(status_code=409, detail="이미 평가를 완료한 티켓입니다. 수정 API를 이용하세요.")
+
+    _assert_ratable(iid)
+
+    employee_name = user.get("name") or username
+    employee_email = user.get("email") or data.employee_email
+
     rating = Rating(
         gitlab_issue_iid=iid,
-        employee_name=data.employee_name,
-        employee_email=data.employee_email,
+        username=username,
+        employee_name=employee_name,
+        employee_email=employee_email,
         score=data.score,
         comment=data.comment,
     )
@@ -37,23 +75,49 @@ def create_rating(iid: int, data: RatingCreate, db: Session = Depends(get_db), _
     db.commit()
     db.refresh(rating)
 
-    # GitLab 이슈에 평가 결과 코멘트 추가
-    stars = "⭐" * data.score
-    comment_body = (
-        f"### 만족도 평가 완료\n\n"
-        f"**점수:** {stars} ({data.score}/5점)\n"
-        f"**평가자:** {data.employee_name}\n"
-    )
-    if data.comment:
-        comment_body += f"**의견:** {data.comment}"
-    try:
-        gitlab_client.add_note(iid, comment_body)
-    except Exception:
-        pass  # 코멘트 실패해도 평가 저장은 유지
-
+    _post_gitlab_comment(iid, employee_name, data.score, data.comment)
     return rating
+
+
+@router.put("/tickets/{iid}/ratings", response_model=RatingResponse)
+def update_rating(
+    iid: int,
+    data: RatingUpdate,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    username = user.get("username", "")
+    existing = _get_my_rating(iid, username, db)
+    if not existing:
+        raise HTTPException(status_code=404, detail="평가 내역이 없습니다. 먼저 평가를 등록해주세요.")
+
+    existing.score = data.score
+    existing.comment = data.comment
+    existing.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(existing)
+
+    _post_gitlab_comment(iid, existing.employee_name, data.score, data.comment, updated=True)
+    return existing
 
 
 @router.get("/tickets/{iid}/ratings", response_model=Optional[RatingResponse])
 def get_rating(iid: int, db: Session = Depends(get_db)):
+    """하위 호환용 — 해당 티켓의 첫 번째 평가 반환."""
     return db.query(Rating).filter(Rating.gitlab_issue_iid == iid).first()
+
+
+def _post_gitlab_comment(iid: int, name: str, score: int, comment: Optional[str], updated: bool = False):
+    stars = "⭐" * score
+    action = "수정" if updated else "완료"
+    body = (
+        f"### 만족도 평가 {action}\n\n"
+        f"**점수:** {stars} ({score}/5점)\n"
+        f"**평가자:** {name}\n"
+    )
+    if comment:
+        body += f"**의견:** {comment}"
+    try:
+        gitlab_client.add_note(iid, body)
+    except Exception as e:
+        logger.warning("Failed to add rating comment to GitLab issue #%d: %s", iid, e)

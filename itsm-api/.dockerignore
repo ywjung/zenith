@@ -12,5 +12,3 @@ venv
 .env
 tests/
 *.db
-alembic/versions/*.py
-!alembic/versions/0001_initial_schema.py

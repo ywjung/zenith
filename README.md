@@ -1,0 +1,1286 @@
+# 🛠️ ITSM 포털
+
+GitLab CE 기반 IT 서비스 관리(ITSM) 포털.
+티켓 관리 · SLA 추적 · 지식베이스 · 칸반 · 실시간 모니터링을 단일 플랫폼에서 제공합니다.
+
+---
+
+## 목차
+
+1. [시스템 구성](#1-시스템-구성)
+2. [사전 요구사항](#2-사전-요구사항)
+3. [설치 — 신규 서버](#3-설치--신규-서버)
+4. [환경변수 설정](#4-환경변수-설정)
+5. [GitLab 연동 설정](#5-gitlab-연동-설정)
+6. [서비스 시작 · 중지](#6-서비스-시작--중지)
+7. [DB 마이그레이션](#7-db-마이그레이션)
+8. [접속 주소](#8-접속-주소)
+9. [주요 기능](#9-주요-기능)
+10. [사용자 역할](#10-사용자-역할)
+11. [SLA 정책](#11-sla-정책)
+12. [보안](#12-보안)
+13. [모니터링 (Prometheus + Grafana)](#13-모니터링-prometheus--grafana)
+14. [백업 & 복구](#14-백업--복구)
+15. [운영 관리](#15-운영-관리)
+16. [도메인 · HTTPS 적용 (운영 서버)](#16-도메인--https-적용-운영-서버)
+17. [개발 환경](#17-개발-환경)
+18. [트러블슈팅](#18-트러블슈팅)
+19. [버전 이력](#19-버전-이력)
+
+---
+
+## 1. 시스템 구성
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    브라우저 (포트 8111)                       │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+              ┌───────▼───────┐
+              │  Nginx 1.27   │  리버스 프록시 · gzip · 보안 헤더
+              └───┬───────┬───┘
+                  │       │
+         ┌────────▼──┐ ┌──▼────────┐
+         │ Next.js 15│ │ FastAPI   │  Python 3.13 / Uvicorn ASGI
+         │  (웹 UI)  │ │  (API)    │
+         └────────────┘ └──┬───┬───┘
+                           │   │
+              ┌────────────┘   └─────────────┐
+         ┌────▼──────┐              ┌────────▼───────┐
+         │PostgreSQL │              │  Redis 7.4     │
+         │    17     │              │  (캐시·Pub/Sub) │
+         └───────────┘              └────────────────┘
+              │
+         ┌────▼──────┐   ┌────────────┐   ┌──────────────┐
+         │  GitLab   │   │ Prometheus │   │   Grafana    │
+         │   CE      │   │  (:9090)   │   │   (:3001)    │
+         └───────────┘   └────────────┘   └──────────────┘
+              │
+         ┌────▼──────┐
+         │  ClamAV   │  바이러스 스캔 데몬
+         └───────────┘
+```
+
+### 컨테이너 목록
+
+| 컨테이너 | 이미지 | 포트(외부) | 역할 |
+|---------|--------|-----------|------|
+| `gitlab` | `gitlab/gitlab-ce:latest` | 8929(HTTP), 2224(SSH) | OAuth 제공자 · 이슈 백엔드 |
+| `itsm-api` | 로컬 빌드 | 8000(내부) | FastAPI REST API |
+| `itsm-web` | 로컬 빌드 | 3000(내부) | Next.js 웹 UI |
+| `nginx` | `nginx:latest` | **8111** | 리버스 프록시 |
+| `postgres` | `postgres:17` | 5432(내부) | 주 데이터베이스 |
+| `redis` | `redis:7.4-alpine` | 6379(내부) | 캐시 · 알림 Pub/Sub |
+| `clamav` | `clamav/clamav:1.4` | 3310(내부) | 파일 바이러스 스캔 |
+| `prometheus` | `prom/prometheus:latest` | **9090** | 메트릭 수집 |
+| `grafana` | `grafana/grafana:latest` | **3001** | 대시보드 |
+
+### 기술 스택
+
+| 구성 요소 | 버전 |
+|---------|------|
+| Python | 3.13 |
+| FastAPI | 0.135 |
+| SQLAlchemy | 2.0 |
+| Alembic | 1.18 |
+| Pydantic | 2.12 |
+| httpx | 0.28 |
+| Next.js | 15 |
+| Node.js | 22 |
+| PostgreSQL | 17 |
+| Redis | 7.4 |
+| Nginx | 1.27 |
+
+---
+
+## 2. 사전 요구사항
+
+### 하드웨어 최소 사양
+
+| 구성 | 최소 | 권장 |
+|------|------|------|
+| CPU | 4코어 | 8코어 이상 |
+| RAM | **8 GB** | 16 GB 이상 |
+| 디스크 | 40 GB SSD | 100 GB SSD 이상 |
+| OS | Ubuntu 22.04 LTS / Debian 12 / RHEL 9 | Ubuntu 24.04 LTS |
+
+> **GitLab CE 단독으로 최소 4 GB RAM을 소비합니다.** RAM이 8 GB 미만이면 서비스 불안정이 발생할 수 있습니다.
+
+### 소프트웨어 요구사항
+
+```bash
+# Docker 및 Docker Compose (필수)
+Docker Engine  24.0 이상
+Docker Compose v2.20 이상
+
+# 확인 명령어
+docker --version
+docker compose version
+```
+
+### 포트 개방 요구사항
+
+| 포트 | 용도 | 외부 노출 |
+|------|------|----------|
+| 8111 | ITSM 포털 (nginx) | ✅ 필수 |
+| 8929 | GitLab 웹 UI | ✅ 필수 |
+| 2224 | GitLab SSH | 선택 |
+| 3001 | Grafana | 내부망만 |
+| 9090 | Prometheus | 내부망만 |
+
+---
+
+## 3. 설치 — 신규 서버
+
+### 3-1. Docker 설치 (Ubuntu 24.04 기준)
+
+```bash
+# 이전 버전 제거
+sudo apt remove docker docker-engine docker.io containerd runc 2>/dev/null
+
+# 저장소 추가
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg lsb-release
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Docker Engine + Compose 설치
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# 현재 사용자를 docker 그룹에 추가 (sudo 없이 사용)
+sudo usermod -aG docker $USER
+newgrp docker
+
+# 설치 확인
+docker --version
+docker compose version
+```
+
+### 3-2. 저장소 클론 및 환경변수 설정
+
+```bash
+# 1. 저장소 클론
+git clone <저장소 URL> /opt/itsm
+cd /opt/itsm
+
+# 2. 환경변수 파일 생성
+cp .env.example .env
+
+# 3. 필수 시크릿 자동 생성
+SECRET_KEY=$(openssl rand -hex 32)
+REDIS_PW=$(openssl rand -hex 16)
+TOKEN_ENC=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null \
+           || docker run --rm python:3.13-slim python3 -c \
+              "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+
+echo "SECRET_KEY: $SECRET_KEY"
+echo "REDIS_PASSWORD: $REDIS_PW"
+echo "TOKEN_ENCRYPTION_KEY: $TOKEN_ENC"
+
+# 4. .env 편집 (필수값 입력)
+vi .env
+```
+
+### 3-3. 환경변수 최소 필수 설정
+
+`.env`를 열어 아래 항목을 반드시 변경합니다:
+
+```bash
+# ── PostgreSQL ──────────────────────────────
+POSTGRES_PASSWORD=<강력한 랜덤 비밀번호>
+
+# ── GitLab ─────────────────────────────────
+GITLAB_ROOT_PASSWORD=<GitLab root 초기 비밀번호>
+# ↓ GitLab 기동 후 OAuth 앱·토큰 발급 뒤 채워야 함
+GITLAB_OAUTH_CLIENT_ID=
+GITLAB_OAUTH_CLIENT_SECRET=
+GITLAB_PROJECT_TOKEN=
+
+# ── Redis ───────────────────────────────────
+REDIS_PASSWORD=<openssl rand -hex 16 결과>
+
+# ── ITSM API ────────────────────────────────
+SECRET_KEY=<openssl rand -hex 32 결과>
+TOKEN_ENCRYPTION_KEY=<Fernet 키>
+
+# ── 외부 접근 URL (서버 IP 또는 도메인으로 변경) ──
+NEXT_PUBLIC_API_BASE_URL=http://<서버IP>:8111/api
+NEXT_PUBLIC_GITLAB_URL=http://<서버IP>:8929
+GITLAB_OAUTH_REDIRECT_URI=http://<서버IP>:8111/api/auth/callback
+```
+
+### 3-4. GitLab 먼저 기동 및 초기 설정
+
+```bash
+# GitLab만 먼저 기동 (초기화에 3~5분 소요)
+docker compose up -d gitlab
+
+# 초기화 완료 대기
+docker compose logs -f gitlab | grep -m1 "Reconfigured!"
+# "gitlab Reconfigured!" 메시지 확인 후 Ctrl+C
+
+# GitLab 접속: http://<서버IP>:8929
+# 계정: root / .env의 GITLAB_ROOT_PASSWORD
+```
+
+**GitLab에서 수행할 초기 설정:**
+
+#### OAuth 앱 등록
+1. **Admin Area** → **Applications** → **New application**
+2. 입력값:
+   - Name: `ITSM Portal`
+   - Redirect URI: `http://<서버IP>:8111/api/auth/callback`
+   - Confidential: ✅ 체크
+   - Scopes: `read_user`, `api`, `openid`
+3. **Save** → `Application ID`, `Secret` 복사 → `.env` 입력
+
+#### ITSM 프로젝트 생성 및 토큰 발급
+1. **New project** → `itsm-tickets` (Private) 생성
+2. 프로젝트 → **Settings** → **Access Tokens** → New token
+   - Name: `ITSM Service Token`
+   - Role: **Maintainer**
+   - Scopes: `api`
+3. 생성된 토큰 복사 → `.env`의 `GITLAB_PROJECT_TOKEN` 입력
+4. 프로젝트 ID 확인 (URL 또는 Settings에서) → `GITLAB_PROJECT_ID` 입력
+
+#### (권장) 그룹 토큰 설정
+여러 프로젝트의 라벨을 그룹 레벨에서 공유하려면:
+1. **Group** → **Settings** → **Access Tokens**
+2. Role: **Maintainer**, Scopes: `api`
+3. `.env`에 `GITLAB_GROUP_ID`, `GITLAB_GROUP_TOKEN` 입력
+
+### 3-5. 전체 서비스 기동
+
+```bash
+# .env 업데이트 후 전체 서비스 시작
+docker compose up -d
+
+# 기동 상태 확인
+docker compose ps
+
+# DB 마이그레이션 실행
+docker compose exec itsm-api alembic upgrade head
+
+# 헬스체크
+curl http://localhost:8111/api/health
+# {"status":"ok","checks":{"db":"ok","redis":"ok","gitlab":"ok","label_sync":"ok"}}
+```
+
+### 3-6. 첫 로그인 및 관리자 설정
+
+1. `http://<서버IP>:8111` 접속
+2. **GitLab으로 로그인** 클릭
+3. GitLab `root` 계정으로 로그인 → ITSM 포털 진입
+4. **관리** → **사용자 관리** → 본인 계정에 `admin` 역할 부여
+5. **관리** → **서비스 유형** → 카테고리 설정 (기본값: 하드웨어/소프트웨어/네트워크/계정/기타)
+
+---
+
+## 4. 환경변수 설정
+
+전체 `.env` 항목 설명입니다.
+
+### 필수 항목
+
+```bash
+# ── PostgreSQL ──────────────────────────────────────────────
+POSTGRES_DB=itsm
+POSTGRES_USER=itsm
+POSTGRES_PASSWORD=<강력한 랜덤 비밀번호>
+
+# ── GitLab ─────────────────────────────────────────────────
+GITLAB_ROOT_PASSWORD=<GitLab root 초기 비밀번호>
+GITLAB_OAUTH_CLIENT_ID=<OAuth Application ID>
+GITLAB_OAUTH_CLIENT_SECRET=<OAuth Secret>
+GITLAB_OAUTH_REDIRECT_URI=http://<HOST>:8111/api/auth/callback
+GITLAB_PROJECT_TOKEN=<프로젝트 Access Token>
+GITLAB_PROJECT_ID=1                    # ITSM 전용 GitLab 프로젝트 ID
+GITLAB_API_URL=http://gitlab:8929      # 내부 Docker 통신용 (변경 불필요)
+
+# ── Redis ───────────────────────────────────────────────────
+REDIS_PASSWORD=<openssl rand -hex 16>
+
+# ── ITSM API ────────────────────────────────────────────────
+SECRET_KEY=<openssl rand -hex 32>          # JWT 서명 키 (최소 32자)
+TOKEN_ENCRYPTION_KEY=<Fernet 키>           # Refresh Token 암호화
+ENVIRONMENT=production                      # development | production
+REFRESH_TOKEN_EXPIRE_DAYS=30               # Refresh Token 유효 기간
+
+# ── 프론트엔드 빌드 시 주입 ────────────────────────────────
+NEXT_PUBLIC_API_BASE_URL=http://<HOST>:8111/api
+NEXT_PUBLIC_GITLAB_URL=http://<HOST>:8929
+```
+
+### 선택 항목
+
+```bash
+# ── Nginx 포트 ──────────────────────────────────────────────
+APP_PORT=8111                          # ITSM 포털 외부 포트
+
+# ── GitLab 그룹 라벨 (권장) ────────────────────────────────
+GITLAB_GROUP_ID=<그룹 숫자 ID>
+GITLAB_GROUP_TOKEN=<그룹 Access Token>
+
+# ── GitLab 웹훅 ────────────────────────────────────────────
+GITLAB_WEBHOOK_SECRET=<랜덤 문자열>
+ITSM_WEBHOOK_URL=http://itsm-api:8000/webhooks/gitlab
+
+# ── 이메일 알림 ─────────────────────────────────────────────
+NOTIFICATION_ENABLED=false             # true 로 활성화
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=noreply@example.com
+SMTP_PASSWORD=<SMTP 비밀번호>
+SMTP_FROM=ITSM Portal <noreply@example.com>
+SMTP_TLS=true
+IT_TEAM_EMAIL=itteam@example.com      # IT 팀 수신 이메일
+
+# ── Telegram 알림 ──────────────────────────────────────────
+TELEGRAM_ENABLED=false
+TELEGRAM_BOT_TOKEN=<BotFather 발급 토큰>
+TELEGRAM_CHAT_ID=<채널 또는 그룹 ID>
+
+# ── IMAP 이메일 수신 (이메일 → 티켓 자동 생성) ─────────────
+IMAP_ENABLED=false
+IMAP_HOST=imap.example.com
+IMAP_PORT=993
+IMAP_USER=helpdesk@example.com
+IMAP_PASSWORD=<비밀번호>
+IMAP_FOLDER=INBOX
+IMAP_POLL_INTERVAL=60                  # 폴링 주기 (초)
+
+# ── 세션 / 보안 ─────────────────────────────────────────────
+MAX_ACTIVE_SESSIONS=5                  # 계정당 최대 동시 세션
+USER_SYNC_INTERVAL=3600                # GitLab 멤버 동기화 주기 (초)
+
+# ── ClamAV 바이러스 스캔 ────────────────────────────────────
+CLAMAV_ENABLED=true                    # false 로 스캔 비활성화
+CLAMAV_HOST=clamav
+CLAMAV_PORT=3310
+
+# ── 모니터링 ────────────────────────────────────────────────
+GRAFANA_PASSWORD=<Grafana 관리자 비밀번호>
+GRAFANA_PORT=3001
+GRAFANA_ROOT_URL=http://<HOST>:3001
+```
+
+### 시크릿 생성 명령어 모음
+
+```bash
+# SECRET_KEY (JWT 서명)
+openssl rand -hex 32
+
+# REDIS_PASSWORD
+openssl rand -hex 16
+
+# TOKEN_ENCRYPTION_KEY (Fernet)
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# GITLAB_WEBHOOK_SECRET
+openssl rand -hex 20
+
+# GRAFANA_PASSWORD (읽기 쉬운 형태)
+openssl rand -base64 12
+```
+
+---
+
+## 5. GitLab 연동 설정
+
+### OAuth 앱 등록
+
+1. GitLab → **Admin Area** → **Applications** → **New application**
+2. 입력:
+   - **Name**: `ITSM Portal`
+   - **Redirect URI**: `http://<HOST>:8111/api/auth/callback`
+   - **Confidential**: ✅
+   - **Scopes**: `read_user`, `api`, `openid`
+3. **Application ID** · **Secret** 복사 → `.env` 반영 → API 재시작
+
+```bash
+docker compose restart itsm-api
+```
+
+### 프로젝트 Access Token 발급
+
+1. GitLab → ITSM 프로젝트 → **Settings** → **Access Tokens**
+2. 설정:
+   - **Token name**: `ITSM Service Token`
+   - **Role**: `Maintainer`
+   - **Scopes**: `api`
+3. 토큰 복사 → `.env`의 `GITLAB_PROJECT_TOKEN` 반영
+
+### GitLab 웹훅 등록 (실시간 동기화)
+
+개발 프로젝트의 이벤트(MR 머지·CI 실패 등)를 ITSM에 실시간으로 전달합니다.
+
+1. GitLab → 개발 프로젝트 → **Settings** → **Webhooks** → **Add new webhook**
+2. 입력:
+   - **URL**: `http://<서버IP>:8111/api/webhooks/gitlab`
+     *(Docker 내부라면 `http://itsm-api:8000/webhooks/gitlab`)*
+   - **Secret token**: `.env`의 `GITLAB_WEBHOOK_SECRET`
+   - **Trigger**: `Push events`, `Issues events`, `Merge request events`, `Pipeline events`, `Comments`
+3. **Add webhook** → **Test** 버튼으로 연결 확인
+
+> 웹훅 URL이 외부에서 GitLab에 접근 불가능한 경우, Docker 내부 URL(`http://itsm-api:8000`)을 사용하세요.
+
+### 그룹 라벨 설정 (권장)
+
+여러 프로젝트에서 `status::`, `cat::`, `prio::` 라벨을 공유합니다.
+
+```bash
+# .env
+GITLAB_GROUP_ID=<그룹 숫자 ID>          # Admin Area → Groups에서 확인
+GITLAB_GROUP_TOKEN=<그룹 Access Token>  # 그룹 Settings → Access Tokens, Maintainer, api
+```
+
+> 설정하지 않으면 프로젝트 레벨 라벨로 자동 등록됩니다.
+
+---
+
+## 6. 서비스 시작 · 중지
+
+### 전체 시작 / 중지
+
+```bash
+docker compose up -d          # 전체 기동
+docker compose down           # 전체 중지 (데이터 보존)
+docker compose down -v        # ⚠️ 전체 중지 + 볼륨(DB 데이터) 삭제
+```
+
+### 개별 서비스 재시작
+
+```bash
+docker compose restart itsm-api     # API 서버
+docker compose restart itsm-web     # 웹 프론트엔드
+docker compose restart nginx        # Nginx (무중단: nginx -s reload 권장)
+docker compose restart grafana      # Grafana
+docker compose restart clamav       # ClamAV 바이러스 스캐너
+```
+
+### Nginx 무중단 설정 리로드
+
+```bash
+docker compose exec nginx nginx -s reload
+```
+
+### 이미지 재빌드 후 배포
+
+```bash
+# 코드 변경 후 전체 재빌드
+docker compose build itsm-api itsm-web
+docker compose up -d
+
+# API만 재빌드·교체 (무중단 아님)
+docker compose build itsm-api
+docker compose up -d --no-deps itsm-api
+
+# 웹만 재빌드·교체
+docker compose build itsm-web
+docker compose up -d --no-deps itsm-web
+```
+
+### Make 단축키
+
+```bash
+make dev          # 전체 시작
+make dev-down     # 전체 중지
+make build        # 전체 빌드 후 재시작
+make build-api    # API만 빌드·재시작
+make build-web    # 웹만 빌드·재시작
+make migrate      # DB 마이그레이션
+make lint         # 린터 (ruff + eslint)
+make test         # 전체 테스트
+make help         # 명령어 목록
+```
+
+### 상태 확인
+
+```bash
+# 컨테이너 전체 상태
+docker compose ps
+
+# 헬스체크 (db·redis·gitlab·label_sync)
+curl http://localhost:8111/api/health
+
+# 리소스 사용량
+docker stats --no-stream
+
+# 실시간 로그
+docker compose logs -f itsm-api
+docker compose logs -f itsm-web
+docker compose logs -f clamav
+```
+
+---
+
+## 7. DB 마이그레이션
+
+Alembic 마이그레이션 **41단계** (0001~0041)가 관리됩니다.
+API 컨테이너 시작 시 **자동으로 최신 버전까지 적용**됩니다.
+
+```bash
+# 현재 버전 확인
+docker compose exec itsm-api alembic current
+# 출력 예: 0041 (head)
+
+# 수동으로 최신 버전 적용
+docker compose exec itsm-api alembic upgrade head
+
+# 마이그레이션 이력 조회
+docker compose exec itsm-api alembic history
+
+# 한 단계 롤백
+docker compose exec itsm-api alembic downgrade -1
+
+# 특정 버전으로 롤백
+docker compose exec itsm-api alembic downgrade 0038
+```
+
+### 신규 마이그레이션 생성 (개발)
+
+```bash
+# 자동 감지 (models.py 변경 반영)
+docker compose exec itsm-api alembic revision --autogenerate -m "설명"
+
+# 빈 파일 생성
+docker compose exec itsm-api alembic revision -m "설명"
+
+# 파일 위치: itsm-api/alembic/versions/XXXX_설명.py
+# 반드시 내용 검토 후 적용!
+docker compose exec itsm-api alembic upgrade head
+```
+
+---
+
+## 8. 접속 주소
+
+| 서비스 | URL | 설명 |
+|--------|-----|------|
+| **ITSM 포털** | `http://<HOST>:8111` | 메인 서비스 (로그인 필요) |
+| **고객 포털** | `http://<HOST>:8111/portal` | 비로그인 티켓 접수 |
+| **GitLab** | `http://<HOST>:8929` | OAuth 제공자 |
+| **Prometheus** | `http://<HOST>:9090` | 메트릭 수집 (내부망) |
+| **Grafana** | `http://<HOST>:3001` | 대시보드 (내부망) |
+| **API 문서 (Swagger)** | `http://<HOST>:8111/docs` | 내부망만 접근 가능 |
+| **API 문서 (ReDoc)** | `http://<HOST>:8111/redoc` | 내부망만 접근 가능 |
+
+> `/docs`, `/redoc`, `/metrics` 는 보안상 `10.x.x.x`, `172.16–31.x.x`, `192.168.x.x`, `127.0.0.1` 대역에서만 접근됩니다.
+
+---
+
+## 9. 주요 기능
+
+### 티켓 관리
+- 생성·조회·수정·삭제 (파일 첨부 최대 10 MB)
+- 상태 워크플로우: `접수됨 → 처리중 → 대기중 → 처리완료 → 종료`
+- 내부 메모 (신청자 비공개)
+- 연관 티켓 링크 (`related` / `blocks` / `duplicate_of`)
+- 시간 기록 (분 단위)
+- 티켓 복제, Confidential Issue, CSV 내보내기
+- **타임라인 뷰**: 댓글 · 감사로그 · GitLab 시스템 노트를 시간순 통합 표시
+
+### 검색 & 필터
+- **글로벌 검색 (⌘K)**: 전체 티켓 실시간 검색, 300 ms 디바운스, 검색 히스토리 저장
+- 복합 필터 (상태·카테고리·우선순위·SLA·신청자)
+- URL 동기화 (북마크·뒤로가기 지원)
+- 즐겨찾기 필터 저장·불러오기
+
+### SLA 관리
+- 우선순위별 응답·해결 목표 시간 (관리자가 DB에서 설정)
+- SLA 일시정지/재개 (대기중 상태 연동)
+- 60분 전 사전 경고 알림
+- **에스컬레이션 정책**: 위반 시 자동 알림·재배정·우선순위 상향
+
+### 지식베이스 (KB)
+- PostgreSQL FTS 전문 검색 (GIN 인덱스)
+- 티켓 제목 6자+ 입력 시 실시간 KB 자동 추천
+- 파일 첨부, 태그·카테고리 분류
+- Markdown 에디터 (TipTap 기반)
+
+### 알림
+- 인앱 실시간 알림 (SSE + Redis Pub/Sub)
+- 이메일 (SMTP) — Jinja2 템플릿 커스터마이즈 가능
+- Telegram 봇
+- 아웃바운드 웹훅 (Slack Incoming Webhook, Teams Power Automate)
+- 개인 알림 설정 (이벤트별 이메일/인앱 토글)
+
+### GitLab 연동
+- MR 머지 → 티켓 자동 해결 (`Closes #N`, `Fixes #N`)
+- CI/CD 파이프라인 실패 → 티켓 자동 알림
+- MR 목록 티켓 상세에서 조회
+- 개발 프로젝트 전달 (이슈 자동 생성·연결)
+
+### 편의 기능
+- 칸반 보드 (드래그앤드롭 상태 변경)
+- 리포트 & 에이전트 성과 분석
+- 빠른 답변 (Canned Response) 템플릿
+- 티켓 구독 (Watcher)
+- 공지사항·배너 시스템 (info/warning/critical)
+- **키보드 단축키**: `g+t`(티켓), `g+k`(칸반), `g+b`(KB), `g+r`(리포트), `n`(새 티켓), `?`(도움말)
+- 고객 셀프서비스 포털 (비로그인 접수 · 진행 상황 추적)
+- IMAP 이메일 → 티켓 자동 생성
+
+---
+
+## 10. 사용자 역할
+
+| 역할 | GitLab 권한 | 주요 기능 |
+|------|------------|---------|
+| **user** | Reporter / Guest | 티켓 생성·조회, KB 열람, 만족도 평가 |
+| **developer** | Developer | 티켓 수정·상태 변경, 내부 메모, KB 작성, MR 조회 |
+| **agent** | Maintainer | 전체 티켓 관리, 담당자 배정, 일괄 작업, 리포트 |
+| **admin** | Owner / Instance Admin | 사용자 관리, SLA 정책, 에스컬레이션, API 키, 웹훅 |
+
+- GitLab 그룹 멤버십은 **1시간마다 자동 동기화**됩니다.
+- 퇴사자 계정은 다음 로그인 시 접근이 자동 차단됩니다.
+
+### 최초 관리자 설정 순서
+
+```
+1. GitLab root 계정으로 ITSM 첫 로그인
+2. ITSM 관리 → 사용자 관리 → root 계정에 admin 역할 부여
+3. 이후 팀원들이 GitLab 로그인 → ITSM 자동 등록
+4. 역할 부여: 관리 → 사용자 관리 → 각 계정에 역할 설정
+```
+
+---
+
+## 11. SLA 정책
+
+기본값 (관리자가 **관리 → SLA 정책**에서 변경 가능):
+
+| 우선순위 | 최초 응답 | 해결 목표 | 적용 예시 |
+|---------|---------|---------|---------|
+| 🔴 긴급 | 4시간 | 8시간 | 서버 다운, 전체 네트워크 불통 |
+| 🟠 높음 | 8시간 | 24시간 | 주요 업무시스템 오류 |
+| 🟡 보통 | 24시간 | 72시간 | 일부 기능 이상, 속도 저하 |
+| ⚪ 낮음 | 48시간 | 168시간 | 장비 교체, 비업무 시간 처리 |
+
+### 에스컬레이션 정책
+
+관리 → 에스컬레이션 정책에서 설정:
+
+| 항목 | 설명 |
+|------|------|
+| 트리거 | `warning` (SLA 임박) / `breach` (SLA 위반) |
+| 액션 | `notify` (알림) / `reassign` (담당자 변경) / `upgrade_priority` (우선순위 상향) |
+| 체크 주기 | **5분** (백그라운드 자동 실행) |
+
+---
+
+## 12. 보안
+
+### 인증 구조
+
+```
+GitLab OAuth 2.0 → JWT Access Token (2시간)
+                 → Refresh Token (30일, Token Rotation)
+                 → JTI 블랙리스트 (로그아웃 시 즉시 무효화)
+                 → 세션 최대 5개 제한
+```
+
+### 파일 업로드 보안
+
+- 최대 **10 MB**
+- MIME 타입 + **Magic Bytes** 이중 검증
+- 이미지 **EXIF 메타데이터 자동 제거** (Pillow) — GPS·기기정보 포함
+- **ClamAV 바이러스 스캔** (fail-open: ClamAV 장애 시 통과)
+
+### 입력 검증
+
+- 티켓·댓글 제출 시 **시크릿 스캐닝** (9개 패턴: AWS Key, GitLab PAT, OpenAI Key 등)
+- Pydantic v2 입력 검증
+- SQLAlchemy ORM (SQL Injection 방지)
+- **SSRF 방지**: 외부 URL 등록 시 내부망 IP 차단
+
+### 감사 로그
+
+- 모든 주요 이벤트 기록 (수행자·역할·IP·타임스탬프)
+- **PostgreSQL 트리거로 수정·삭제 원천 차단** (Immutable 테이블)
+
+### 네트워크 보안
+
+| 헤더 | 값 |
+|------|-----|
+| `X-Frame-Options` | `DENY` |
+| `X-Content-Type-Options` | `nosniff` |
+| `X-XSS-Protection` | `1; mode=block` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Content-Security-Policy` | 인라인 스크립트만 허용 |
+| `Strict-Transport-Security` | `max-age=31536000` |
+| `Permissions-Policy` | 카메라·마이크·위치 차단 |
+
+### API 키 인증 (외부 연동)
+
+```bash
+# API 키 발급 (관리자 권한 필요)
+curl -X POST http://localhost:8111/api/admin/api-keys \
+  -H "Cookie: itsm_token=<admin_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"CI Bot","scopes":["tickets:read","tickets:write"]}'
+
+# API 키로 호출
+curl http://localhost:8111/api/tickets/ \
+  -H "Authorization: Bearer itsm_live_<키>"
+```
+
+### Rate Limiting
+
+| 엔드포인트 | 제한 |
+|-----------|------|
+| 티켓 생성 | 10회 / 분 |
+| 파일 업로드 | 5회 / 분 |
+
+---
+
+## 13. 모니터링 (Prometheus + Grafana)
+
+### 접속
+
+| 서비스 | URL | 계정 |
+|--------|-----|------|
+| Prometheus | `http://<HOST>:9090` | — |
+| Grafana | `http://<HOST>:3001` | `admin` / `GRAFANA_PASSWORD` |
+
+### 자동 프로비저닝 대시보드 (4개)
+
+| 대시보드 | 내용 |
+|---------|------|
+| **ITSM 운영 대시보드** | UP/DOWN, RPS, 에러율, P95 레이턴시, CPU·메모리·FD, 엔드포인트별 통계 |
+| **ITSM 성능 분석** | P50/P90/P95/P99 레이턴시, 엔드포인트별 처리량, 요청·응답 크기 |
+| **ITSM SLA 모니터링** | 가용성 %, Apdex 점수, 에러 버짓, P95 SLO 준수율, 장애 이력 |
+| **ITSM 메뉴별 운영 현황** | 티켓·KB·칸반·리포트·관리 메뉴 기준 비즈니스 KPI (27개 커스텀 메트릭) |
+
+### 비즈니스 메트릭 (5분 주기 DB 집계)
+
+```
+itsm_kb_articles_total{status}        — KB 게시/초안 문서 수
+itsm_users_total{role}                — 역할별 사용자 수
+itsm_sla_records_total{breached}      — SLA 위반/정상 티켓 수
+itsm_audit_events_total{action}       — 감사 로그 액션별 이벤트 수
+itsm_notifications_total{read}        — 읽음/미읽음 알림 수
+itsm_ratings_avg_score                — 만족도 평균 점수
+itsm_time_entries_hours_total         — 총 기록 시간
+itsm_escalation_records_total         — 에스컬레이션 이력 수
+```
+
+### 주요 PromQL 쿼리
+
+```promql
+# 초당 요청수
+sum(rate(http_requests_total{job="itsm-api"}[5m]))
+
+# 에러율 (%)
+sum(rate(http_requests_total{job="itsm-api",status=~"5.."}[5m]))
+/ sum(rate(http_requests_total{job="itsm-api"}[5m])) * 100
+
+# P95 레이턴시 (ms)
+histogram_quantile(0.95,
+  sum(rate(http_request_duration_highr_seconds_bucket{job="itsm-api"}[5m])) by (le)
+) * 1000
+
+# 서비스 가용성 (%)
+sum(rate(http_requests_total{job="itsm-api",status!~"5.."}[5m]))
+/ sum(rate(http_requests_total{job="itsm-api"}[5m])) * 100
+```
+
+### Grafana 비밀번호 재설정
+
+```bash
+docker compose exec grafana grafana cli admin reset-admin-password <새비밀번호>
+docker compose restart grafana
+```
+
+---
+
+## 14. 백업 & 복구
+
+### PostgreSQL 수동 백업
+
+```bash
+# 백업 생성 (gzip 압축)
+docker compose exec postgres pg_dump -U itsm itsm \
+  | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
+
+# 백업 복구
+gunzip -c backup_20260309_120000.sql.gz \
+  | docker compose exec -T postgres psql -U itsm -d itsm
+```
+
+### 자동 백업 활성화 (24시간 주기, 7일 보관)
+
+```bash
+# docker-compose.yml의 pg-backup 서비스 활성화
+docker compose --profile backup up -d pg-backup
+```
+
+### Redis 데이터 백업
+
+```bash
+# RDB 스냅샷 강제 생성
+docker compose exec redis redis-cli -a ${REDIS_PASSWORD} BGSAVE
+
+# 파일 복사
+docker cp itsm-redis-1:/data/dump.rdb ./redis_backup_$(date +%Y%m%d).rdb
+```
+
+### Docker 볼륨 전체 백업
+
+```bash
+# 볼륨 목록 확인
+docker volume ls | grep itsm
+
+# PostgreSQL 볼륨 백업
+docker run --rm \
+  -v itsm_itsm_pgdata:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/pgdata_$(date +%Y%m%d).tar.gz -C /data .
+
+# 복구
+docker run --rm \
+  -v itsm_itsm_pgdata:/data \
+  -v $(pwd):/backup \
+  alpine tar xzf /backup/pgdata_20260309.tar.gz -C /data
+```
+
+### 백업 자동화 크론 설정 (권장)
+
+```bash
+# crontab -e 에 추가
+# 매일 새벽 2시 백업, 7일 초과분 자동 삭제
+0 2 * * * cd /opt/itsm && \
+  docker compose exec -T postgres pg_dump -U itsm itsm \
+  | gzip > /opt/itsm/backups/db_$(date +\%Y\%m\%d).sql.gz && \
+  find /opt/itsm/backups -name "db_*.sql.gz" -mtime +7 -delete
+```
+
+---
+
+## 15. 운영 관리
+
+### 관리자 초기 설정
+
+```
+ITSM 로그인 → 관리(Admin) 메뉴 진입:
+  - 사용자 관리: 팀원 역할 부여
+  - SLA 정책: 목표 시간 조정
+  - 서비스 유형: 카테고리 추가·수정
+  - 에스컬레이션 정책: 위반 시 자동 처리 규칙
+  - 이메일 템플릿: 알림 메일 문구 커스터마이즈
+  - 빠른 답변: 자주 쓰는 답변 템플릿 등록
+```
+
+### 사용자 동기화
+
+GitLab 그룹 멤버십은 1시간마다 자동 동기화됩니다.
+즉시 동기화 필요 시:
+
+```bash
+docker compose restart itsm-api
+```
+
+### GitLab 레이블 복구
+
+레이블이 누락되거나 corrupt된 경우 API가 자동 감지·복구합니다.
+수동 복구가 필요한 경우:
+
+```bash
+# 헬스체크에서 label_sync 상태 확인
+curl http://localhost:8111/api/health | python3 -m json.tool
+
+# 수동 복구 (관리자 토큰 필요)
+curl -X POST http://localhost:8111/api/admin/cleanup-labels \
+  -H "Cookie: itsm_token=<admin_token>"
+```
+
+### 캐시 관리
+
+```bash
+# 티켓 목록 캐시만 삭제 (가장 안전)
+docker exec itsm-redis-1 redis-cli -a ${REDIS_PASSWORD} \
+  --scan --pattern "itsm:tickets:*" \
+  | xargs -r docker exec -i itsm-redis-1 redis-cli -a ${REDIS_PASSWORD} DEL
+
+# stats 캐시 삭제
+docker exec itsm-redis-1 redis-cli -a ${REDIS_PASSWORD} \
+  --scan --pattern "itsm:stats:*" \
+  | xargs -r docker exec -i itsm-redis-1 redis-cli -a ${REDIS_PASSWORD} DEL
+
+# ⚠️ 전체 Redis 캐시 삭제 (모든 세션 무효화 → 전원 재로그인 필요)
+docker exec itsm-redis-1 redis-cli -a ${REDIS_PASSWORD} FLUSHDB
+```
+
+### ClamAV 바이러스 DB 업데이트
+
+```bash
+# 수동 업데이트
+docker compose exec clamav freshclam
+
+# 자동 업데이트 확인 (로그)
+docker compose logs clamav --tail=20
+```
+
+### DB 유지보수
+
+```bash
+# VACUUM ANALYZE (Dead tuple 정리, 통계 갱신)
+docker compose exec postgres psql -U itsm -d itsm -c "VACUUM ANALYZE;"
+
+# Dead tuple 현황 확인
+docker compose exec postgres psql -U itsm -d itsm -c "
+SELECT relname, n_dead_tup, n_live_tup
+FROM pg_stat_user_tables
+WHERE n_dead_tup > 100
+ORDER BY n_dead_tup DESC;
+"
+
+# DB 크기 확인
+docker compose exec postgres psql -U itsm -d itsm -c "
+SELECT pg_size_pretty(pg_database_size('itsm')) AS db_size;
+"
+```
+
+### 로그 조회
+
+```bash
+# 실시간 로그
+docker compose logs -f itsm-api
+
+# 에러만 필터
+docker compose logs itsm-api 2>&1 | grep -iE "error|critical|exception"
+
+# 지난 1시간 로그
+docker compose logs itsm-api --since 1h
+
+# nginx 액세스 로그
+docker compose logs nginx --since 1h | grep -v "health"
+```
+
+---
+
+## 16. 도메인 · HTTPS 적용 (운영 서버)
+
+### Certbot + Let's Encrypt 적용
+
+```bash
+# 1. Certbot 설치
+sudo apt install -y certbot
+
+# 2. 인증서 발급 (포트 80이 열려있어야 함)
+sudo certbot certonly --standalone -d itsm.example.com
+
+# 인증서 위치
+# /etc/letsencrypt/live/itsm.example.com/fullchain.pem
+# /etc/letsencrypt/live/itsm.example.com/privkey.pem
+```
+
+### nginx HTTPS 설정
+
+`nginx/conf.d/default.conf`를 아래와 같이 수정합니다:
+
+```nginx
+server {
+  listen 80;
+  server_name itsm.example.com;
+  return 301 https://$host$request_uri;
+}
+
+server {
+  listen 443 ssl;
+  server_name itsm.example.com;
+
+  ssl_certificate     /etc/letsencrypt/live/itsm.example.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/itsm.example.com/privkey.pem;
+  ssl_protocols       TLSv1.2 TLSv1.3;
+  ssl_ciphers         HIGH:!aNULL:!MD5;
+
+  gzip on;
+  gzip_types application/json text/plain text/css application/javascript;
+  gzip_min_length 1024;
+  gzip_comp_level 4;
+  gzip_vary on;
+  gzip_proxied any;
+
+  # (나머지 보안 헤더·location 블록은 기존과 동일)
+  ...
+}
+```
+
+### docker-compose.yml 볼륨 마운트 추가
+
+```yaml
+nginx:
+  volumes:
+    - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    - /etc/letsencrypt:/etc/letsencrypt:ro   # 추가
+```
+
+### `.env` URL 변경
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://itsm.example.com/api
+NEXT_PUBLIC_GITLAB_URL=https://gitlab.example.com
+GITLAB_OAUTH_REDIRECT_URI=https://itsm.example.com/api/auth/callback
+GRAFANA_ROOT_URL=https://grafana.example.com
+```
+
+### 자동 갱신 설정
+
+```bash
+# crontab -e
+0 3 * * * certbot renew --quiet && docker compose exec nginx nginx -s reload
+```
+
+### GitLab HTTPS 연동 시 내부 통신 주의
+
+GitLab이 별도 도메인(`gitlab.example.com`)에 있고, ITSM API가 Docker 내부에서 접근할 때:
+
+```bash
+# .env — Docker 내부 통신에는 내부 URL 사용
+GITLAB_API_URL=http://gitlab:8929      # Docker 네트워크 내부
+# 또는 외부 도메인 (Let's Encrypt 인증서 적용 후)
+GITLAB_API_URL=https://gitlab.example.com
+```
+
+---
+
+## 17. 개발 환경
+
+### 로컬 개발 설정
+
+```bash
+# 백엔드 의존성
+cd itsm-api
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 프론트엔드 의존성
+cd itsm-web
+npm ci
+```
+
+### 백엔드 로컬 실행
+
+```bash
+cd itsm-api
+
+# 환경변수 로드
+set -a && source ../.env && set +a
+
+# DB·Redis만 Docker로 실행
+docker compose up -d postgres redis
+
+# 마이그레이션
+alembic upgrade head
+
+# 개발 서버 (핫리로드)
+uvicorn app.main:app --reload --port 8000
+```
+
+### 프론트엔드 로컬 실행
+
+```bash
+cd itsm-web
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev
+# http://localhost:3000 에서 접속
+```
+
+### 테스트
+
+```bash
+# 백엔드 테스트
+cd itsm-api && pytest tests/ -v
+
+# 프론트엔드 테스트
+cd itsm-web && npm test
+
+# 전체 린터
+make lint
+# ruff (Python) + eslint (TypeScript) 동시 실행
+```
+
+### 신규 마이그레이션 추가
+
+```bash
+# 1. itsm-api/app/models.py 변경
+# 2. 마이그레이션 파일 자동 생성
+docker compose exec itsm-api alembic revision --autogenerate -m "add_feature_x"
+
+# 3. 생성 파일 검토 (itsm-api/alembic/versions/)
+# 4. 적용
+docker compose exec itsm-api alembic upgrade head
+```
+
+---
+
+## 18. 트러블슈팅
+
+### GitLab 초기 기동이 느림
+
+최초 기동 시 3~5분 소요됩니다.
+
+```bash
+docker compose logs -f gitlab | grep -E "Reconfigured|Error"
+```
+
+### OAuth 로그인 실패
+
+```bash
+# 1. Redirect URI 일치 여부 확인
+grep GITLAB_OAUTH .env
+
+# 2. GitLab OAuth 앱 설정 재확인
+# GitLab → Admin Area → Applications → ITSM Portal → Edit
+
+# 3. API 서버 재시작
+docker compose restart itsm-api
+docker compose logs itsm-api | grep -E "oauth|auth|error" | tail -20
+```
+
+### API 502 Bad Gateway
+
+nginx가 이전 컨테이너 IP를 캐시한 경우:
+
+```bash
+docker compose exec nginx nginx -s reload
+```
+
+### label_sync 오류 (레이블 드리프트)
+
+```bash
+# 헬스체크로 상태 확인
+curl http://localhost:8111/api/health
+
+# API 로그에서 복구 여부 확인 (자동 복구됨)
+docker compose logs itsm-api | grep "Label drift" | tail -5
+
+# 수동 강제 복구
+curl -X POST http://localhost:8111/api/admin/cleanup-labels \
+  -H "Cookie: itsm_token=<admin_token>"
+```
+
+### Alembic 마이그레이션 실패
+
+```bash
+# 현재 상태 확인
+docker compose exec itsm-api alembic current
+
+# DB 직접 확인
+docker compose exec postgres psql -U itsm -d itsm \
+  -c "SELECT version_num FROM alembic_version;"
+
+# 재시도
+docker compose exec itsm-api alembic upgrade head
+```
+
+### ClamAV 연결 실패
+
+ClamAV 미연결 시 **fail-open** (업로드 허용) 동작합니다.
+
+```bash
+docker compose ps clamav
+docker compose logs clamav --tail=20
+docker compose restart clamav
+
+# ClamAV DB 업데이트 (용량 약 300 MB 다운로드)
+docker compose exec clamav freshclam
+```
+
+### 메모리 부족
+
+```bash
+# 현재 메모리 사용량 확인
+docker stats --no-stream
+
+# GitLab 메모리 제한 (docker-compose.yml에 추가)
+gitlab:
+  mem_limit: 4g
+  mem_reservation: 2g
+```
+
+### Redis 연결 오류
+
+```bash
+# Redis 컨테이너 상태
+docker compose ps redis
+
+# 비밀번호 확인
+grep REDIS_PASSWORD .env
+
+# Redis 직접 연결 테스트
+docker compose exec redis redis-cli -a ${REDIS_PASSWORD} ping
+```
+
+### Grafana 비밀번호 분실
+
+```bash
+docker compose exec grafana grafana cli admin reset-admin-password <새비밀번호>
+docker compose restart grafana
+```
+
+### 디스크 공간 부족
+
+```bash
+# Docker 이미지·컨테이너 정리 (미사용 항목만)
+docker system prune -f
+
+# 볼륨 크기 확인
+docker system df -v
+
+# GitLab 데이터 정리
+docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
+```
+
+---
+
+## 19. 버전 이력
+
+### 현재 버전 (2026-03-10)
+
+- **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22
+- **DB 마이그레이션**: 41단계 (0001~0041)
+- **API 엔드포인트**: 128개
+
+### 마이그레이션 이력
+
+| 버전 | 주요 변경 |
+|------|---------|
+| `0041` | 중복 DB 인덱스 17개 제거 (스토리지·쓰기 성능 개선) |
+| `0040` | Sudo 토큰 (관리자 재인증) |
+| `0039` | 사용자 아바타 URL 저장 |
+| `0038` | 해결 노트 (티켓 종료·처리완료 시 상세 기록) |
+| `0037` | API 키 인증 (`itsm_live_` prefix, SHA-256 해시) |
+| `0036` | 감사 로그 Immutable (PostgreSQL 트리거로 수정·삭제 차단) |
+| `0035` | 공지사항·배너 시스템 |
+| `0034` | 개인 알림 설정 (이벤트별 이메일/인앱 토글) |
+| `0033` | 세션 디바이스 추적, 최대 동시 세션 제한 |
+| `0032` | 아웃바운드 웹훅 (Slack/Teams 연동) |
+| `0031` | DB 인덱스 최적화 (KB FTS GIN, SLA, 알림) |
+| `0030` | 이메일 템플릿 관리 UI (Jinja2) |
+| `0029` | SLA 에스컬레이션 정책 |
+| `0028` | 퇴사자 계정 자동 동기화 (`is_active`) |
+
+### 최근 주요 개선
+
+| 항목 | 내용 |
+|------|------|
+| 병목 개선 | 티켓 목록 초기 로드: 272ms → 176ms (35% 단축) |
+| 네트워크 | nginx gzip 압축 (JSON 응답 90% 압축, 53 KB → 5 KB) |
+| 커넥션 풀 | httpx 공유 클라이언트 (TCP 재사용, max_connections=30) |
+| 캐시 | stats TTL 300s / requesters TTL 600s / 무효화 시 구 키 즉시 삭제 |
+| 모니터링 | 비즈니스 KPI 27개 Prometheus 커스텀 메트릭 + Grafana 대시보드 4개 |
+| 타임라인 | 댓글·감사로그·시스템 노트 통합 뷰 |
+| 안정성 | label drift 쿨다운 (5분) / 중복 인덱스 제거 / Dead tuple VACUUM |
+
+---
+
+## 라이선스
+
+내부 사용 전용. 무단 배포 금지.
