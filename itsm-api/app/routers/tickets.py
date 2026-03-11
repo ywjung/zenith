@@ -807,9 +807,13 @@ def proxy_upload(
                 logger.warning("Failed to resolve project namespace for proxy: %s", e)
 
     if project_id and upload_id and filename:
+        # URL-decode filename once more to handle double-encoding
+        # (frontend encodeURIComponent on already-encoded Korean paths → %25E1... → %E1... → 한글)
+        from urllib.parse import unquote as _unquote
+        decoded_filename = _unquote(filename)
         # Sanitize filename — strip any path components
-        safe_filename = os.path.basename(filename)
-        if not safe_filename or safe_filename != filename:
+        safe_filename = os.path.basename(decoded_filename)
+        if not safe_filename or safe_filename != decoded_filename:
             raise HTTPException(status_code=400, detail="잘못된 파일명입니다.")
 
         sha256 = hashlib.sha256(project_id.encode()).hexdigest()
