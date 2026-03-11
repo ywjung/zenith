@@ -55,6 +55,7 @@ function getSLAStatus(t: Ticket): 'breached' | 'warning' | 'ok' | null {
   if (!t.sla_deadline) return null
   if (t.sla_breached) return 'breached'
   const remaining = new Date(t.sla_deadline).getTime() - Date.now()
+  if (remaining < 0) return 'breached'          // 마감 시간 초과
   return remaining < 2 * 3600_000 ? 'warning' : 'ok'
 }
 
