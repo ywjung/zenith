@@ -1588,16 +1588,18 @@ def get_timeline(
 
     _pid = project_id or str(_gs().GITLAB_PROJECT_ID)
     _cache_key = f"itsm:timeline:{_pid}:{iid}"
-    _TTL = 30  # 30초 캐시
+    _TTL = 60  # 60초 캐시
 
     # Redis 캐시 확인
+    _r = None
     try:
         import redis as _redis
         _r = _redis.from_url(_gs().REDIS_URL, socket_connect_timeout=1, decode_responses=True)
         _cached = _r.get(_cache_key)
         if _cached:
             return _json.loads(_cached)
-    except Exception:
+    except Exception as _re:
+        logger.warning("Timeline #%d: Redis error: %s", iid, _re)
         _r = None
 
     events: list[dict] = []
@@ -1661,8 +1663,8 @@ def get_timeline(
     try:
         if _r:
             _r.setex(_cache_key, _TTL, _json.dumps(events, default=str))
-    except Exception:
-        pass
+    except Exception as _ce:
+        logger.warning("Timeline #%d: cache save failed: %s", iid, _ce)
 
     return events
 
