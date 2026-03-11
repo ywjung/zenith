@@ -25,3 +25,7 @@ coverage/
 *.egg-info/
 dist/
 build/
+
+# 프로젝트 내부 문서
+CLAUDE.md
+요구사항.md
