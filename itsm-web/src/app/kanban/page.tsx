@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
+import { DragDropContext, Droppable, Draggable, DropResult, DragStart } from '@hello-pangea/dnd'
 import { fetchTickets, updateTicket, fetchProjects } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import type { Ticket, GitLabProject } from '@/types'
@@ -16,6 +16,15 @@ const COLUMNS: { id: string; label: string; bg: string; header: string; wip: num
   { id: 'resolved',    label: '처리 완료',    bg: 'bg-green-50',  header: 'bg-green-200 text-green-800', wip: 30 },
   { id: 'closed',      label: '종료됨',       bg: 'bg-slate-50',  header: 'bg-slate-200 text-slate-700', wip: 50 },
 ]
+
+// 백엔드 VALID_TRANSITIONS와 동일 — 드래그 중 이동 불가 컬럼 사전 차단
+const VALID_TRANSITIONS: Record<string, Set<string>> = {
+  open:        new Set(['in_progress', 'waiting', 'closed']),
+  in_progress: new Set(['resolved', 'waiting', 'closed']),
+  waiting:     new Set(['in_progress', 'closed']),
+  resolved:    new Set(['in_progress', 'closed']),
+  closed:      new Set(['open']),  // reopened → open으로 표시됨
+}
 
 const PRIORITY_BORDER: Record<string, string> = {
   critical: 'border-l-red-500',
@@ -83,6 +92,7 @@ function KanbanContent() {
   const prevProjectRef = useRef('')  // 이전 프로젝트 ID 추적 (init 첫 설정 구분용)
   const [dragError, setDragError] = useState<string | null>(null)
   const [colOrders, setColOrders] = useState<Record<string, number[]>>({})
+  const [draggingFromCol, setDraggingFromCol] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -157,7 +167,16 @@ function KanbanContent() {
     return result
   }, [colOrders, ticketMap])
 
+  const onDragStart = (start: DragStart) => {
+    const iid = parseInt(start.draggableId, 10)
+    const ticket = tickets.find(t => t.iid === iid)
+    const col = ticket?.state === 'closed' ? 'closed' : (ticket?.status || 'open')
+    setDraggingFromCol(col)
+    setDragError(null)
+  }
+
   const onDragEnd = async (result: DropResult) => {
+    setDraggingFromCol(null)
     if (!result.destination) return
     const { source, destination, draggableId } = result
     const iid = parseInt(draggableId, 10)
@@ -377,31 +396,50 @@ function KanbanContent() {
             ))}
           </div>
         ) : (
-          <DragDropContext onDragEnd={onDragEnd}>
+          <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
             <div className="grid grid-cols-5 gap-3 h-full">
               {COLUMNS.map(col => {
                 const colTickets = getColTickets(col.id)
                 const overWip = colTickets.length > col.wip
+
+                // 드래그 중: 현재 컬럼(같은 컬럼 재정렬)은 항상 허용
+                // 다른 컬럼: VALID_TRANSITIONS에 없으면 비활성화
+                const isDisabled = draggingFromCol !== null
+                  && draggingFromCol !== col.id
+                  && !(VALID_TRANSITIONS[draggingFromCol]?.has(col.id))
+
                 return (
-                  <div key={col.id} className="flex flex-col min-h-0 rounded-lg overflow-hidden shadow-sm border border-gray-200">
+                  <div
+                    key={col.id}
+                    className={`flex flex-col min-h-0 rounded-lg overflow-hidden shadow-sm border transition-opacity ${
+                      isDisabled ? 'border-gray-200 opacity-40' : 'border-gray-200'
+                    }`}
+                  >
                     {/* Column header */}
                     <div className={`flex-none flex items-center justify-between px-3 py-2 ${col.header}`}>
                       <span className="text-xs font-bold tracking-wide">{col.label}</span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                        overWip ? 'bg-red-500 text-white' : 'bg-white/60'
-                      }`}>
-                        {colTickets.length}{overWip && ' ⚠'}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {isDisabled && (
+                          <span className="text-[10px] text-gray-500" title="이 상태로 바로 이동할 수 없습니다">🚫</span>
+                        )}
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          overWip ? 'bg-red-500 text-white' : 'bg-white/60'
+                        }`}>
+                          {colTickets.length}{overWip && ' ⚠'}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Scrollable area */}
-                    <Droppable droppableId={col.id}>
+                    <Droppable droppableId={col.id} isDropDisabled={isDisabled}>
                       {(provided, snapshot) => (
                         <div
                           ref={provided.innerRef}
                           {...provided.droppableProps}
                           className={`flex-1 overflow-y-auto p-2 transition-colors ${col.bg} ${
-                            snapshot.isDraggingOver ? 'ring-2 ring-inset ring-blue-300 bg-blue-50/60' : ''
+                            isDisabled
+                              ? 'cursor-not-allowed'
+                              : snapshot.isDraggingOver ? 'ring-2 ring-inset ring-blue-300 bg-blue-50/60' : ''
                           }`}
                         >
                           {colTickets.length === 0 && !snapshot.isDraggingOver && (
