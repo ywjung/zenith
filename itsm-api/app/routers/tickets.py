@@ -1583,6 +1583,23 @@ def get_timeline(
     db: Session = Depends(get_db),
 ):
     """댓글 + 감사로그 + GitLab 시스템 노트를 시간순으로 병합한 타임라인."""
+    import json as _json
+    from ..config import get_settings as _gs
+
+    _pid = project_id or str(_gs().GITLAB_PROJECT_ID)
+    _cache_key = f"itsm:timeline:{_pid}:{iid}"
+    _TTL = 30  # 30초 캐시
+
+    # Redis 캐시 확인
+    try:
+        import redis as _redis
+        _r = _redis.from_url(_gs().REDIS_URL, socket_connect_timeout=1, decode_responses=True)
+        _cached = _r.get(_cache_key)
+        if _cached:
+            return _json.loads(_cached)
+    except Exception:
+        _r = None
+
     events: list[dict] = []
 
     # 1) GitLab 노트 (댓글 + 시스템 메시지)
@@ -1639,6 +1656,14 @@ def get_timeline(
         return e.get("created_at") or ""
 
     events.sort(key=_sort_key)
+
+    # Redis 캐시 저장
+    try:
+        if _r:
+            _r.setex(_cache_key, _TTL, _json.dumps(events, default=str))
+    except Exception:
+        pass
+
     return events
 
 
