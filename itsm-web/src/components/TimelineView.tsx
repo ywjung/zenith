@@ -88,13 +88,23 @@ function formatDate(iso: string) {
 }
 
 function Avatar({ name, url }: { name?: string; url?: string }) {
-  if (url) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt={name ?? ''} className="w-7 h-7 rounded-full object-cover shrink-0" />
+  const [imgError, setImgError] = useState(false)
+  const initial = name?.[0]?.toUpperCase() ?? '?'
+
+  if (url && !imgError) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt={name ?? ''}
+        className="w-7 h-7 rounded-full object-cover shrink-0"
+        onError={() => setImgError(true)}
+      />
+    )
   }
   return (
     <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold text-gray-600 shrink-0">
-      {name?.[0]?.toUpperCase() ?? '?'}
+      {initial}
     </div>
   )
 }
