@@ -16,7 +16,8 @@ from ..models import KBArticle
 from ..rbac import require_agent, require_admin
 from ..rate_limit import user_limiter, LIMIT_KB_CREATE, LIMIT_UPLOAD
 
-_KB_CACHE_TTL = 120  # KB 목록 Redis 캐시 2분
+_KB_CACHE_TTL = 300        # KB 목록 Redis 캐시 5분
+_KB_ARTICLE_CACHE_TTL = 300  # KB 개별 아티클 캐시 5분
 
 
 def _get_redis():
@@ -146,6 +147,17 @@ def get_article(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
+    role = user.get("role", "user")
+    is_agent = role in ("agent", "admin")
+
+    # Redis 캐시 확인 (published 아티클만)
+    cache_key = f"itsm:kb:article:{id_or_slug}"
+    r = _get_redis()
+    if r and not is_agent:
+        cached = r.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
     article = None
     if id_or_slug.isdigit():
         article = db.query(KBArticle).filter(KBArticle.id == int(id_or_slug)).first()
@@ -154,13 +166,17 @@ def get_article(
     if not article:
         raise HTTPException(status_code=404, detail="아티클을 찾을 수 없습니다.")
 
-    if not article.published and user.get("role", "user") not in ("agent", "admin"):
+    if not article.published and not is_agent:
         raise HTTPException(status_code=403, detail="권한이 부족합니다.")
 
     # Increment view count
     article.view_count = (article.view_count or 0) + 1
     db.commit()
-    return _article_to_dict(article, include_content=True)
+
+    result = _article_to_dict(article, include_content=True)
+    if r and article.published and not is_agent:
+        r.setex(cache_key, _KB_ARTICLE_CACHE_TTL, json.dumps(result, default=str))
+    return result
 
 
 @router.get("/suggest")

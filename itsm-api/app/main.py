@@ -40,7 +40,11 @@ _snapshot_check_lock = threading.Lock()
 
 
 def _sla_checker_loop():
-    """Background thread: check SLA breaches and warnings every 5 minutes."""
+    """Background thread: check SLA breaches and warnings every 5 minutes.
+
+    기동 후 60초 대기 후 첫 실행 — 스타트업 부하 분산.
+    """
+    _sla_thread_stop.wait(timeout=60)  # 기동 직후 60초 대기
     while not _sla_thread_stop.is_set():
         try:
             with SessionLocal() as db:
@@ -363,7 +367,7 @@ except ImportError:
 try:
     from .business_metrics import start_background_refresh
     from .database import SessionLocal
-    start_background_refresh(SessionLocal, interval=300)
+    start_background_refresh(SessionLocal, interval=600)
 except Exception as _bm_err:
     logger.warning("Business metrics init failed: %s", _bm_err)
 
@@ -391,17 +395,24 @@ def health():
     except Exception as e:
         checks["redis"] = f"error: {e}"
 
-    # GitLab (lightweight)
-    try:
-        import httpx as _httpx
-        with _httpx.Client(timeout=3) as c:
-            resp = c.get(
-                f"{settings.GITLAB_API_URL}/api/v4/version",
-                headers={"PRIVATE-TOKEN": settings.GITLAB_PROJECT_TOKEN},
-            )
-            checks["gitlab"] = "ok" if resp.is_success else f"status {resp.status_code}"
-    except Exception as e:
-        checks["gitlab"] = f"error: {e}"
+    # GitLab (lightweight) — 30초 캐시로 Prometheus/nginx 헬스체크 부하 방지
+    global _gitlab_health_cache
+    now_mono = time.monotonic()
+    if now_mono - _gitlab_health_cache[1] < _GITLAB_HEALTH_COOLDOWN:
+        checks["gitlab"] = _gitlab_health_cache[0]
+    else:
+        try:
+            import httpx as _httpx
+            with _httpx.Client(timeout=3) as c:
+                resp = c.get(
+                    f"{settings.GITLAB_API_URL}/api/v4/version",
+                    headers={"PRIVATE-TOKEN": settings.GITLAB_PROJECT_TOKEN},
+                )
+                result = "ok" if resp.is_success else f"status {resp.status_code}"
+        except Exception as e:
+            result = f"error: {e}"
+        _gitlab_health_cache = (result, now_mono)
+        checks["gitlab"] = result
 
     # GitLab 레이블 드리프트 감지 — 필수 레이블 누락 시 경고
     try:
@@ -415,6 +426,9 @@ def health():
         status_code=200 if all_ok else 503,
     )
 
+
+_gitlab_health_cache: tuple[str, float] = ("ok", 0.0)
+_GITLAB_HEALTH_COOLDOWN = 30.0  # GitLab /version 호출 30초 캐시
 
 _label_drift_last_check: float = 0.0
 _label_drift_last_result: str = "ok"
