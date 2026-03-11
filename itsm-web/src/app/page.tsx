@@ -122,6 +122,8 @@ function HomeContent() {
         page,
         per_page: DEFAULT_PER_PAGE,
         created_by_username: selectedRequester || undefined,
+        sort_by: sortBy === 'oldest' ? 'created_at' : sortBy === 'priority' ? 'priority' : 'created_at',
+        order:   sortBy === 'oldest' ? 'asc' : 'desc',
       })
       setTickets(data.tickets)
       setTotal(data.total)
@@ -130,7 +132,7 @@ function HomeContent() {
     } finally {
       setLoading(false)
     }
-  }, [state, category, priority, sla, search, selectedProject, page, selectedRequester])
+  }, [state, category, priority, sla, search, selectedProject, page, selectedRequester, sortBy])
 
   useEffect(() => {
     load()
@@ -232,11 +234,12 @@ function HomeContent() {
 
   const totalPages = Math.max(1, Math.ceil(total / DEFAULT_PER_PAGE))
 
-  const sortedTickets = [...tickets].sort((a, b) => {
-    if (sortBy === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    if (sortBy === 'priority') return (PRIORITY_ORDER[(b.priority ?? 'medium') as keyof typeof PRIORITY_ORDER] ?? 2) - (PRIORITY_ORDER[(a.priority ?? 'medium') as keyof typeof PRIORITY_ORDER] ?? 2)
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  })
+  // newest/oldest는 서버사이드 정렬 — priority만 클라이언트 보조 정렬
+  const sortedTickets = sortBy === 'priority'
+    ? [...tickets].sort((a, b) =>
+        (PRIORITY_ORDER[(b.priority ?? 'medium') as keyof typeof PRIORITY_ORDER] ?? 2) -
+        (PRIORITY_ORDER[(a.priority ?? 'medium') as keyof typeof PRIORITY_ORDER] ?? 2))
+    : tickets
 
   const hasActiveFilters = !!(category || priority || sla || search || selectedRequester || (state && state !== 'all'))
 
@@ -247,7 +250,7 @@ function HomeContent() {
   const statTabs = [
     { key: 'all',      label: '전체',    count: stats?.all ?? total,          ring: 'ring-gray-400',   active: 'bg-gray-100 border-gray-400',  num: 'text-gray-800'   },
     { key: 'open',     label: '접수됨',  count: stats?.open ?? 0,             ring: 'ring-yellow-400', active: 'bg-yellow-50 border-yellow-400', num: 'text-yellow-700' },
-    { key: 'active',   label: '처리중',  count: stats?.in_progress ?? 0,      ring: 'ring-blue-400',   active: 'bg-blue-50 border-blue-400',    num: 'text-blue-700'   },
+    { key: 'in_progress', label: '처리중', count: stats?.in_progress ?? 0,     ring: 'ring-blue-400',   active: 'bg-blue-50 border-blue-400',    num: 'text-blue-700'   },
     { key: 'resolved', label: '처리완료', count: stats?.resolved ?? 0,        ring: 'ring-purple-400', active: 'bg-purple-50 border-purple-400', num: 'text-purple-700' },
     { key: 'closed',   label: '종료',    count: stats?.closed ?? 0,           ring: 'ring-green-400',  active: 'bg-green-50 border-green-400',  num: 'text-green-700'  },
   ]
@@ -325,7 +328,7 @@ function HomeContent() {
           <form onSubmit={handleSearch} className="flex gap-1.5 ml-auto">
             <input
               type="text"
-              placeholder="제목 검색..."
+              placeholder="제목 · 내용 검색..."
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               className="border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-44"

@@ -607,6 +607,9 @@ def list_tickets(
         if state == "open":
             gl_state = "opened"
             not_labels = "status::in_progress,status::waiting,status::resolved"
+        elif state == "in_progress":
+            gl_state = "opened"
+            status_label = "status::in_progress"
         elif state == "active":
             gl_state = "opened"
             not_labels = "status::resolved"
