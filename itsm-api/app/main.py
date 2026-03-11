@@ -108,9 +108,11 @@ def _user_sync_loop():
     """Background thread: 매 시간 GitLab 그룹 멤버와 ITSM 사용자 역할 동기화.
 
     퇴사/그룹 제거된 사용자를 is_active=False로 비활성화한다.
+    기동 후 90초 대기 후 첫 실행 — 스타트업 부하 분산.
     """
     settings = get_settings()
     interval = getattr(settings, "USER_SYNC_INTERVAL", 3600)  # 기본 1시간
+    _user_sync_stop.wait(timeout=90)  # 기동 직후 90초 대기
     while not _user_sync_stop.is_set():
         try:
             _run_user_sync()
@@ -428,7 +430,7 @@ def health():
 
 
 _gitlab_health_cache: tuple[str, float] = ("ok", 0.0)
-_GITLAB_HEALTH_COOLDOWN = 30.0  # GitLab /version 호출 30초 캐시
+_GITLAB_HEALTH_COOLDOWN = 60.0  # GitLab /version 호출 60초 캐시 (Docker healthcheck 30s보다 길게)
 
 _label_drift_last_check: float = 0.0
 _label_drift_last_result: str = "ok"

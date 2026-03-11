@@ -46,6 +46,8 @@ services:
       redis-server
       --requirepass ${REDIS_PASSWORD}
       --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     volumes:
       - itsm_redis:/data
 
@@ -110,7 +112,7 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
+      interval: 60s
       timeout: 10s
       retries: 3
       start_period: 60s

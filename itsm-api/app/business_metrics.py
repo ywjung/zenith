@@ -151,6 +151,7 @@ def start_background_refresh(session_factory, interval: int = 300):
     """daemon 스레드로 주기적 갱신 시작."""
 
     def _loop():
+        time.sleep(30)  # 기동 직후 30초 대기 — 스타트업 부하 분산
         while True:
             _refresh(session_factory)
             time.sleep(interval)
