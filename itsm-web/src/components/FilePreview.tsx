@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface FilePreviewProps {
   url: string        // 실제 파일 URL (proxy 경로)
@@ -20,6 +20,39 @@ function isPdf(name: string, mime?: string): boolean {
 export default function FilePreview({ url, name, mime }: FilePreviewProps) {
   const [lightbox, setLightbox] = useState(false)
   const [pdfModal, setPdfModal] = useState(false)
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const blobRef = useRef<string | null>(null)
+
+  // Blob URL 해제 (메모리 누수 방지)
+  useEffect(() => {
+    return () => {
+      if (blobRef.current) URL.revokeObjectURL(blobRef.current)
+    }
+  }, [])
+
+  const openPdf = async () => {
+    setPdfLoading(true)
+    setPdfModal(true)
+    try {
+      // frame-ancestors 'none' CSP 우회: 인증된 fetch로 Blob URL 생성
+      const res = await fetch(url, { credentials: 'include' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      if (blobRef.current) URL.revokeObjectURL(blobRef.current)
+      blobRef.current = objectUrl
+      setBlobUrl(objectUrl)
+    } catch {
+      setBlobUrl(null)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const closePdf = () => {
+    setPdfModal(false)
+  }
 
   if (isImage(name, mime)) {
     return (
@@ -87,7 +120,7 @@ export default function FilePreview({ url, name, mime }: FilePreviewProps) {
       <>
         {/* PDF 미리보기 버튼 */}
         <button
-          onClick={() => setPdfModal(true)}
+          onClick={openPdf}
           className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors text-sm text-red-700"
         >
           <span className="text-lg">📄</span>
@@ -95,7 +128,7 @@ export default function FilePreview({ url, name, mime }: FilePreviewProps) {
           <span className="text-xs text-red-500 shrink-0">미리보기</span>
         </button>
 
-        {/* PDF 모달 */}
+        {/* PDF 모달 — Blob URL 사용으로 frame-ancestors CSP 우회 */}
         {pdfModal && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col">
@@ -105,16 +138,27 @@ export default function FilePreview({ url, name, mime }: FilePreviewProps) {
                   <a href={url} download={name} className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50">
                     ⬇ 다운로드
                   </a>
-                  <button onClick={() => setPdfModal(false)} className="text-xs px-3 py-1.5 bg-gray-100 rounded-lg hover:bg-gray-200">
+                  <button onClick={closePdf} className="text-xs px-3 py-1.5 bg-gray-100 rounded-lg hover:bg-gray-200">
                     ✕ 닫기
                   </button>
                 </div>
               </div>
-              <iframe
-                src={`${url}#toolbar=1`}
-                className="flex-1 w-full rounded-b-2xl"
-                title={name}
-              />
+              {pdfLoading ? (
+                <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                  PDF 불러오는 중...
+                </div>
+              ) : blobUrl ? (
+                <iframe
+                  src={`${blobUrl}#toolbar=1`}
+                  className="flex-1 w-full rounded-b-2xl"
+                  title={name}
+                />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500 text-sm">
+                  <p>PDF를 불러올 수 없습니다.</p>
+                  <a href={url} download={name} className="text-blue-600 underline">파일 다운로드</a>
+                </div>
+              )}
             </div>
           </div>
         )}
