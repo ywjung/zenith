@@ -1,7 +1,35 @@
-# 🛠️ ITSM 포털
+# ZENITH — IT 서비스 관리 플랫폼
 
-GitLab CE 기반 IT 서비스 관리(ITSM) 포털.
+> **천정(天頂)** — 하늘에서 가장 높은 점. IT 서비스의 정점을 지향합니다.
+
+GitLab CE 기반 IT 서비스 관리(ITSM) 플랫폼.
 티켓 관리 · SLA 추적 · 지식베이스 · 칸반 · 실시간 모니터링을 단일 플랫폼에서 제공합니다.
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.135-009688?logo=fastapi)](https://fastapi.tiangolo.com)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791?logo=postgresql)](https://postgresql.org)
+
+---
+
+## 스크린샷
+
+| 로그인 | 티켓 목록 |
+|--------|---------|
+| ![로그인](docs/screenshots/01-login.png) | ![티켓 목록](docs/screenshots/03-ticket-list.png) |
+
+| 티켓 상세 | 칸반 보드 |
+|---------|---------|
+| ![티켓 상세](docs/screenshots/04-ticket-detail.png) | ![칸반](docs/screenshots/05-kanban.png) |
+
+| 지식베이스 | 리포트 |
+|---------|------|
+| ![지식베이스](docs/screenshots/06-kb.png) | ![리포트](docs/screenshots/07-reports.png) |
+
+| 관리자 페이지 | 고객 포털 |
+|-----------|---------|
+| ![관리](docs/screenshots/08-admin.png) | ![포털](docs/screenshots/02-portal.png) |
 
 ---
 
@@ -26,6 +54,7 @@ GitLab CE 기반 IT 서비스 관리(ITSM) 포털.
 17. [개발 환경](#17-개발-환경)
 18. [트러블슈팅](#18-트러블슈팅)
 19. [버전 이력](#19-버전-이력)
+20. [라이선스](#20-라이선스)
 
 ---
 
@@ -122,7 +151,7 @@ docker compose version
 
 | 포트 | 용도 | 외부 노출 |
 |------|------|----------|
-| 8111 | ITSM 포털 (nginx) | ✅ 필수 |
+| 8111 | ZENITH 포털 (nginx) | ✅ 필수 |
 | 8929 | GitLab 웹 UI | ✅ 필수 |
 | 2224 | GitLab SSH | 선택 |
 | 3001 | Grafana | 내부망만 |
@@ -165,8 +194,8 @@ docker compose version
 
 ```bash
 # 1. 저장소 클론
-git clone <저장소 URL> /opt/itsm
-cd /opt/itsm
+git clone <저장소 URL> /opt/zenith
+cd /opt/zenith
 
 # 2. 환경변수 파일 생성
 cp .env.example .env
@@ -204,7 +233,7 @@ GITLAB_PROJECT_TOKEN=
 # ── Redis ───────────────────────────────────
 REDIS_PASSWORD=<openssl rand -hex 16 결과>
 
-# ── ITSM API ────────────────────────────────
+# ── ZENITH API ──────────────────────────────
 SECRET_KEY=<openssl rand -hex 32 결과>
 TOKEN_ENCRYPTION_KEY=<Fernet 키>
 
@@ -233,16 +262,16 @@ docker compose logs -f gitlab | grep -m1 "Reconfigured!"
 #### OAuth 앱 등록
 1. **Admin Area** → **Applications** → **New application**
 2. 입력값:
-   - Name: `ITSM Portal`
+   - Name: `ZENITH`
    - Redirect URI: `http://<서버IP>:8111/api/auth/callback`
    - Confidential: ✅ 체크
    - Scopes: `read_user`, `api`, `openid`
 3. **Save** → `Application ID`, `Secret` 복사 → `.env` 입력
 
-#### ITSM 프로젝트 생성 및 토큰 발급
+#### ZENITH 프로젝트 생성 및 토큰 발급
 1. **New project** → `itsm-tickets` (Private) 생성
 2. 프로젝트 → **Settings** → **Access Tokens** → New token
-   - Name: `ITSM Service Token`
+   - Name: `ZENITH Service Token`
    - Role: **Maintainer**
    - Scopes: `api`
 3. 생성된 토큰 복사 → `.env`의 `GITLAB_PROJECT_TOKEN` 입력
@@ -275,7 +304,7 @@ curl http://localhost:8111/api/health
 
 1. `http://<서버IP>:8111` 접속
 2. **GitLab으로 로그인** 클릭
-3. GitLab `root` 계정으로 로그인 → ITSM 포털 진입
+3. GitLab `root` 계정으로 로그인 → ZENITH 진입
 4. **관리** → **사용자 관리** → 본인 계정에 `admin` 역할 부여
 5. **관리** → **서비스 유형** → 카테고리 설정 (기본값: 하드웨어/소프트웨어/네트워크/계정/기타)
 
@@ -299,13 +328,13 @@ GITLAB_OAUTH_CLIENT_ID=<OAuth Application ID>
 GITLAB_OAUTH_CLIENT_SECRET=<OAuth Secret>
 GITLAB_OAUTH_REDIRECT_URI=http://<HOST>:8111/api/auth/callback
 GITLAB_PROJECT_TOKEN=<프로젝트 Access Token>
-GITLAB_PROJECT_ID=1                    # ITSM 전용 GitLab 프로젝트 ID
+GITLAB_PROJECT_ID=1                    # ZENITH 전용 GitLab 프로젝트 ID
 GITLAB_API_URL=http://gitlab:8929      # 내부 Docker 통신용 (변경 불필요)
 
 # ── Redis ───────────────────────────────────────────────────
 REDIS_PASSWORD=<openssl rand -hex 16>
 
-# ── ITSM API ────────────────────────────────────────────────
+# ── ZENITH API ──────────────────────────────────────────────
 SECRET_KEY=<openssl rand -hex 32>          # JWT 서명 키 (최소 32자)
 TOKEN_ENCRYPTION_KEY=<Fernet 키>           # Refresh Token 암호화
 ENVIRONMENT=production                      # development | production
@@ -320,7 +349,7 @@ NEXT_PUBLIC_GITLAB_URL=http://<HOST>:8929
 
 ```bash
 # ── Nginx 포트 ──────────────────────────────────────────────
-APP_PORT=8111                          # ITSM 포털 외부 포트
+APP_PORT=8111                          # ZENITH 포털 외부 포트
 
 # ── GitLab 그룹 라벨 (권장) ────────────────────────────────
 GITLAB_GROUP_ID=<그룹 숫자 ID>
@@ -336,7 +365,7 @@ SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_USER=noreply@example.com
 SMTP_PASSWORD=<SMTP 비밀번호>
-SMTP_FROM=ITSM Portal <noreply@example.com>
+SMTP_FROM=ZENITH <noreply@example.com>
 SMTP_TLS=true
 IT_TEAM_EMAIL=itteam@example.com      # IT 팀 수신 이메일
 
@@ -396,7 +425,7 @@ openssl rand -base64 12
 
 1. GitLab → **Admin Area** → **Applications** → **New application**
 2. 입력:
-   - **Name**: `ITSM Portal`
+   - **Name**: `ZENITH`
    - **Redirect URI**: `http://<HOST>:8111/api/auth/callback`
    - **Confidential**: ✅
    - **Scopes**: `read_user`, `api`, `openid`
@@ -408,16 +437,16 @@ docker compose restart itsm-api
 
 ### 프로젝트 Access Token 발급
 
-1. GitLab → ITSM 프로젝트 → **Settings** → **Access Tokens**
+1. GitLab → ZENITH 프로젝트 → **Settings** → **Access Tokens**
 2. 설정:
-   - **Token name**: `ITSM Service Token`
+   - **Token name**: `ZENITH Service Token`
    - **Role**: `Maintainer`
    - **Scopes**: `api`
 3. 토큰 복사 → `.env`의 `GITLAB_PROJECT_TOKEN` 반영
 
 ### GitLab 웹훅 등록 (실시간 동기화)
 
-개발 프로젝트의 이벤트(MR 머지·CI 실패 등)를 ITSM에 실시간으로 전달합니다.
+개발 프로젝트의 이벤트(MR 머지·CI 실패 등)를 ZENITH에 실시간으로 전달합니다.
 
 1. GitLab → 개발 프로젝트 → **Settings** → **Webhooks** → **Add new webhook**
 2. 입력:
@@ -562,7 +591,7 @@ docker compose exec itsm-api alembic upgrade head
 
 | 서비스 | URL | 설명 |
 |--------|-----|------|
-| **ITSM 포털** | `http://<HOST>:8111` | 메인 서비스 (로그인 필요) |
+| **ZENITH** | `http://<HOST>:8111` | 메인 서비스 (로그인 필요) |
 | **고객 포털** | `http://<HOST>:8111/portal` | 비로그인 티켓 접수 |
 | **GitLab** | `http://<HOST>:8929` | OAuth 제공자 |
 | **Prometheus** | `http://<HOST>:9090` | 메트릭 수집 (내부망) |
@@ -643,9 +672,9 @@ docker compose exec itsm-api alembic upgrade head
 ### 최초 관리자 설정 순서
 
 ```
-1. GitLab root 계정으로 ITSM 첫 로그인
-2. ITSM 관리 → 사용자 관리 → root 계정에 admin 역할 부여
-3. 이후 팀원들이 GitLab 로그인 → ITSM 자동 등록
+1. GitLab root 계정으로 ZENITH 첫 로그인
+2. ZENITH 관리 → 사용자 관리 → root 계정에 admin 역할 부여
+3. 이후 팀원들이 GitLab 로그인 → ZENITH 자동 등록
 4. 역할 부여: 관리 → 사용자 관리 → 각 계정에 역할 설정
 ```
 
@@ -752,10 +781,10 @@ curl http://localhost:8111/api/tickets/ \
 
 | 대시보드 | 내용 |
 |---------|------|
-| **ITSM 운영 대시보드** | UP/DOWN, RPS, 에러율, P95 레이턴시, CPU·메모리·FD, 엔드포인트별 통계 |
-| **ITSM 성능 분석** | P50/P90/P95/P99 레이턴시, 엔드포인트별 처리량, 요청·응답 크기 |
-| **ITSM SLA 모니터링** | 가용성 %, Apdex 점수, 에러 버짓, P95 SLO 준수율, 장애 이력 |
-| **ITSM 메뉴별 운영 현황** | 티켓·KB·칸반·리포트·관리 메뉴 기준 비즈니스 KPI (27개 커스텀 메트릭) |
+| **ZENITH 운영 대시보드** | UP/DOWN, RPS, 에러율, P95 레이턴시, CPU·메모리·FD, 엔드포인트별 통계 |
+| **ZENITH 성능 분석** | P50/P90/P95/P99 레이턴시, 엔드포인트별 처리량, 요청·응답 크기 |
+| **ZENITH SLA 모니터링** | 가용성 %, Apdex 점수, 에러 버짓, P95 SLO 준수율, 장애 이력 |
+| **ZENITH 메뉴별 운영 현황** | 티켓·KB·칸반·리포트·관리 메뉴 기준 비즈니스 KPI (27개 커스텀 메트릭) |
 
 ### 비즈니스 메트릭 (5분 주기 DB 집계)
 
@@ -854,10 +883,10 @@ docker run --rm \
 ```bash
 # crontab -e 에 추가
 # 매일 새벽 2시 백업, 7일 초과분 자동 삭제
-0 2 * * * cd /opt/itsm && \
+0 2 * * * cd /opt/zenith && \
   docker compose exec -T postgres pg_dump -U itsm itsm \
-  | gzip > /opt/itsm/backups/db_$(date +\%Y\%m\%d).sql.gz && \
-  find /opt/itsm/backups -name "db_*.sql.gz" -mtime +7 -delete
+  | gzip > /opt/zenith/backups/db_$(date +\%Y\%m\%d).sql.gz && \
+  find /opt/zenith/backups -name "db_*.sql.gz" -mtime +7 -delete
 ```
 
 ---
@@ -867,7 +896,7 @@ docker run --rm \
 ### 관리자 초기 설정
 
 ```
-ITSM 로그인 → 관리(Admin) 메뉴 진입:
+ZENITH 로그인 → 관리(Admin) 메뉴 진입:
   - 사용자 관리: 팀원 역할 부여
   - SLA 정책: 목표 시간 조정
   - 서비스 유형: 카테고리 추가·수정
@@ -973,11 +1002,11 @@ docker compose logs nginx --since 1h | grep -v "health"
 sudo apt install -y certbot
 
 # 2. 인증서 발급 (포트 80이 열려있어야 함)
-sudo certbot certonly --standalone -d itsm.example.com
+sudo certbot certonly --standalone -d zenith.example.com
 
 # 인증서 위치
-# /etc/letsencrypt/live/itsm.example.com/fullchain.pem
-# /etc/letsencrypt/live/itsm.example.com/privkey.pem
+# /etc/letsencrypt/live/zenith.example.com/fullchain.pem
+# /etc/letsencrypt/live/zenith.example.com/privkey.pem
 ```
 
 ### nginx HTTPS 설정
@@ -987,16 +1016,16 @@ sudo certbot certonly --standalone -d itsm.example.com
 ```nginx
 server {
   listen 80;
-  server_name itsm.example.com;
+  server_name zenith.example.com;
   return 301 https://$host$request_uri;
 }
 
 server {
   listen 443 ssl;
-  server_name itsm.example.com;
+  server_name zenith.example.com;
 
-  ssl_certificate     /etc/letsencrypt/live/itsm.example.com/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/itsm.example.com/privkey.pem;
+  ssl_certificate     /etc/letsencrypt/live/zenith.example.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/zenith.example.com/privkey.pem;
   ssl_protocols       TLSv1.2 TLSv1.3;
   ssl_ciphers         HIGH:!aNULL:!MD5;
 
@@ -1024,9 +1053,9 @@ nginx:
 ### `.env` URL 변경
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=https://itsm.example.com/api
+NEXT_PUBLIC_API_BASE_URL=https://zenith.example.com/api
 NEXT_PUBLIC_GITLAB_URL=https://gitlab.example.com
-GITLAB_OAUTH_REDIRECT_URI=https://itsm.example.com/api/auth/callback
+GITLAB_OAUTH_REDIRECT_URI=https://zenith.example.com/api/auth/callback
 GRAFANA_ROOT_URL=https://grafana.example.com
 ```
 
@@ -1039,7 +1068,7 @@ GRAFANA_ROOT_URL=https://grafana.example.com
 
 ### GitLab HTTPS 연동 시 내부 통신 주의
 
-GitLab이 별도 도메인(`gitlab.example.com`)에 있고, ITSM API가 Docker 내부에서 접근할 때:
+GitLab이 별도 도메인(`gitlab.example.com`)에 있고, ZENITH API가 Docker 내부에서 접근할 때:
 
 ```bash
 # .env — Docker 내부 통신에는 내부 URL 사용
@@ -1137,7 +1166,7 @@ docker compose logs -f gitlab | grep -E "Reconfigured|Error"
 grep GITLAB_OAUTH .env
 
 # 2. GitLab OAuth 앱 설정 재확인
-# GitLab → Admin Area → Applications → ITSM Portal → Edit
+# GitLab → Admin Area → Applications → ZENITH → Edit
 
 # 3. API 서버 재시작
 docker compose restart itsm-api
@@ -1242,7 +1271,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ## 19. 버전 이력
 
-### 현재 버전 (2026-03-10)
+### 현재 버전 (2026-03-11)
 
 - **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22
 - **DB 마이그레이션**: 41단계 (0001~0041)
@@ -1271,6 +1300,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 | 항목 | 내용 |
 |------|------|
+| 브랜딩 | ITSM 포털 → **ZENITH** 리브랜딩 (아이콘·파비콘 포함) |
 | 병목 개선 | 티켓 목록 초기 로드: 272ms → 176ms (35% 단축) |
 | 네트워크 | nginx gzip 압축 (JSON 응답 90% 압축, 53 KB → 5 KB) |
 | 커넥션 풀 | httpx 공유 클라이언트 (TCP 재사용, max_connections=30) |
@@ -1281,6 +1311,24 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ---
 
-## 라이선스
+## 20. 라이선스
 
-내부 사용 전용. 무단 배포 금지.
+이 프로젝트는 **Apache License 2.0** 하에 배포됩니다.
+
+```
+Copyright 2026 ZENITH Contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+전체 라이선스 본문은 [LICENSE](LICENSE) 파일을 확인하세요.

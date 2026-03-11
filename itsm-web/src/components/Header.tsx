@@ -15,7 +15,14 @@ export default function Header() {
     <header className="bg-blue-700 text-white shadow-md">
       <div className="w-full px-4 py-3 flex items-center justify-between gap-3">
         <Link href="/" className="text-xl font-bold tracking-tight hover:opacity-90 shrink-0">
-          🛠️ ITSM
+          <span className="flex items-center gap-1.5">
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 shrink-0">
+              <rect width="32" height="32" rx="6" fill="white" fillOpacity="0.15"/>
+              <polygon points="16,4 17.2,8.4 21.6,8.4 18.2,11 19.4,15.4 16,12.8 12.6,15.4 13.8,11 10.4,8.4 14.8,8.4" fill="#FCD34D"/>
+              <path d="M9 18.5H22L9 26H23" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            ZENITH
+          </span>
         </Link>
 
         {user && <GlobalSearch />}

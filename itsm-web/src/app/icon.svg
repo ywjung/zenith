@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#2563EB"/>
-  <path d="M8 10C8 8.895 8.895 8 10 8H22C23.105 8 24 8.895 24 10V18C24 19.105 23.105 20 22 20H17L13 24V20H10C8.895 20 8 19.105 8 18V10Z" fill="white"/>
-  <circle cx="13" cy="14" r="1.5" fill="#2563EB"/>
-  <circle cx="16" cy="14" r="1.5" fill="#2563EB"/>
-  <circle cx="19" cy="14" r="1.5" fill="#2563EB"/>
+  <!-- 배경 -->
+  <rect width="32" height="32" rx="8" fill="#1D4ED8"/>
+  <!-- 천정 별 (zenith star) - 상단 중앙 -->
+  <polygon points="16,4 17.2,8.4 21.6,8.4 18.2,11 19.4,15.4 16,12.8 12.6,15.4 13.8,11 10.4,8.4 14.8,8.4" fill="#FCD34D"/>
+  <!-- Z 레터 - 하단 -->
+  <path d="M9 18.5H22L9 26H23" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

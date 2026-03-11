@@ -8,8 +8,16 @@ import KeyboardShortcuts from '@/components/KeyboardShortcuts'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
 
 export const metadata: Metadata = {
-  title: 'ITSM 포털',
-  description: 'IT 서비스 관리 포털',
+  title: 'ZENITH',
+  description: 'ZENITH · IT 서비스 관리 플랫폼',
+  icons: {
+    icon: [
+      { url: '/icon', type: 'image/png', sizes: '32x32' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    shortcut: '/icon',
+    apple: '/icon',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -24,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <ErrorBoundary>{children}</ErrorBoundary>
             </main>
             <footer className="text-center text-xs text-gray-400 py-6 border-t mt-10">
-              ITSM 포털 · IT 서비스 관리 시스템
+              ZENITH · IT 서비스 관리 플랫폼
             </footer>
             <KeyboardShortcuts />
           </ServiceTypesProvider>

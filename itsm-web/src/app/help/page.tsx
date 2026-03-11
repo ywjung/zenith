@@ -1573,7 +1573,7 @@ function TabRbac() {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 px-4 text-xs font-semibold text-gray-500 min-w-[200px]">기능</th>
-                    <th className="text-center py-2 px-2 text-xs font-bold text-blue-700 w-16">ITSM</th>
+                    <th className="text-center py-2 px-2 text-xs font-bold text-blue-700 w-16">ZENITH</th>
                     <th className="text-center py-2 px-2 text-xs font-semibold text-gray-500 w-16">Zammad</th>
                     <th className="text-center py-2 px-2 text-xs font-semibold text-gray-500 w-16">GLPI</th>
                     <th className="text-center py-2 px-2 text-xs font-semibold text-gray-500 w-16">Jira</th>
@@ -2022,8 +2022,8 @@ export default function HelpPage() {
       {/* 헤더 */}
       <div className="bg-white border-b shadow-sm">
         <div className="w-full px-4 py-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">ITSM 도움말</h1>
-          <p className="text-sm text-gray-500">IT 서비스 관리 시스템 사용 안내 및 기술 문서</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">ZENITH 도움말</h1>
+          <p className="text-sm text-gray-500">IT 서비스 관리 플랫폼 사용 안내 및 기술 문서</p>
         </div>
 
         {/* 탭 네비게이션 — sticky, 모바일 스크롤 */}
@@ -2075,7 +2075,7 @@ export default function HelpPage() {
             {' · '}
             <Link href="http://localhost:3001" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Grafana</Link>
           </div>
-          <div>ITSM · Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Alembic 41단계</div>
+          <div>ZENITH · Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Alembic 41단계</div>
         </div>
       </div>
     </div>
