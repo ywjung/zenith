@@ -28,6 +28,10 @@ def get_current_stats(
     _user: dict = Depends(require_agent),
 ):
     """실시간 통계: GitLab에서 직접 조회. 날짜 범위가 지정되면 해당 기간의 신규/완료 건수를 반환."""
+    from fastapi import HTTPException as _HTTPException
+    if from_date and to_date and from_date > to_date:
+        raise _HTTPException(status_code=400, detail="시작일이 종료일보다 늦을 수 없습니다.")
+
     # GitLab API 날짜 필터: ISO 형식 (날짜 경계를 명확히 하기 위해 datetime 문자열 사용)
     from_iso = datetime.combine(from_date, dt_time.min).isoformat() if from_date else None
     to_iso = datetime.combine(to_date, dt_time.max).isoformat() if to_date else None
@@ -44,32 +48,38 @@ def get_current_stats(
         return total
 
     def _count_open():
-        """현재 접수됨 (opened, in_progress/waiting/resolved 제외)"""
+        """기간 내 생성된 티켓 중 현재 접수됨 상태"""
         _, total = gitlab_client.get_issues(
             state="opened",
             not_labels="status::in_progress,status::waiting,status::resolved",
             project_id=project_id,
             per_page=1, page=1,
+            created_after=from_iso,
+            created_before=to_iso,
         )
         return total
 
     def _count_in_progress():
-        """현재 처리 중"""
+        """기간 내 생성된 티켓 중 현재 처리 중"""
         _, total = gitlab_client.get_issues(
             state="opened",
             labels="status::in_progress",
             project_id=project_id,
             per_page=1, page=1,
+            created_after=from_iso,
+            created_before=to_iso,
         )
         return total
 
     def _count_resolved():
-        """현재 처리 완료 대기 (resolved 상태)"""
+        """기간 내 생성된 티켓 중 현재 처리 완료"""
         _, total = gitlab_client.get_issues(
             state="opened",
             labels="status::resolved",
             project_id=project_id,
             per_page=1, page=1,
+            created_after=from_iso,
+            created_before=to_iso,
         )
         return total
 
@@ -202,6 +212,9 @@ def get_breakdown(
     _user: dict = Depends(require_agent),
 ):
     """기간 내 티켓을 상태별·카테고리별·우선순위별로 집계."""
+    from fastapi import HTTPException as _HTTPException
+    if from_date and to_date and from_date > to_date:
+        raise _HTTPException(status_code=400, detail="시작일이 종료일보다 늦을 수 없습니다.")
     from_iso = datetime.combine(from_date, dt_time.min).isoformat() if from_date else None
     to_iso = datetime.combine(to_date, dt_time.max).isoformat() if to_date else None
 
@@ -238,9 +251,16 @@ def get_breakdown(
                 by_status["open"] += 1
 
         cat = next((l[5:] for l in labels if l.startswith("cat::")), "기타")
+        # 영문 카테고리 키를 한국어로 정규화 (영문/한국어 혼재 방지)
+        _CAT_KO = {"hardware": "하드웨어", "software": "소프트웨어",
+                   "network": "네트워크", "account": "계정/권한", "other": "기타"}
+        cat = _CAT_KO.get(cat, cat)
         by_category[cat] = by_category.get(cat, 0) + 1
 
         prio = next((l[6:] for l in labels if l.startswith("prio::")), "medium")
+        # corrupt 라벨 정규화: PriorityEnum.MEDIUM → medium
+        if "." in prio and prio[0].isupper():
+            prio = prio.split(".")[-1].lower()
         by_priority[prio] = by_priority.get(prio, 0) + 1
 
     return {
