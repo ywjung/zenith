@@ -606,54 +606,59 @@ docker compose exec itsm-api alembic upgrade head
 ## 9. 주요 기능
 
 ### 티켓 관리
-- 생성·조회·수정·삭제 (파일 첨부 최대 10 MB)
+- 생성·조회·수정·삭제 (파일 첨부 최대 10 MB, ClamAV 바이러스 스캔)
 - 상태 워크플로우: `접수됨 → 처리중 → 대기중 → 처리완료 → 종료`
-- 내부 메모 (신청자 비공개)
-- 연관 티켓 링크 (`related` / `blocks` / `duplicate_of`)
-- 시간 기록 (분 단위)
+- 내부 메모 (신청자 비공개), 연관 티켓 링크, 시간 기록 (분 단위)
 - 티켓 복제, Confidential Issue, CSV 내보내기
-- **타임라인 뷰**: 댓글 · 감사로그 · GitLab 시스템 노트를 시간순 통합 표시
+- **타임라인 뷰**: 댓글 · 감사로그 · GitLab 시스템 노트 시간순 통합 표시 + 마크다운 렌더링
+- **해결 노트**: 처리완료·종료 시 해결 내용·유형·원인 구조화 기록 → KB 변환 가능
+- 첨부 이미지 라이트박스 · PDF sandbox iframe 인라인 미리보기
 
 ### 검색 & 필터
 - **글로벌 검색 (⌘K)**: 전체 티켓 실시간 검색, 300 ms 디바운스, 검색 히스토리 저장
-- 복합 필터 (상태·카테고리·우선순위·SLA·신청자)
-- URL 동기화 (북마크·뒤로가기 지원)
-- 즐겨찾기 필터 저장·불러오기
+- 복합 필터 (상태·카테고리·우선순위·SLA·신청자) — 카테고리 필터 정확 동작
+- URL 동기화 (북마크·뒤로가기 지원), 즐겨찾기 필터 저장·불러오기
+- 정렬 서버사이드 처리 (newest/oldest/priority)
 
 ### SLA 관리
-- 우선순위별 응답·해결 목표 시간 (관리자가 DB에서 설정)
-- SLA 일시정지/재개 (대기중 상태 연동)
-- 60분 전 사전 경고 알림
+- 우선순위별 응답·해결 목표 시간 (관리자 UI에서 설정, 최소 1시간 검증)
+- SLA 일시정지/재개 (대기중 상태 연동), 60분 전 사전 경고 알림
 - **에스컬레이션 정책**: 위반 시 자동 알림·재배정·우선순위 상향
+- 칸반 보드 SLA 색상 배지 (⚠️ 초과 빨간색 / 🟢 여유 초록색)
 
 ### 지식베이스 (KB)
-- PostgreSQL FTS 전문 검색 (GIN 인덱스)
-- 티켓 제목 6자+ 입력 시 실시간 KB 자동 추천
-- 파일 첨부, 태그·카테고리 분류
-- Markdown 에디터 (TipTap 기반)
+- PostgreSQL FTS 전문 검색 (GIN 인덱스, websearch_to_tsquery OR 방식)
+- 티켓 제목 6자+ 입력 시 실시간 KB 자동 추천 (긴 제목도 부분 매칭)
+- 파일 첨부, 태그·카테고리 분류, 조회수 중복 카운트 방지 (5분 쿨다운)
+- Markdown 에디터 (TipTap 기반), 빈 제목·내용 API 레벨 검증
 
 ### 알림
-- 인앱 실시간 알림 (SSE + Redis Pub/Sub)
-- 이메일 (SMTP) — Jinja2 템플릿 커스터마이즈 가능
-- Telegram 봇
-- 아웃바운드 웹훅 (Slack Incoming Webhook, Teams Power Automate)
+- 인앱 실시간 알림 (SSE + Redis Pub/Sub) — tight loop 제거로 CPU 정상화
+- 이메일 (SMTP) — Jinja2 템플릿 커스터마이즈, sandbox iframe 미리보기
+- Telegram 봇, 아웃바운드 웹훅 (Slack Incoming Webhook, Teams Power Automate)
 - 개인 알림 설정 (이벤트별 이메일/인앱 토글)
 
 ### GitLab 연동
 - MR 머지 → 티켓 자동 해결 (`Closes #N`, `Fixes #N`)
 - CI/CD 파이프라인 실패 → 티켓 자동 알림
-- MR 목록 티켓 상세에서 조회
-- 개발 프로젝트 전달 (이슈 자동 생성·연결)
+- MR 목록 티켓 상세에서 조회, 개발 프로젝트 전달 (이슈 자동 생성·연결)
 
 ### 편의 기능
-- 칸반 보드 (드래그앤드롭 상태 변경)
-- 리포트 & 에이전트 성과 분석
-- 빠른 답변 (Canned Response) 템플릿
-- 티켓 구독 (Watcher)
+- **칸반 보드**: 드래그앤드롭 상태 변경 + **전환 규칙 강제** (이동 불가 컬럼 🚫 자동 비활성화)
+- 리포트 & 에이전트 성과 분석 (날짜 필터 정확 적용, 역방향 날짜 검증)
+- 빠른 답변 (Canned Response) 템플릿, 티켓 구독 (Watcher)
 - 공지사항·배너 시스템 (info/warning/critical)
 - **키보드 단축키**: `g+t`(티켓), `g+k`(칸반), `g+b`(KB), `g+r`(리포트), `n`(새 티켓), `?`(도움말)
 - 고객 셀프서비스 포털 (비로그인 접수 · 진행 상황 추적)
 - IMAP 이메일 → 티켓 자동 생성
+
+### 관리 기능
+- 사용자 관리 (역할 변경, Sudo 재인증, 자기 자신 강등 방지, 세션 강제 종료)
+- SLA 정책 관리 (음수·0 입력 차단), 에스컬레이션 정책
+- 서비스 유형 동적 관리 (사용 중 삭제 방지), API 키 관리 (이름 중복 방지)
+- 이메일 템플릿 관리 (XSS sandbox iframe 미리보기)
+- 감사 로그 (행위자 서버사이드 검색, Immutable PostgreSQL 트리거)
+- GitLab 라벨 동기화, 자동 배정 규칙
 
 ---
 
@@ -776,6 +781,14 @@ curl http://localhost:8111/api/tickets/ \
 |--------|-----|------|
 | Prometheus | `http://<HOST>:9090` | — |
 | Grafana | `http://<HOST>:3001` | `admin` / `GRAFANA_PASSWORD` |
+
+### Prometheus 설정
+
+| 항목 | 값 | 비고 |
+|------|-----|------|
+| `scrape_interval` | **60s** | API 부하 최소화 (이전 15s에서 변경) |
+| `evaluation_interval` | **60s** | — |
+| `tsdb.retention.time` | 30d | 30일 시계열 보관 |
 
 ### 자동 프로비저닝 대시보드 (4개)
 
@@ -1271,11 +1284,11 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ## 19. 버전 이력
 
-### 현재 버전 (2026-03-11)
+### 현재 버전 (2026-03-12)
 
 - **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22
 - **DB 마이그레이션**: 41단계 (0001~0041)
-- **API 엔드포인트**: 128개
+- **API 엔드포인트**: 130개+
 
 ### 마이그레이션 이력
 
@@ -1300,14 +1313,37 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 | 항목 | 내용 |
 |------|------|
-| 브랜딩 | ITSM 포털 → **ZENITH** 리브랜딩 (아이콘·파비콘 포함) |
-| 병목 개선 | 티켓 목록 초기 로드: 272ms → 176ms (35% 단축) |
-| 네트워크 | nginx gzip 압축 (JSON 응답 90% 압축, 53 KB → 5 KB) |
-| 커넥션 풀 | httpx 공유 클라이언트 (TCP 재사용, max_connections=30) |
-| 캐시 | stats TTL 300s / requesters TTL 600s / 무효화 시 구 키 즉시 삭제 |
-| 모니터링 | 비즈니스 KPI 27개 Prometheus 커스텀 메트릭 + Grafana 대시보드 4개 |
-| 타임라인 | 댓글·감사로그·시스템 노트 통합 뷰 |
-| 안정성 | label drift 쿨다운 (5분) / 중복 인덱스 제거 / Dead tuple VACUUM |
+| **브랜딩** | ITSM 포털 → **ZENITH** 리브랜딩 (아이콘·파비콘·README 포함) |
+| **CPU 100% 수정** | SSE 스트림 tight loop 제거 → CPU 100% 고착 완전 해소 (0.24% 안정) |
+| **성능** | `/health` GitLab 캐시 60초 → 2~8초 → 3ms |
+| **성능** | 타임라인 Redis 캐시 60초 → 1.5~4초 → ~17ms |
+| **성능** | 서비스 유형 Usage API Redis 캐시 5분 → 22초 → 즉시 |
+| **모니터링** | Prometheus scrape 간격 15s → 60s / Docker healthcheck 30s → 60s |
+| **모니터링** | Redis maxmemory 256mb + allkeys-lru 정책 추가 |
+| **병목 개선** | 티켓 목록 초기 로드: 272ms → 176ms (35% 단축) |
+| **네트워크** | nginx gzip 압축 (JSON 응답 90% 압축, 53 KB → 5 KB) |
+| **커넥션 풀** | httpx 공유 클라이언트 (TCP 재사용, max_connections=30) |
+| **캐시** | stats TTL 300s / requesters TTL 600s / 무효화 시 구 키 즉시 삭제 |
+| **모니터링** | 비즈니스 KPI 27개 Prometheus 커스텀 메트릭 + Grafana 대시보드 4개 |
+| **타임라인** | 댓글·감사로그·시스템 노트 통합 뷰 + 마크다운 렌더링 |
+| **칸반** | 드래그 전환 규칙 강제 (이동 불가 컬럼 자동 비활성화·🚫 표시) |
+| **안정성** | label drift 쿨다운 (5분) / 중복 인덱스 제거 / Dead tuple VACUUM |
+
+### 주요 버그 수정 이력
+
+| 항목 | 수정 내용 |
+|------|---------|
+| 티켓 카테고리 필터 | option value 숫자→English description 수정 / 기타 필터 not_labels 방식으로 전환 |
+| KB 카테고리 불일치 | ServiceTypesContext value·label·description 3가지 모두 지원 / DB 이상 데이터 정정 |
+| SLA 음수·0 입력 | `ge=1` 검증 추가 → API 422 반환 |
+| 이메일 미리보기 XSS | `dangerouslySetInnerHTML` → `sandbox iframe` 교체 |
+| 리포트 날짜 역방향 | `from > to` 시 HTTP 400 반환 / open·in_progress·resolved 날짜 필터 적용 |
+| 감사 로그 actor 검색 | 클라이언트사이드 → 서버사이드 `ILIKE` 전환 |
+| API 키 이름 중복 | 동일 이름 활성 키 중복 생성 차단 |
+| 자기 자신 역할 변경 | `sub == gitlab_user_id` 일치 시 400 차단 |
+| PDF 미리보기 CSP | `frame-ancestors 'none'` + `dangerouslySetInnerHTML` → Blob URL + sandbox iframe |
+| 파일 미리보기 404 | 한국어 파일명 이중 URL 인코딩 → `unquote()` 추가 |
+| PriorityEnum 오염 | `prio::PriorityEnum.MEDIUM` corrupt 라벨 정규화 |
 
 ---
 
