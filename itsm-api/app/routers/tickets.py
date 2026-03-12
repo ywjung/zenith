@@ -273,6 +273,8 @@ def _extract_meta(description: str) -> dict:
     for line in lines:
         if line.startswith("**신청자:**"):
             meta["employee_name"] = line.replace("**신청자:**", "").strip()
+        elif line.startswith("신청자:"):  # 플레인 텍스트 포맷 호환
+            meta["employee_name"] = meta["employee_name"] or line.replace("신청자:", "").strip()
         elif line.startswith("**이메일:**"):
             meta["employee_email"] = line.replace("**이메일:**", "").strip()
         elif line.startswith("**부서:**"):
@@ -369,8 +371,18 @@ def _get_issue_requester(issue: dict) -> tuple[str, str]:
     """
     meta = _extract_meta(issue.get("description") or "")
     author = issue.get("author") or {}
-    username = meta.get("created_by_username") or author.get("username") or ""
-    name = meta.get("employee_name") or author.get("name") or username
+    author_username = author.get("username") or ""
+    # 봇 계정이 작성했더라도 description에 신청자 이름이 있으면 해당 이름 사용
+    employee_name = meta.get("employee_name")
+    created_by = meta.get("created_by_username")
+    if created_by:
+        username = created_by
+    elif employee_name and ("bot" in author_username.lower() or not author_username):
+        # 봇 작성 + 신청자 이름 있음 → 이름을 식별자로 활용
+        username = employee_name
+    else:
+        username = author_username
+    name = employee_name or author.get("name") or username
     return username, name
 
 
