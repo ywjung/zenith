@@ -309,7 +309,7 @@ function HomeContent() {
             </select>
           )}
 
-          {/* 상태 — filter-options에서 동적 생성 */}
+          {/* 1. 상태 */}
           <select
             value={state === 'all' ? '' : state}
             onChange={e => handleStateChange(e.target.value || 'all')}
@@ -321,19 +321,7 @@ function HomeContent() {
             ))}
           </select>
 
-          {/* 카테고리 — filter-options에서 동적 생성 */}
-          <select
-            value={category}
-            onChange={e => handleCategoryChange(e.target.value)}
-            className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">전체 카테고리</option>
-            {(filterOptions?.categories ?? serviceTypes.map(t => ({ key: t.description ?? t.value, label: t.label, emoji: t.emoji }))).map(c => (
-              <option key={c.key} value={c.key}>{c.emoji} {c.label}</option>
-            ))}
-          </select>
-
-          {/* 우선순위 — filter-options에서 동적 생성 */}
+          {/* 2. 우선순위 */}
           <select
             value={priority}
             onChange={e => handlePriorityChange(e.target.value)}
@@ -350,7 +338,19 @@ function HomeContent() {
             ))}
           </select>
 
-          {/* SLA 필터 */}
+          {/* 3. 카테고리 */}
+          <select
+            value={category}
+            onChange={e => handleCategoryChange(e.target.value)}
+            className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">전체 카테고리</option>
+            {(filterOptions?.categories ?? serviceTypes.map(t => ({ key: t.description ?? t.value, label: t.label, emoji: t.emoji }))).map(c => (
+              <option key={c.key} value={c.key}>{c.emoji} {c.label}</option>
+            ))}
+          </select>
+
+          {/* 4. SLA */}
           <select
             value={sla}
             onChange={e => handleSlaChange(e.target.value)}
@@ -363,7 +363,7 @@ function HomeContent() {
             <option value="good">🟢 SLA 여유</option>
           </select>
 
-          {/* 신청자 필터 */}
+          {/* 5. 신청자 */}
           {isAgent && requesters.length > 0 && (
             <select
               value={selectedRequester}
