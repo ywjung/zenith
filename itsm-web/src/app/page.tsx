@@ -258,10 +258,11 @@ function HomeContent() {
   // Stat tabs config
   const statTabs = [
     { key: 'all',      label: '전체',    count: stats?.all ?? total,          ring: 'ring-gray-400',   active: 'bg-gray-100 border-gray-400',  num: 'text-gray-800'   },
-    { key: 'open',     label: '접수됨',  count: stats?.open ?? 0,             ring: 'ring-yellow-400', active: 'bg-yellow-50 border-yellow-400', num: 'text-yellow-700' },
-    { key: 'in_progress', label: '처리중', count: stats?.in_progress ?? 0,     ring: 'ring-blue-400',   active: 'bg-blue-50 border-blue-400',    num: 'text-blue-700'   },
-    { key: 'resolved', label: '처리완료', count: stats?.resolved ?? 0,        ring: 'ring-purple-400', active: 'bg-purple-50 border-purple-400', num: 'text-purple-700' },
-    { key: 'closed',   label: '종료',    count: stats?.closed ?? 0,           ring: 'ring-green-400',  active: 'bg-green-50 border-green-400',  num: 'text-green-700'  },
+    { key: 'open',        label: '접수됨',   count: stats?.open ?? 0,          ring: 'ring-yellow-400',  active: 'bg-yellow-50 border-yellow-400',   num: 'text-yellow-700'  },
+    { key: 'in_progress', label: '처리중',   count: stats?.in_progress ?? 0,   ring: 'ring-blue-400',    active: 'bg-blue-50 border-blue-400',       num: 'text-blue-700'    },
+    { key: 'waiting',     label: '대기중',   count: stats?.waiting ?? 0,       ring: 'ring-orange-400',  active: 'bg-orange-50 border-orange-400',   num: 'text-orange-700'  },
+    { key: 'resolved',    label: '처리완료', count: stats?.resolved ?? 0,      ring: 'ring-purple-400',  active: 'bg-purple-50 border-purple-400',   num: 'text-purple-700'  },
+    { key: 'closed',      label: '종료',     count: stats?.closed ?? 0,        ring: 'ring-green-400',   active: 'bg-green-50 border-green-400',     num: 'text-green-700'   },
   ]
 
   return (

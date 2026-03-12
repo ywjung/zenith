@@ -496,6 +496,7 @@ def get_ticket_stats(
                 "all": _count_in("all"),
                 "open": _count_in("opened", not_label="status::in_progress,status::waiting,status::resolved"),
                 "in_progress": _count_in("opened", label="status::in_progress"),
+                "waiting": _count_in("opened", label="status::waiting"),
                 "resolved": _count_in("opened", label="status::resolved"),
                 "closed": _count_in("closed"),
             }
@@ -512,16 +513,18 @@ def get_ticket_stats(
             )
             return total
 
-        with ThreadPoolExecutor(max_workers=5) as pool:
+        with ThreadPoolExecutor(max_workers=6) as pool:
             f_all         = pool.submit(_count, "all")
             f_open        = pool.submit(_count, "opened", None, "status::in_progress,status::waiting,status::resolved")
             f_in_progress = pool.submit(_count, "opened", "status::in_progress")
+            f_waiting     = pool.submit(_count, "opened", "status::waiting")
             f_resolved    = pool.submit(_count, "opened", "status::resolved")
             f_closed      = pool.submit(_count, "closed")
             _result = {
                 "all":         f_all.result(),
                 "open":        f_open.result(),
                 "in_progress": f_in_progress.result(),
+                "waiting":     f_waiting.result(),
                 "resolved":    f_resolved.result(),
                 "closed":      f_closed.result(),
             }
@@ -612,6 +615,9 @@ def list_tickets(
         elif state == "in_progress":
             gl_state = "opened"
             status_label = "status::in_progress"
+        elif state == "waiting":
+            gl_state = "opened"
+            status_label = "status::waiting"
         elif state == "active":
             gl_state = "opened"
             not_labels = "status::resolved"

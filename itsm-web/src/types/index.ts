@@ -83,6 +83,7 @@ export interface TicketStats {
   all: number
   open: number
   in_progress: number
+  waiting: number
   resolved: number
   closed: number
 }
