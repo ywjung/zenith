@@ -268,25 +268,25 @@ function HomeContent() {
   return (
     <div>
       {/* Status Tabs */}
-      <div className="grid grid-cols-5 gap-3 mb-5">
+      <div className="grid grid-cols-6 gap-2 mb-5">
         {statTabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => handleStateChange(tab.key)}
-            className={`rounded-lg border-2 p-3 text-center transition-all focus:outline-none ${
+            className={`rounded-lg border-2 px-2 py-2.5 text-center transition-all focus:outline-none ${
               state === tab.key
                 ? `${tab.active} ring-2 ${tab.ring} shadow-sm`
                 : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
             }`}
           >
             {stats === null ? (
-              <div className="h-8 bg-gray-200 rounded animate-pulse mb-1" />
+              <div className="h-6 bg-gray-200 rounded animate-pulse mb-1" />
             ) : (
-              <div className={`text-2xl font-bold ${state === tab.key ? tab.num : 'text-gray-700'}`}>
+              <div className={`text-xl font-bold ${state === tab.key ? tab.num : 'text-gray-700'}`}>
                 {tab.count}
               </div>
             )}
-            <div className="text-xs text-gray-500 mt-0.5">{tab.label}</div>
+            <div className="text-xs text-gray-500 mt-0.5 whitespace-nowrap">{tab.label}</div>
           </button>
         ))}
       </div>
