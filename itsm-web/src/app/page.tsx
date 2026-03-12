@@ -57,7 +57,7 @@ function HomeContent() {
   const [saveFilterName, setSaveFilterName] = useState('')
   const [showSaveFilter, setShowSaveFilter] = useState(false)
   const [savedFilterError, setSavedFilterError] = useState<string | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
+
 
   function syncUrl(overrides: Record<string, string> = {}) {
     const params = new URLSearchParams()
@@ -350,12 +350,61 @@ function HomeContent() {
             ))}
           </select>
 
-          <button
-            onClick={() => setShowAdvanced(v => !v)}
-            className={`text-sm px-2 py-1.5 rounded-md border transition-colors ${showAdvanced ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+          {/* SLA 필터 */}
+          <select
+            value={sla}
+            onChange={e => handleSlaChange(e.target.value)}
+            className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {showAdvanced ? '▲ 간단히' : '▼ 더보기'}
-          </button>
+            <option value="">전체 SLA</option>
+            <option value="over">🔴 SLA 초과</option>
+            <option value="imminent">🟠 SLA 임박</option>
+            <option value="warning">🟡 SLA 주의</option>
+            <option value="good">🟢 SLA 여유</option>
+          </select>
+
+          {/* 신청자 필터 */}
+          {isAgent && requesters.length > 0 && (
+            <select
+              value={selectedRequester}
+              onChange={e => handleRequesterChange(e.target.value)}
+              className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">전체 신청자</option>
+              {requesters.map(r => (
+                <option key={r.username} value={r.username}>
+                  {r.employee_name ? `${r.employee_name} (${r.username})` : r.username}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* 등록일 기간 필터 */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-gray-500 whitespace-nowrap">등록일</span>
+            <input
+              type="date"
+              value={fromDate}
+              max={toDate || undefined}
+              onChange={e => { setFromDate(e.target.value); setPage(1); syncUrl({ from: e.target.value }) }}
+              className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="text-xs text-gray-400">~</span>
+            <input
+              type="date"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={e => { setToDate(e.target.value); setPage(1); syncUrl({ to: e.target.value }) }}
+              className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {(fromDate || toDate) && (
+              <button
+                onClick={() => { setFromDate(''); setToDate(''); setPage(1); syncUrl({ from: '', to: '' }) }}
+                className="text-xs text-gray-400 hover:text-red-500 px-1"
+                title="날짜 초기화"
+              >✕</button>
+            )}
+          </div>
 
           {/* Search */}
           <form onSubmit={handleSearch} className="flex gap-1.5 ml-auto">
@@ -371,63 +420,6 @@ function HomeContent() {
             </button>
           </form>
         </div>
-
-        {/* Advanced filters */}
-        {showAdvanced && (
-          <div className="px-4 pb-3 flex flex-wrap gap-2 border-t pt-3 items-center">
-            <select
-              value={sla}
-              onChange={e => handleSlaChange(e.target.value)}
-              className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">전체 SLA</option>
-              <option value="over">🔴 SLA 초과</option>
-              <option value="imminent">🟠 SLA 임박</option>
-              <option value="warning">🟡 SLA 주의</option>
-              <option value="good">🟢 SLA 여유</option>
-            </select>
-            {isAgent && requesters.length > 0 && (
-              <select
-                value={selectedRequester}
-                onChange={e => handleRequesterChange(e.target.value)}
-                className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">전체 신청자</option>
-                {requesters.map(r => (
-                  <option key={r.username} value={r.username}>
-                    {r.employee_name ? `${r.employee_name} (${r.username})` : r.username}
-                  </option>
-                ))}
-              </select>
-            )}
-            {/* 등록일 기간 필터 */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500 whitespace-nowrap">등록일</span>
-              <input
-                type="date"
-                value={fromDate}
-                max={toDate || undefined}
-                onChange={e => { setFromDate(e.target.value); setPage(1); syncUrl({ from: e.target.value }) }}
-                className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <span className="text-xs text-gray-400">~</span>
-              <input
-                type="date"
-                value={toDate}
-                min={fromDate || undefined}
-                onChange={e => { setToDate(e.target.value); setPage(1); syncUrl({ to: e.target.value }) }}
-                className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {(fromDate || toDate) && (
-                <button
-                  onClick={() => { setFromDate(''); setToDate(''); setPage(1); syncUrl({ from: '', to: '' }) }}
-                  className="text-xs text-gray-400 hover:text-red-500 px-1"
-                  title="날짜 초기화"
-                >✕</button>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Active filter chips */}
         {hasActiveFilters && (
