@@ -1763,20 +1763,27 @@ async def ticket_event_stream(
             pubsub = r.pubsub()
             await pubsub.subscribe(channel)
 
+            keepalive_interval = 30.0
+            last_keepalive = asyncio.get_event_loop().time()
+
             while True:
                 if await request.is_disconnected():
                     break
-                try:
-                    message = await asyncio.wait_for(
-                        pubsub.get_message(ignore_subscribe_messages=True),
-                        timeout=30.0,
-                    )
-                except asyncio.TimeoutError:
-                    yield ": keep-alive\n\n"
-                    continue
+
+                # get_message()는 메시지 없으면 즉시 None 반환 → tight loop 방지
+                # 1초 대기로 이벤트 루프 반환, 30초마다 keep-alive 전송
+                message = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
 
                 if message and message.get("type") == "message":
                     yield f"data: {message['data']}\n\n"
+                    last_keepalive = asyncio.get_event_loop().time()
+                else:
+                    now = asyncio.get_event_loop().time()
+                    if now - last_keepalive >= keepalive_interval:
+                        yield ": keep-alive\n\n"
+                        last_keepalive = now
 
             await pubsub.unsubscribe(channel)
             await r.aclose()

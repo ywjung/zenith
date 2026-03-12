@@ -92,20 +92,27 @@ async def notification_stream(
             pubsub = r.pubsub()
             await pubsub.subscribe(f"notifications:{recipient_id}")
 
-            # Send a keep-alive comment every 30 seconds
+            # get_message(timeout=1.0)으로 1초 대기 → tight loop 방지
+            keepalive_interval = 30.0
+            last_keepalive = asyncio.get_event_loop().time()
+
             while True:
                 if await request.is_disconnected():
                     break
 
-                try:
-                    message = await asyncio.wait_for(pubsub.get_message(ignore_subscribe_messages=True), timeout=30.0)
-                except asyncio.TimeoutError:
-                    yield ": keep-alive\n\n"
-                    continue
+                message = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
 
                 if message and message.get("type") == "message":
                     data = message.get("data", "{}")
                     yield f"data: {data}\n\n"
+                    last_keepalive = asyncio.get_event_loop().time()
+                else:
+                    now = asyncio.get_event_loop().time()
+                    if now - last_keepalive >= keepalive_interval:
+                        yield ": keep-alive\n\n"
+                        last_keepalive = now
 
             await pubsub.unsubscribe(f"notifications:{recipient_id}")
             await r.aclose()
