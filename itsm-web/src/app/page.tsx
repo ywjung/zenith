@@ -36,6 +36,8 @@ function HomeContent() {
   const [searchInput, setSearchInput] = useState(() => searchParams.get('q') || '')
   const [selectedRequester, setSelectedRequester] = useState(() => searchParams.get('assignee') || '')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'priority'>('newest')
+  const [fromDate, setFromDate] = useState(() => searchParams.get('from') || '')
+  const [toDate, setToDate] = useState(() => searchParams.get('to') || '')
 
   const [projects, setProjects] = useState<GitLabProject[]>([])
   const [selectedProject, setSelectedProject] = useState<string>('')
@@ -62,12 +64,16 @@ function HomeContent() {
     const sl = overrides.sla ?? sla
     const q = overrides.q ?? search
     const assignee = overrides.assignee ?? selectedRequester
+    const fd = overrides.from ?? fromDate
+    const td = overrides.to ?? toDate
     if (s && s !== 'all') params.set('status', s)
     if (cat) params.set('category', cat)
     if (prio) params.set('priority', prio)
     if (sl) params.set('sla', sl)
     if (q) params.set('q', q)
     if (assignee) params.set('assignee', assignee)
+    if (fd) params.set('from', fd)
+    if (td) params.set('to', td)
     const qs = params.toString()
     router.replace(qs ? `/?${qs}` : '/', { scroll: false })
   }
@@ -124,6 +130,8 @@ function HomeContent() {
         created_by_username: selectedRequester || undefined,
         sort_by: sortBy === 'oldest' ? 'created_at' : sortBy === 'priority' ? 'priority' : 'created_at',
         order:   sortBy === 'oldest' ? 'asc' : 'desc',
+        created_after:  fromDate  ? `${fromDate}T00:00:00`  : undefined,
+        created_before: toDate    ? `${toDate}T23:59:59`    : undefined,
       })
       setTickets(data.tickets)
       setTotal(data.total)
@@ -132,7 +140,7 @@ function HomeContent() {
     } finally {
       setLoading(false)
     }
-  }, [state, category, priority, sla, search, selectedProject, page, selectedRequester, sortBy])
+  }, [state, category, priority, sla, search, selectedProject, page, selectedRequester, sortBy, fromDate, toDate])
 
   useEffect(() => {
     load()
@@ -161,7 +169,8 @@ function HomeContent() {
   }
 
   function resetAllFilters() {
-    setState('all'); setCategory(''); setPriority(''); setSla(''); setSearch(''); setSearchInput(''); setSelectedRequester('')
+    setState('all'); setCategory(''); setPriority(''); setSla(''); setSearch(''); setSearchInput('')
+    setSelectedRequester(''); setFromDate(''); setToDate('')
     setPage(1); setSelectedIids(new Set()); router.replace('/', { scroll: false })
   }
 
@@ -241,7 +250,7 @@ function HomeContent() {
         (PRIORITY_ORDER[(a.priority ?? 'medium') as keyof typeof PRIORITY_ORDER] ?? 2))
     : tickets
 
-  const hasActiveFilters = !!(category || priority || sla || search || selectedRequester || (state && state !== 'all'))
+  const hasActiveFilters = !!(category || priority || sla || search || selectedRequester || fromDate || toDate || (state && state !== 'all'))
 
   const PRIORITY_LABEL: Record<string, string> = { critical: '긴급', high: '높음', medium: '보통', low: '낮음' }
   const SLA_LABEL: Record<string, string> = { over: 'SLA 초과', imminent: 'SLA 임박', warning: 'SLA 주의', good: 'SLA 여유' }
@@ -341,7 +350,7 @@ function HomeContent() {
 
         {/* Advanced filters */}
         {showAdvanced && (
-          <div className="px-4 pb-3 flex flex-wrap gap-2 border-t pt-3">
+          <div className="px-4 pb-3 flex flex-wrap gap-2 border-t pt-3 items-center">
             <select
               value={sla}
               onChange={e => handleSlaChange(e.target.value)}
@@ -367,6 +376,32 @@ function HomeContent() {
                 ))}
               </select>
             )}
+            {/* 등록일 기간 필터 */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500 whitespace-nowrap">등록일</span>
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={e => { setFromDate(e.target.value); setPage(1); syncUrl({ from: e.target.value }) }}
+                className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span className="text-xs text-gray-400">~</span>
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={e => { setToDate(e.target.value); setPage(1); syncUrl({ to: e.target.value }) }}
+                className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {(fromDate || toDate) && (
+                <button
+                  onClick={() => { setFromDate(''); setToDate(''); setPage(1); syncUrl({ from: '', to: '' }) }}
+                  className="text-xs text-gray-400 hover:text-red-500 px-1"
+                  title="날짜 초기화"
+                >✕</button>
+              )}
+            </div>
           </div>
         )}
 
@@ -391,6 +426,12 @@ function HomeContent() {
             )}
             {selectedRequester && (
               <FilterChip label={`신청자: ${selectedRequester}`} onRemove={() => handleRequesterChange('')} />
+            )}
+            {(fromDate || toDate) && (
+              <FilterChip
+                label={`등록일: ${fromDate || '~'} ~ ${toDate || '~'}`}
+                onRemove={() => { setFromDate(''); setToDate(''); setPage(1); syncUrl({ from: '', to: '' }) }}
+              />
             )}
             <button onClick={resetAllFilters} className="text-xs text-red-500 hover:text-red-700 ml-1 underline">
               모두 초기화

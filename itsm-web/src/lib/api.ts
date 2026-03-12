@@ -109,6 +109,8 @@ export function fetchTickets(params?: {
   sort_by?: string
   order?: string
   created_by_username?: string
+  created_after?: string
+  created_before?: string
 }): Promise<TicketListResponse> {
   return request<TicketListResponse>(`/tickets/${buildQuery(params)}`)
 }

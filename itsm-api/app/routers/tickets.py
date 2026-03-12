@@ -596,6 +596,8 @@ def list_tickets(
     per_page: int = Query(default=20, ge=1, le=100),
     sort_by: str = Query(default="created_at", description="정렬 기준: created_at|updated_at|priority|title"),
     order: str = Query(default="desc", description="정렬 방향: asc|desc"),
+    created_after: Optional[str] = Query(default=None, description="등록일 시작 (ISO 8601, 예: 2026-01-01)"),
+    created_before: Optional[str] = Query(default=None, description="등록일 종료 (ISO 8601, 예: 2026-12-31)"),
     _user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -653,7 +655,8 @@ def list_tickets(
         _list_cache_key = (
             f"itsm:tickets:{project_id or ''}:v{_ver}:{role}:{_user_suffix}:"
             f"{state}:{category or ''}:{priority or ''}:{sla or ''}:"
-            f"{search or ''}:{created_by_username or ''}:{page}:{per_page}:{sort_by}:{order}"
+            f"{search or ''}:{created_by_username or ''}:{page}:{per_page}:{sort_by}:{order}:"
+            f"{created_after or ''}:{created_before or ''}"
         )
         if _r:
             _cached = _r.get(_list_cache_key)
@@ -674,6 +677,7 @@ def list_tickets(
                 state=gl_state, labels=labels, not_labels=not_labels,
                 search=search, project_id=project_id,
                 order_by=sort_by, sort=order,
+                created_after=created_after, created_before=created_before,
             )
             filtered_issues = issues
             if role == "user":
@@ -735,6 +739,7 @@ def list_tickets(
             state=gl_state, labels=labels, not_labels=not_labels,
             search=search, project_id=project_id, page=page, per_page=per_page,
             order_by=sort_by, sort=order,
+            created_after=created_after, created_before=created_before,
         )
         tickets_page = [_issue_to_response(i) for i in issues]
         _attach_sla_deadlines(tickets_page, db)
