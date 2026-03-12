@@ -52,7 +52,8 @@ const ALL_FEATURES: { emoji: string; title: string; note: string; desc: string; 
   { emoji: '🎫', title: '티켓 CRUD + 파일 첨부',              note: '현업 사용자 이상',                                      desc: '티켓 생성·조회·수정과 스크린샷·로그 파일 첨부(최대 10MB)를 지원합니다. 파일은 매직바이트로 형식을 검증합니다.' },
   { emoji: '🔎', title: '글로벌 티켓 검색 (⌘K)',              note: '로그인 사용자 전체',                                    desc: '헤더 검색창 또는 ⌘K(Ctrl+K) 단축키로 전체 티켓을 실시간 검색합니다. GitLab 이슈 검색 API를 활용해 제목·설명을 대상으로 검색하며 300ms 디바운스로 자동완성됩니다. 화살표 키 탐색 및 Enter 선택, Esc로 닫기를 지원합니다.' },
   { emoji: '⌨️', title: '키보드 단축키',                      note: '로그인 사용자 전체',                                    desc: 'g+t(티켓 목록), g+k(칸반), g+b(지식베이스), g+r(리포트), g+a(관리), n(새 티켓 등록), ?(단축키 도움말). 입력 필드에서는 자동 비활성화됩니다.', isNew: true },
-  { emoji: '🗂️', title: '칸반 보드',                          note: 'IT 개발자 이상 · /kanban',                             desc: '5개 상태 컬럼(접수됨·처리중·대기중·처리완료·종료)을 드래그앤드롭으로 티켓 상태를 직접 변경합니다.' },
+  { emoji: '🗂️', title: '칸반 보드',                          note: 'IT 개발자 이상 · /kanban',                             desc: '5개 상태 컬럼(접수됨·처리중·대기중·처리완료·종료)을 드래그앤드롭으로 티켓 상태를 직접 변경합니다. 우선순위·담당자 필터로 원하는 카드만 표시하고, SLA 초과 카드는 빨간색(⚠️), 여유 카드는 초록색으로 구분합니다.' },
+  { emoji: '🚫', title: '칸반 드래그 전환 규칙 강제',         note: 'IT 개발자 이상 · /kanban',                             desc: '카드 드래그 시작 순간, 현재 상태에서 이동이 허용되지 않는 컬럼이 자동으로 흐리게(opacity 40%) 비활성화되고 🚫 아이콘이 표시됩니다. 허용된 컬럼만 파란 하이라이트로 강조됩니다. 백엔드 VALID_TRANSITIONS와 동일한 규칙을 프론트에서 사전 적용하여 API 실패 후 카드가 원위치로 돌아오는 불필요한 UX를 방지합니다.', isNew: true },
   { emoji: '🔍', title: '고급 검색 & URL 동기화',             note: '현업 사용자 이상',                                     desc: '상태·카테고리·우선순위·SLA·신청자·기간 등 복합 필터를 URL로 동기화하여 브라우저 뒤로가기·북마크가 가능합니다.' },
   { emoji: '⭐', title: '즐겨찾기 필터 저장',                  note: 'IT 개발자 이상',                                        desc: '자주 쓰는 필터 조합을 이름 붙여 저장하고 한 번에 적용합니다.' },
   { emoji: '☑️', title: '일괄 작업',                           note: 'IT 관리자 이상',                                       desc: '여러 티켓을 체크박스로 선택하여 종료·담당자 배정·우선순위 변경을 한 번에 처리합니다.' },
@@ -149,6 +150,7 @@ const PERMISSION_ROWS: { feature: string; user: string; dev: string; agent: stri
   { feature: '만족도 평가',                             user: '✅', dev: '✅', agent: '✅', admin: '✅' },
   { feature: '지식베이스 열람',                         user: '✅', dev: '✅', agent: '✅', admin: '✅' },
   { feature: '칸반 보드 조회',                          user: '✅', dev: '✅', agent: '✅', admin: '✅' },
+  { feature: '칸반 드래그 전환 규칙 (상태 제한)',        user: '—',  dev: '✅', agent: '✅', admin: '✅', isNew: true },
   { feature: '필터 저장 (즐겨찾기)',                    user: '✅', dev: '✅', agent: '✅', admin: '✅' },
   { feature: '글로벌 검색 (⌘K)',                        user: '✅', dev: '✅', agent: '✅', admin: '✅' },
   { feature: '티켓 구독 (Watcher)',                     user: '✅', dev: '✅', agent: '✅', admin: '✅' },
@@ -210,6 +212,7 @@ const COMPARISON_SECTIONS: { category: string; rows: { feature: string; itsm: st
       { feature: '연관 티켓 링크·시간 기록',                itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '✅' },
       { feature: '일괄 작업 (종료·배정·우선순위)',          itsm: '✅', zammad: '⚠️', glpi: '⚠️', jira: '✅', sn: '✅' },
       { feature: '칸반 보드 뷰',                            itsm: '✅', zammad: '❌', glpi: '❌', jira: '✅', sn: '✅' },
+      { feature: '칸반 드래그 전환 규칙 강제',              itsm: '✅', zammad: '❌', glpi: '❌', jira: '⚠️', sn: '✅', isNew: true },
       { feature: '파일 매직바이트 검증',                    itsm: '✅', zammad: '⚠️', glpi: '⚠️', jira: '✅', sn: '✅' },
       { feature: '서비스 유형 동적 관리 (DB)',              itsm: '✅', zammad: '⚠️', glpi: '⚠️', jira: '✅', sn: '✅' },
       { feature: 'Confidential 티켓 (GitLab)',              itsm: '✅', zammad: '❌', glpi: '❌', jira: '✅', sn: '⚠️', isNew: true },
@@ -339,7 +342,7 @@ const COMPARISON_SECTIONS: { category: string; rows: { feature: string; itsm: st
       { feature: 'ClamAV 바이러스 스캔 (상시)',            itsm: '✅', zammad: '❌', glpi: '⚠️', jira: '❌', sn: '✅', isNew: true },
       { feature: 'PostgreSQL 자동 백업',                   itsm: '✅', zammad: '⚠️', glpi: '⚠️', jira: '✅', sn: '✅' },
       { feature: 'GitLab CI/CD 파이프라인',                itsm: '✅', zammad: '⚠️', glpi: '❌', jira: '✅', sn: '✅' },
-      { feature: 'Alembic 마이그레이션 (37단계)',          itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '✅', isNew: true },
+      { feature: 'Alembic 마이그레이션 (41단계)',          itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '✅', isNew: true },
     ],
   },
 ]
@@ -604,8 +607,9 @@ const SW_COMPONENTS = [
       '웹훅 X-Gitlab-Event-UUID 중복 감지 (TTL 5분)',
       'IMAP 이메일 Message-ID 중복 방지 SET (TTL 30일)',
       'requirepass 인증 (REDIS_PASSWORD 환경변수)',
+      'maxmemory 256mb + allkeys-lru 정책 (메모리 무제한 성장 방지)',
       '포트 6379 (Docker 내부 네트워크)',
-      '영속성 볼륨: itsm_redis',
+      '영속성 볼륨: itsm_redis (appendonly yes)',
     ],
   },
   {
@@ -634,7 +638,8 @@ const SW_COMPONENTS = [
     role: '메트릭 수집 · 시계열 저장',
     desc: 'FastAPI /metrics 엔드포인트를 15초 간격으로 스크래핑하여 API 응답 시간·요청 수·에러율을 수집합니다. 30일 데이터를 보관하며, 별도 profile 없이 항상 기동됩니다.',
     details: [
-      'scrape_interval: 15s (FastAPI /metrics)',
+      'scrape_interval: 60s (성능 최적화 — 이전 15s에서 변경)',
+      'evaluation_interval: 60s',
       'tsdb 보관 기간: 30일',
       '포트 9090 (Grafana 데이터소스)',
       '항상 기동 (--profile 불필요)',
@@ -707,6 +712,38 @@ const PERF_IMPROVEMENTS = [
     saving: '저대역폭·모바일 환경에서 응답 속도 대폭 향상',
     detail: 'gzip on, gzip_types application/json, gzip_min_length 1024, gzip_comp_level 4, gzip_proxied any. 1KB 미만 소형 응답은 압축 제외(CPU 낭비 방지).',
   },
+  {
+    category: '🔴 CPU 100% 수정',
+    title: 'SSE 스트림 tight loop 제거',
+    before: 'API CPU 100% 고착 (티켓 상세 페이지 오픈 시)',
+    after: 'CPU 0.24% 안정 유지',
+    saving: '상시 CPU 낭비 완전 제거',
+    detail: 'pubsub.get_message()가 메시지 없을 때 즉시 None 반환 → asyncio.wait_for(timeout=30) 무효화 → while True 이벤트 루프 독점 발생. 수정: get_message(timeout=1.0)으로 1초 실제 블로킹 대기. 티켓 SSE·알림 SSE 양쪽 모두 수정.',
+  },
+  {
+    category: '🟠 캐시 추가',
+    title: '타임라인 Redis 캐시 60초',
+    before: '타임라인 탭 클릭 시 매번 GitLab API 호출 (1.5~4초)',
+    after: '캐시 히트 시 ~17ms',
+    saving: '반복 접근 시 99% 응답 시간 단축',
+    detail: 'get_notes() GitLab API 결과를 Redis에 60초 캐시. 캐시 키: itsm:timeline:{pid}:{iid}. 사용자 역할과 무관하게 동일 캐시 사용(공개 데이터). 댓글 등록 시 자동 무효화.',
+  },
+  {
+    category: '🟠 캐시 추가',
+    title: '서비스 유형 Usage API 캐시 5분',
+    before: '서비스 유형 관리 페이지 진입 시 22초 지연 (GitLab API 5회 직렬)',
+    after: '5분 캐시 히트 시 즉시 반환',
+    saving: '관리 페이지 응답 22초 → 즉시',
+    detail: '각 서비스 유형별 티켓 수를 GitLab API로 병렬 조회 후 Redis에 5분 캐시. itsm:admin:service_type_usage 키. 서비스 유형 추가·수정 시 캐시가 5분 후 자연 만료.',
+  },
+  {
+    category: '🟡 모니터링 최적화',
+    title: 'Prometheus scrape 간격 60초 + GitLab health 캐시',
+    before: 'scrape 15초, /health 매번 GitLab API 호출(2~8초), Docker healthcheck 30초',
+    after: 'scrape 60초, /health GitLab 캐시 60초, Docker healthcheck 60초',
+    saving: '/health 2~8초 → 3ms, Prometheus 부하 4배 감소',
+    detail: 'Prometheus scrape_interval 15s→60s. /health GitLab /api/v4/version 호출 결과 60초 in-memory 캐시. Docker healthcheck interval 30s→60s. 모두 캐시 60s > healthcheck 30s 보장.',
+  },
 ]
 
 const STABILITY_FIXES = [
@@ -749,6 +786,54 @@ const STABILITY_FIXES = [
     symptom: '"upstream prematurely closed connection" 반복 로그',
     cause: '브라우저 탭 닫을 때 SSE 연결이 끊기는 정상 동작',
     fix: '실제 장애 아님 — 클라이언트 disconnect 정상 현상으로 확인',
+  },
+  {
+    emoji: '🔴',
+    title: '티켓 목록 카테고리 필터 동작 안함 수정',
+    severity: '심각',
+    symptom: '카테고리 드롭다운 선택 시 결과 0건 반환, 기타 선택 시 항상 0건',
+    cause: '① 프론트: option value로 숫자("1","2") 전송 → 백엔드 cat::1 검색(GitLab 라벨 없음). ② 기타(other): cat::other 라벨 없는 티켓 33건이 필터에서 누락',
+    fix: '① option value를 t.description("hardware","software")으로 수정. ② other 선택 시 알려진 카테고리를 not_labels로 제외하는 방식으로 전환. ServiceTypesContext: value/label/description 3가지 모두 조회 가능하도록 개선.',
+  },
+  {
+    emoji: '🟠',
+    title: 'KB 카테고리 카운트/필터 오작동 수정',
+    severity: '높음',
+    symptom: 'KB 카테고리 카드 모두 0개, 카테고리 필터 결과 없음',
+    cause: 'service_type.value("1")와 KB article.category("하드웨어") 불일치. 한 아티클에 category="2" 이상 데이터 존재',
+    fix: 'ServiceTypesContext getLabel/getEmoji를 value·label·description 모두로 조회. KB 목록: 카운트·필터를 c.label 기준으로 전환. DB: category="2" → "소프트웨어" 정정.',
+  },
+  {
+    emoji: '🟠',
+    title: 'SLA 정책 음수·0 값 저장 허용 수정',
+    severity: '높음',
+    symptom: 'SLA 응답/해결 시간에 음수(-1) 또는 0 시간 저장 가능 → 모든 티켓 즉시 SLA 위반 처리',
+    cause: 'SLAPolicyUpdate 모델에 ge=1 검증 없음',
+    fix: 'response_hours, resolve_hours 필드에 ge=1 최솟값 검증 추가. API 호출 시 422 Unprocessable Entity 반환.',
+  },
+  {
+    emoji: '🟡',
+    title: '이메일 미리보기 XSS(Stored) 수정',
+    severity: '중간',
+    symptom: '이메일 템플릿 편집 시 <script> 태그 저장 후 미리보기 클릭 시 관리자 브라우저에서 스크립트 실행',
+    cause: 'dangerouslySetInnerHTML={{ __html: preview.html_body }} 사용으로 HTML 그대로 렌더링',
+    fix: 'sandbox iframe(allow-same-origin)으로 교체. script 실행 완전 차단. 자동 높이 조절 onLoad 핸들러 추가.',
+  },
+  {
+    emoji: '🟡',
+    title: '리포트 날짜 필터 버그 2종 수정',
+    severity: '높음',
+    symptom: '① 역방향 날짜(from>to) 시 에러 없이 잘못된 데이터 반환. ② open/in_progress/resolved 수치가 날짜 범위 무시하고 현재 상태 반환',
+    cause: '① from_date > to_date 검증 없음. ② _count_open/in_progress/resolved 함수에 created_after/before 파라미터 미전달',
+    fix: '① from>to 시 HTTP 400. ② 세 함수에 created_after/before 추가하여 기간 내 생성 티켓 기준으로 집계. PriorityEnum.X corrupt 키 정규화, 카테고리 키 한국어 통일.',
+  },
+  {
+    emoji: '🟢',
+    title: '감사 로그 행위자 검색 서버사이드 전환',
+    severity: '낮음',
+    symptom: '행위자 검색 시 현재 페이지 50건만 필터링 → "X건 (전체 N건)" 오해 유발',
+    cause: 'actorSearch가 fetchAuditLogs 의존성에 없어 서버 재조회 없음 + 클라이언트 필터',
+    fix: '백엔드 actor_username ILIKE 파라미터 추가. 프론트 fetchAuditLogs에 actor_username 전달 및 deps 추가. 클라이언트 필터 로직 제거.',
   },
 ]
 
@@ -823,6 +908,12 @@ const FAQ_ITEMS = [
   { q: 'GitLab 라벨이 ITSM과 맞지 않게 표시됩니다.', a: '관리 메뉴 → GitLab 라벨 동기화(/admin/labels)에서 현황을 확인하세요. status::/prio::/cat:: 라벨이 GitLab 프로젝트·그룹에 존재하는지 ✅/❌로 표시됩니다. 누락된 라벨이 있으면 "전체 동기화" 버튼을 클릭하면 자동 복구됩니다. 서비스 유형 추가·수정 시에는 cat:: 라벨이 자동으로 동기화되므로 별도 작업이 불필요합니다.' },
   { q: '해결 노트를 지식베이스(KB) 아티클로 만들 수 있나요?', a: '네. 티켓 상태가 처리완료 또는 종료이고 해결 노트가 작성된 경우, 티켓 상세 화면에서 만족도 평가 위에 해결 노트 카드가 표시됩니다. IT 에이전트 이상 역할이면 카드 우측 상단의 "📚 KB 아티클로 변환" 버튼을 클릭하면 해결 노트 내용을 바탕으로 KB 아티클 초안이 자동 생성되고, 생성된 KB 페이지로 바로 이동합니다. 이미 변환된 경우에는 "KB 아티클 보기 →" 링크로 대체됩니다.' },
   { q: '관리자 메뉴 탭 목록이 변경됐나요?', a: '시스템 관리자(/admin)의 현재 메뉴는 다음과 같습니다: 사용자 관리, SLA 정책, 에스컬레이션 정책, 이메일 템플릿, 서비스 유형, 자동배정 규칙, 티켓 템플릿, 빠른 답변, 공지사항/배너(신규), 이메일 알림 연동, 아웃바운드 웹훅, API 키, GitLab 라벨 동기화(신규), 감사 로그. 총 14개 탭입니다.' },
+  { q: '칸반에서 특정 컬럼으로 카드를 드래그해도 이동이 안됩니다.', a: '상태 전환 규칙에 따라 이동할 수 없는 컬럼으로는 드롭이 차단됩니다. 드래그 시작 시점에 이동 가능한 컬럼만 파란색으로 강조되고, 이동 불가 컬럼은 흐릿하게(40%) 표시됩니다.\n\n상태별 허용 전환:\n• 접수됨 → 처리중, 추가정보 대기, 종료됨\n• 처리중 → 처리완료, 추가정보 대기, 종료됨\n• 추가정보 대기 → 처리중, 종료됨\n• 처리완료 → 처리중, 종료됨\n• 종료됨 → 접수됨(재오픈)\n\n예를 들어 "접수됨"에서 "처리완료"로 바로 이동하는 것은 허용되지 않습니다.' },
+  { q: '티켓 목록에서 카테고리 필터가 작동하지 않습니다.', a: '카테고리 필터를 선택해도 결과가 나오지 않는 경우, 다음을 확인하세요.\n\n① 선택한 카테고리에 해당하는 티켓이 실제로 없을 수 있습니다.\n② "기타" 카테고리는 cat:: 라벨이 없는 모든 티켓을 포함합니다. 대부분의 기존 티켓은 카테고리 라벨 없이 생성되었으므로 "기타"를 선택하면 다수가 표시됩니다.\n③ 새로 등록하는 티켓은 카테고리를 선택하면 해당 라벨이 GitLab에 자동 저장됩니다.\n\n정확한 필터링을 위해 티켓 등록 시 카테고리를 반드시 선택해 주세요.' },
+  { q: '이메일 템플릿 미리보기가 이전과 다르게 표시됩니다.', a: '이메일 미리보기가 보안 강화를 위해 sandbox iframe 방식으로 변경되었습니다. 이전에는 HTML이 직접 렌더링되어 스크립트 실행 위험이 있었으나, 현재는 스크립트 실행이 완전히 차단된 안전한 환경에서 렌더링됩니다. 미리보기 내용이 잘려보이면 스크롤하거나 모달 크기를 조절하세요.' },
+  { q: 'SLA 정책 시간에 0이나 음수를 입력하면 어떻게 되나요?', a: 'SLA 응답 시간과 해결 시간은 최소 1시간 이상이어야 합니다. 0 또는 음수 값을 입력하면 서버에서 422 오류를 반환하고 저장되지 않습니다. 관리 > SLA 정책 화면에서도 숫자 입력 필드의 min=1 속성으로 1 미만 입력이 차단됩니다.' },
+  { q: 'API 키를 같은 이름으로 두 개 만들 수 없나요?', a: '동일한 이름의 활성 API 키는 중복 생성이 차단됩니다. 이름이 겹치면 "이미 존재합니다" 오류가 반환됩니다. 기존 키를 비활성화하거나 삭제한 후 동일 이름으로 새 키를 생성하는 것은 가능합니다.' },
+  { q: '내 자신의 역할을 변경할 수 없습니다.', a: '관리자(admin)라도 자기 자신의 역할을 변경하는 것은 시스템에서 차단됩니다. 이는 실수로 본인을 일반 사용자로 강등시켜 관리자가 없는 상태가 되는 것을 방지하기 위한 조치입니다. 자신의 역할 변경이 필요한 경우 다른 관리자에게 요청하세요.' },
 ]
 
 /* ─── 헬퍼 컴포넌트 ──────────────────────────────────────────────────── */
@@ -1611,8 +1702,9 @@ function TabRbac() {
 function TabPerf() {
   const SEVERITY_COLOR: Record<string, string> = {
     심각: 'bg-red-100 text-red-700 border-red-300',
-    중간: 'bg-orange-100 text-orange-700 border-orange-300',
-    낮음: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+    높음: 'bg-orange-100 text-orange-700 border-orange-300',
+    중간: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+    낮음: 'bg-blue-100 text-blue-700 border-blue-300',
     정보: 'bg-gray-100 text-gray-600 border-gray-300',
   }
   return (
@@ -1680,6 +1772,11 @@ function TabPerf() {
                 { metric: 'DB Dead tuple (주요 테이블)', before: '최대 4100%', after: '0%', gain: '100% 제거' },
                 { metric: '중복 DB 인덱스', before: '17개', after: '0개', gain: '전량 제거' },
                 { metric: 'label_sync GitLab API 호출', before: '2회/분 (30s 주기)', after: '0.2회/분 (5분 쿨다운)', gain: '10× 감소' },
+                { metric: 'API CPU 점유율 (SSE tight loop)', before: '100% 고착', after: '0.24% 안정', gain: '완전 해소' },
+                { metric: '/health 응답 시간', before: '2~8초 (매번 GitLab API)', after: '3ms (60초 캐시)', gain: '99.9% ↓' },
+                { metric: '타임라인 응답 시간 (캐시 히트)', before: '1.5~4초', after: '~17ms', gain: '99% ↓' },
+                { metric: '서비스 유형 usage API', before: '22초 (GitLab 5회 직렬)', after: '즉시 (5분 캐시)', gain: '~22초 절감' },
+                { metric: 'Prometheus scrape 간격', before: '15초', after: '60초', gain: '4× 부하 감소' },
               ].map((row) => (
                 <tr key={row.metric} className="hover:bg-gray-50">
                   <td className="px-4 py-2.5 text-gray-700">{row.metric}</td>
@@ -1777,7 +1874,7 @@ function TabArch() {
             { name: 'PostgreSQL',  version: '17',      emoji: '🐘', color: 'border-indigo-200 bg-indigo-50 text-indigo-800' },
             { name: 'Redis',       version: '7.4',     emoji: '🔴', color: 'border-red-200 bg-red-50 text-red-800' },
             { name: 'Nginx',       version: '1.27',    emoji: '🔀', color: 'border-green-200 bg-green-50 text-green-800' },
-            { name: 'Alembic',     version: '37단계',  emoji: '📋', color: 'border-purple-200 bg-purple-50 text-purple-800' },
+            { name: 'Alembic',     version: '41단계',  emoji: '📋', color: 'border-purple-200 bg-purple-50 text-purple-800' },
             { name: 'Prometheus',  version: 'latest',  emoji: '📊', color: 'border-orange-200 bg-orange-50 text-orange-800' },
             { name: 'Grafana',     version: 'latest',  emoji: '📈', color: 'border-purple-200 bg-purple-50 text-purple-800' },
             { name: 'ClamAV',      version: 'latest',  emoji: '🦠', color: 'border-red-200 bg-red-50 text-red-800' },
