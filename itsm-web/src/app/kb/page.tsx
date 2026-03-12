@@ -96,12 +96,13 @@ function KBListContent() {
       {!hasFilter && (
         <div className="grid grid-cols-5 gap-3 mb-7">
           {serviceTypes.filter(t => t.enabled).map((c) => {
-            const count = allArticles.filter((a) => a.category === c.value).length
-            const active = category === c.value
+            // DB는 한국어 레이블 또는 숫자 value 혼재 → 둘 다 매칭
+            const count = allArticles.filter((a) => a.category === c.label || a.category === c.value).length
+            const active = category === c.label || category === c.value
             return (
               <button
                 key={c.value}
-                onClick={() => { setCategory(active ? '' : c.value); setPage(1) }}
+                onClick={() => { setCategory(active ? '' : c.label); setPage(1) }}
                 className={`rounded-xl border p-4 text-center transition-all hover:shadow-md ${active ? 'border-blue-400 bg-blue-100 text-blue-800 shadow-md' : 'bg-white border-gray-200 hover:border-gray-300'}`}
               >
                 <div className="text-2xl mb-1">{c.emoji}</div>

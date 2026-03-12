@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from ..rate_limit import user_limiter, LIMIT_KB_CREATE, LIMIT_UPLOAD
 
 _KB_CACHE_TTL = 300        # KB 목록 Redis 캐시 5분
 _KB_ARTICLE_CACHE_TTL = 300  # KB 개별 아티클 캐시 5분
+_KB_VIEW_COOLDOWN = 300    # 조회수 중복 카운트 방지 쿨다운 (5분)
 
 
 def _get_redis():
@@ -62,8 +63,8 @@ def _ensure_unique_slug(db: Session, base_slug: str, exclude_id: Optional[int] =
 
 
 class ArticleCreate(BaseModel):
-    title: str
-    content: str
+    title: str = Field(..., min_length=1, max_length=500, description="아티클 제목")
+    content: str = Field(..., min_length=1, description="아티클 본문")
     category: Optional[str] = None
     published: bool = False
     tags: List[str] = []  # F-8
@@ -169,9 +170,20 @@ def get_article(
     if not article.published and not is_agent:
         raise HTTPException(status_code=403, detail="권한이 부족합니다.")
 
-    # Increment view count
-    article.view_count = (article.view_count or 0) + 1
-    db.commit()
+    # 조회수 증가 — Redis로 사용자별 쿨다운 적용 (중복 카운트 방지)
+    user_id = str(user.get("sub", "anon"))
+    view_key = f"itsm:kb:view:{article.id}:{user_id}"
+    already_viewed = False
+    if r:
+        try:
+            already_viewed = bool(r.get(view_key))
+            if not already_viewed:
+                r.setex(view_key, _KB_VIEW_COOLDOWN, "1")
+        except Exception:
+            pass
+    if not already_viewed:
+        article.view_count = (article.view_count or 0) + 1
+        db.commit()
 
     result = _article_to_dict(article, include_content=True)
     if r and article.published and not is_agent:
@@ -192,18 +204,38 @@ def suggest_kb_articles(
     에이전트 댓글 작성 시에도 활용 가능.
     """
     try:
+        # websearch_to_tsquery: OR 연산 지원, 긴 제목 입력 시에도 부분 매칭
+        # 예) "Docker 설치 방법" → Docker | 설치 | 방법 (AND 대신 OR)
         results = (
             db.query(KBArticle)
             .filter(
                 KBArticle.published == True,  # noqa: E712
                 sa_text(
-                    "to_tsvector('simple', title || ' ' || content) @@ plainto_tsquery('simple', :q)"
+                    "to_tsvector('simple', title || ' ' || content) @@ "
+                    "websearch_to_tsquery('simple', :q)"
                 ).bindparams(q=q),
             )
             .order_by(KBArticle.view_count.desc())
             .limit(limit)
             .all()
         )
+        # websearch 결과가 없으면 단어 분리 OR 검색으로 폴백
+        if not results:
+            words = q.split()[:5]  # 최대 5개 단어
+            or_query = " | ".join(words)
+            results = (
+                db.query(KBArticle)
+                .filter(
+                    KBArticle.published == True,  # noqa: E712
+                    sa_text(
+                        "to_tsvector('simple', title || ' ' || content) @@ "
+                        "to_tsquery('simple', :q)"
+                    ).bindparams(q=or_query),
+                )
+                .order_by(KBArticle.view_count.desc())
+                .limit(limit)
+                .all()
+            )
     except Exception:
         # FTS 폴백
         like = f"%{q}%"

@@ -40,14 +40,15 @@ export function ServiceTypesProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => { load() }, [load])
 
+  // value 또는 label 모두로 조회 (KB 아티클이 한국어 레이블을 저장한 경우 호환)
   const getLabel = (value: string) => {
-    const found = serviceTypes.find(t => t.value === value)
+    const found = serviceTypes.find(t => t.value === value || t.label === value)
     if (found) return found.label
     return FALLBACK[value]?.label ?? value
   }
 
   const getEmoji = (value: string) => {
-    const found = serviceTypes.find(t => t.value === value)
+    const found = serviceTypes.find(t => t.value === value || t.label === value)
     if (found) return found.emoji
     return FALLBACK[value]?.emoji ?? '📋'
   }
