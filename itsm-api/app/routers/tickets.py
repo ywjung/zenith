@@ -44,20 +44,27 @@ def _get_redis():
 def _invalidate_ticket_list_cache(project_id: Optional[str] = None) -> None:
     """티켓 목록 캐시 버전을 증가 + 구 버전 캐시 키를 즉시 삭제한다.
 
-    버전 키를 올리는 것만으로는 이전 버전 키가 TTL 만료까지 Redis 메모리에 남는다.
-    _r.delete()로 실제 구 키를 제거해 메모리 낭비를 방지한다.
+    project_id가 지정된 경우에도 'all' 키를 함께 무효화한다.
+    (목록은 project_id 없이 로드될 수 있으므로 양쪽 버전을 모두 갱신해야 함)
     """
     _r = _get_redis()
     if _r:
-        ver_key = f"itsm:tickets:v:{project_id or 'all'}"
-        # 구 버전 캐시 키 삭제 (버전 올리기 전에 패턴 수집)
         pid_part = project_id or ''
-        old_keys = _r.keys(f"itsm:tickets:{pid_part}:v*")
-        if old_keys:
-            _r.delete(*old_keys)
-        _r.incr(ver_key)
-        _r.expire(ver_key, 3600)
-        # stats/requesters 캐시도 무효화 (프로젝트별)
+        # 모든 관련 캐시 키 삭제 (프로젝트별 + all)
+        patterns = [f"itsm:tickets:{pid_part}:v*"]
+        if pid_part:
+            patterns.append("itsm:tickets::v*")  # project_id 없이 로드된 캐시도 삭제
+        for pattern in patterns:
+            old_keys = _r.keys(pattern)
+            if old_keys:
+                _r.delete(*old_keys)
+        # 버전 증가 (프로젝트별 + all 모두)
+        _r.incr(f"itsm:tickets:v:{pid_part or 'all'}")
+        _r.expire(f"itsm:tickets:v:{pid_part or 'all'}", 3600)
+        if pid_part:
+            _r.incr("itsm:tickets:v:all")
+            _r.expire("itsm:tickets:v:all", 3600)
+        # stats/requesters 캐시도 무효화
         stat_keys = _r.keys(f"itsm:stats:{pid_part}*")
         if stat_keys:
             _r.delete(*stat_keys)
