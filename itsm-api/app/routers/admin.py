@@ -1172,3 +1172,68 @@ def revoke_api_key(
         raise HTTPException(404, "API 키를 찾을 수 없습니다.")
     rec.revoked = True
     db.commit()
+
+
+@router.get("/filter-options")
+def get_filter_options(db: Session = Depends(get_db)):
+    """티켓 목록 필터에 필요한 옵션(상태·우선순위·카테고리)을 동적으로 반환한다.
+
+    - 상태: 워크플로우에 정의된 STATUS_KO 기반 (인증 불필요 — 로그인 전 포털에서도 사용)
+    - 우선순위: SLA 정책 테이블에서 조회 (없으면 기본값 사용)
+    - 카테고리: service_types 테이블에서 조회
+    """
+    from ..models import SLAPolicy
+
+    # ── 상태 (워크플로우 정의, 관리자 Label Sync 기준) ──────────────────
+    statuses = [
+        {"key": "open",        "label": "접수됨",        "color": "yellow"},
+        {"key": "in_progress", "label": "처리중",        "color": "blue"},
+        {"key": "waiting",     "label": "대기중",        "color": "orange"},
+        {"key": "resolved",    "label": "처리완료",      "color": "purple"},
+        {"key": "closed",      "label": "종료됨",        "color": "green"},
+    ]
+
+    # ── 우선순위 (SLA 정책 테이블에서 동적 생성) ────────────────────────
+    _PRIORITY_DEFAULT = [
+        {"key": "critical", "label": "긴급", "color": "red"},
+        {"key": "high",     "label": "높음", "color": "orange"},
+        {"key": "medium",   "label": "보통", "color": "yellow"},
+        {"key": "low",      "label": "낮음", "color": "gray"},
+    ]
+    _PRIORITY_ORDER = ["critical", "high", "medium", "low"]
+    try:
+        policies = db.query(SLAPolicy).all()
+        if policies:
+            policy_map = {p.priority: p for p in policies}
+            priorities = [
+                {
+                    "key": prio,
+                    "label": {"critical": "긴급", "high": "높음", "medium": "보통", "low": "낮음"}.get(prio, prio),
+                    "color": {"critical": "red", "high": "orange", "medium": "yellow", "low": "gray"}.get(prio, "gray"),
+                    "response_hours": policy_map[prio].response_hours if prio in policy_map else None,
+                    "resolve_hours": policy_map[prio].resolve_hours if prio in policy_map else None,
+                }
+                for prio in _PRIORITY_ORDER if prio in policy_map or True
+            ]
+        else:
+            priorities = _PRIORITY_DEFAULT
+    except Exception:
+        priorities = _PRIORITY_DEFAULT
+
+    # ── 카테고리 (service_types 테이블) ─────────────────────────────────
+    service_types = db.query(ServiceType).filter(ServiceType.enabled == True).order_by(ServiceType.sort_order, ServiceType.id).all()  # noqa: E712
+    categories = [
+        {
+            "key": st.description or st.value,
+            "label": st.label,
+            "emoji": st.emoji,
+            "color": st.color,
+        }
+        for st in service_types
+    ]
+
+    return {
+        "statuses":   statuses,
+        "priorities": priorities,
+        "categories": categories,
+    }

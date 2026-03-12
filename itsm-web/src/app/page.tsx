@@ -6,7 +6,9 @@ import Link from 'next/link'
 import {
   fetchTickets, fetchTicketStats, fetchProjects, bulkUpdateTickets,
   fetchTicketRequesters, fetchSavedFilters, createSavedFilter, deleteSavedFilter,
+  fetchFilterOptions,
 } from '@/lib/api'
+import type { FilterOptions } from '@/lib/api'
 import { formatName, formatDate } from '@/lib/utils'
 import { PRIORITY_ORDER, DEFAULT_PER_PAGE, API_BASE } from '@/lib/constants'
 import type { Ticket, GitLabProject, TicketStats, SavedFilter } from '@/types'
@@ -43,6 +45,7 @@ function HomeContent() {
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [requesters, setRequesters] = useState<{ username: string; employee_name: string }[]>([])
   const [stats, setStats] = useState<TicketStats | null>(null)
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null)
 
   const [selectedIids, setSelectedIids] = useState<Set<number>>(new Set())
   const [bulkAction, setBulkAction] = useState('close')
@@ -81,15 +84,17 @@ function HomeContent() {
   // 초기 데이터 로딩 — fetchProjects / fetchStats / fetchSavedFilters 동시 시작 (병목 1 개선)
   useEffect(() => {
     const init = async () => {
-      // ① 3개 요청 동시 출발 (fetchProjects를 기다리지 않음)
-      const [projectList, statsResult, filtersResult] = await Promise.allSettled([
+      // ① 4개 요청 동시 출발 (filterOptions 포함)
+      const [projectList, statsResult, filtersResult, filterOptsResult] = await Promise.allSettled([
         fetchProjects(),
-        fetchTicketStats(undefined),           // project_id 없이 먼저 통계 fetch
+        fetchTicketStats(undefined),
         isAgent ? fetchSavedFilters() : Promise.resolve([]),
+        fetchFilterOptions(),
       ])
 
       if (statsResult.status === 'fulfilled') setStats(statsResult.value)
       if (filtersResult.status === 'fulfilled') setSavedFilters(filtersResult.value)
+      if (filterOptsResult.status === 'fulfilled') setFilterOptions(filterOptsResult.value)
 
       // ② 프로젝트 수에 따라 selectedProject 결정
       //    1개: '' (전체) — list_tickets는 이미 '' 로 실행 중이므로 재로드 불필요
@@ -304,27 +309,45 @@ function HomeContent() {
             </select>
           )}
 
+          {/* 상태 — filter-options에서 동적 생성 */}
+          <select
+            value={state === 'all' ? '' : state}
+            onChange={e => handleStateChange(e.target.value || 'all')}
+            className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">전체 상태</option>
+            {(filterOptions?.statuses ?? []).map(s => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
+          </select>
+
+          {/* 카테고리 — filter-options에서 동적 생성 */}
           <select
             value={category}
             onChange={e => handleCategoryChange(e.target.value)}
             className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">전체 카테고리</option>
-            {serviceTypes.map(t => (
-              <option key={t.value} value={t.description ?? t.value}>{t.emoji} {t.label}</option>
+            {(filterOptions?.categories ?? serviceTypes.map(t => ({ key: t.description ?? t.value, label: t.label, emoji: t.emoji }))).map(c => (
+              <option key={c.key} value={c.key}>{c.emoji} {c.label}</option>
             ))}
           </select>
 
+          {/* 우선순위 — filter-options에서 동적 생성 */}
           <select
             value={priority}
             onChange={e => handlePriorityChange(e.target.value)}
             className="border rounded-md px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">전체 우선순위</option>
-            <option value="critical">🔴 긴급</option>
-            <option value="high">🟠 높음</option>
-            <option value="medium">🟡 보통</option>
-            <option value="low">⚪ 낮음</option>
+            {(filterOptions?.priorities ?? [
+              { key: 'critical', label: '긴급' },
+              { key: 'high',     label: '높음' },
+              { key: 'medium',   label: '보통' },
+              { key: 'low',      label: '낮음' },
+            ]).map(p => (
+              <option key={p.key} value={p.key}>{p.label}</option>
+            ))}
           </select>
 
           <button
@@ -411,7 +434,7 @@ function HomeContent() {
           <div className="px-4 pb-3 flex flex-wrap items-center gap-1.5 border-t pt-2.5">
             <span className="text-xs text-gray-400 mr-1">필터:</span>
             {state && state !== 'all' && (
-              <FilterChip label={`상태: ${statTabs.find(t => t.key === state)?.label ?? state}`} onRemove={() => handleStateChange('all')} />
+              <FilterChip label={`상태: ${filterOptions?.statuses.find(s => s.key === state)?.label ?? statTabs.find(t => t.key === state)?.label ?? state}`} onRemove={() => handleStateChange('all')} />
             )}
             {category && (
               <FilterChip label={`카테고리: ${getEmoji(category)} ${getLabel(category)}`} onRemove={() => handleCategoryChange('')} />

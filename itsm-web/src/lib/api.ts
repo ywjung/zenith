@@ -566,6 +566,17 @@ export function fetchServiceTypes(): Promise<ServiceType[]> {
   return request('/admin/service-types')
 }
 
+export interface FilterOption { key: string; label: string; emoji?: string; color?: string }
+export interface FilterOptions {
+  statuses:   FilterOption[]
+  priorities: (FilterOption & { response_hours?: number; resolve_hours?: number })[]
+  categories: FilterOption[]
+}
+
+export function fetchFilterOptions(): Promise<FilterOptions> {
+  return request('/admin/filter-options')
+}
+
 export function createServiceType(data: {
   label: string; description?: string; emoji?: string; color?: string; sort_order?: number
   context_label?: string; context_options?: string[]
