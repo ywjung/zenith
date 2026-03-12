@@ -623,7 +623,23 @@ def list_tickets(
         if status_label:
             label_parts.append(status_label)
         if category:
-            label_parts.append(f"cat::{category}")
+            if category == "other":
+                # "기타" 카테고리: 명시적 cat:: 라벨이 없는 티켓 포함
+                # → 알려진 다른 카테고리를 not_labels로 제외
+                from ..database import SessionLocal as _SL
+                from ..models import ServiceType as _ST
+                with _SL() as _db:
+                    _other_cats = [
+                        f"cat::{t.description}"
+                        for t in _db.query(_ST).filter(_ST.enabled == True).all()  # noqa: E712
+                        if t.description and t.description != "other"
+                    ]
+                if not_labels:
+                    not_labels += "," + ",".join(_other_cats)
+                else:
+                    not_labels = ",".join(_other_cats)
+            else:
+                label_parts.append(f"cat::{category}")
         if priority:
             label_parts.append(f"prio::{priority}")
         labels = ",".join(label_parts) if label_parts else None
