@@ -40,15 +40,20 @@ export function ServiceTypesProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => { load() }, [load])
 
-  // value 또는 label 모두로 조회 (KB 아티클이 한국어 레이블을 저장한 경우 호환)
+  // value / label / description 모두로 조회
+  // - value: 숫자 "1","2" (서비스 타입 ID)
+  // - label: 한국어 "하드웨어" (KB 아티클 호환)
+  // - description: 영문 "hardware" (GitLab 라벨 기반, 티켓 필터)
   const getLabel = (value: string) => {
-    const found = serviceTypes.find(t => t.value === value || t.label === value)
+    const found = serviceTypes.find(t =>
+      t.value === value || t.label === value || t.description === value)
     if (found) return found.label
     return FALLBACK[value]?.label ?? value
   }
 
   const getEmoji = (value: string) => {
-    const found = serviceTypes.find(t => t.value === value || t.label === value)
+    const found = serviceTypes.find(t =>
+      t.value === value || t.label === value || t.description === value)
     if (found) return found.emoji
     return FALLBACK[value]?.emoji ?? '📋'
   }

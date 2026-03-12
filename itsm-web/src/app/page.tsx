@@ -301,7 +301,7 @@ function HomeContent() {
           >
             <option value="">전체 카테고리</option>
             {serviceTypes.map(t => (
-              <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>
+              <option key={t.value} value={t.description ?? t.value}>{t.emoji} {t.label}</option>
             ))}
           </select>
 
