@@ -371,6 +371,7 @@ export function fetchAuditLogs(params?: {
   per_page?: number
   resource_type?: string
   actor_id?: string
+  actor_username?: string
   action?: string
   from_date?: string
   to_date?: string

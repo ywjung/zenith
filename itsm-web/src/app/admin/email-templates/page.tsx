@@ -230,7 +230,18 @@ function EmailTemplatesContent() {
                   </div>
                   <div className="border rounded-lg overflow-hidden">
                     <div className="bg-gray-100 px-3 py-1.5 text-xs text-gray-500 border-b">HTML 렌더링</div>
-                    <div className="p-4 text-sm" dangerouslySetInnerHTML={{ __html: preview.html_body }} />
+                    {/* sandbox iframe — XSS 방지: script 실행 차단 */}
+                    <iframe
+                      srcDoc={preview.html_body}
+                      sandbox="allow-same-origin"
+                      className="w-full min-h-[200px] border-0"
+                      title="이메일 미리보기"
+                      onLoad={(e) => {
+                        const iframe = e.currentTarget
+                        const body = iframe.contentDocument?.body
+                        if (body) iframe.style.height = `${body.scrollHeight + 32}px`
+                      }}
+                    />
                   </div>
                 </div>
               )}

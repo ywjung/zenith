@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -94,6 +94,10 @@ def update_user_role(
     from ..routers.auth import verify_sudo_token
     verify_sudo_token(x_sudo_token, user, db)
 
+    # 자기 자신 역할 변경 방지 (관리자 없는 상태 방지)
+    if str(user.get("sub")) == str(gitlab_user_id):
+        raise HTTPException(status_code=400, detail="자기 자신의 역할은 변경할 수 없습니다.")
+
     allowed = {"admin", "agent", "developer", "user"}
     if data.role not in allowed:
         raise HTTPException(status_code=400, detail=f"허용된 역할: {', '.join(allowed)}")
@@ -120,7 +124,7 @@ def update_user_role(
 # Audit logs
 # ---------------------------------------------------------------------------
 
-def _build_audit_query(db: Session, resource_type=None, actor_id=None, action=None, from_date=None, to_date=None):
+def _build_audit_query(db: Session, resource_type=None, actor_id=None, action=None, from_date=None, to_date=None, actor_username=None):
     from sqlalchemy import func, text as sa_text
     # actor_id가 순수 숫자인 경우에만 user_roles와 JOIN
     # 비숫자(예: "apikey:1", "test" 등)는 JOIN 대상에서 제외 → CAST 오류 방지
@@ -140,6 +144,8 @@ def _build_audit_query(db: Session, resource_type=None, actor_id=None, action=No
         q = q.filter(AuditLog.resource_type == resource_type)
     if actor_id:
         q = q.filter(AuditLog.actor_id == actor_id)
+    if actor_username:
+        q = q.filter(AuditLog.actor_username.ilike(f"%{actor_username}%"))
     if action:
         q = q.filter(AuditLog.action == action)
     if from_date:
@@ -173,13 +179,14 @@ def list_audit_logs(
     per_page: int = Query(default=50, ge=1, le=200),
     resource_type: Optional[str] = None,
     actor_id: Optional[str] = None,
+    actor_username: Optional[str] = None,
     action: Optional[str] = None,
     from_date: Optional[datetime] = None,
     to_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
     _user: dict = Depends(require_agent),
 ):
-    q = _build_audit_query(db, resource_type, actor_id, action, from_date, to_date)
+    q = _build_audit_query(db, resource_type, actor_id, action, from_date, to_date, actor_username)
     total = q.count()
     rows = q.offset((page - 1) * per_page).limit(per_page).all()  # list of (AuditLog, display_name)
     return {
@@ -350,8 +357,8 @@ def list_breached_sla(
 # ---------------------------------------------------------------------------
 
 class SLAPolicyUpdate(BaseModel):
-    response_hours: int
-    resolve_hours: int
+    response_hours: int = Field(..., ge=1, description="최초 응답 목표 시간 (최소 1시간)")
+    resolve_hours: int = Field(..., ge=1, description="해결 목표 시간 (최소 1시간)")
 
 
 @router.get("/sla-policies")
@@ -425,9 +432,24 @@ def get_service_type_usage(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_admin),
 ):
-    """서비스 유형별 사용 중인 티켓 수를 반환한다 (병렬 조회)."""
+    """서비스 유형별 사용 중인 티켓 수를 반환한다 (병렬 조회, 5분 캐시)."""
+    import json as _json
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from .. import gitlab_client as _gc
+    from ..config import get_settings as _gs
+
+    _CACHE_KEY = "itsm:admin:service_type_usage"
+    _CACHE_TTL = 300  # 5분
+
+    # Redis 캐시 확인
+    try:
+        import redis as _redis
+        _r = _redis.from_url(_gs().REDIS_URL, socket_connect_timeout=1, decode_responses=True)
+        cached = _r.get(_CACHE_KEY)
+        if cached:
+            return _json.loads(cached)
+    except Exception:
+        _r = None
 
     types = db.query(ServiceType).order_by(ServiceType.sort_order, ServiceType.id).all()
 
@@ -446,6 +468,13 @@ def get_service_type_usage(
         for future in as_completed(futures):
             st_id, count = future.result()
             result[st_id] = count
+
+    # 캐시 저장
+    try:
+        if _r:
+            _r.setex(_CACHE_KEY, _CACHE_TTL, _json.dumps(result))
+    except Exception:
+        pass
 
     return result  # {service_type_id: ticket_count}
 
@@ -1093,6 +1122,11 @@ def create_api_key(
     invalid_scopes = [s for s in body.scopes if s not in _API_KEY_SCOPES]
     if invalid_scopes:
         raise HTTPException(400, f"유효하지 않은 스코프: {invalid_scopes}. 가능: {_API_KEY_SCOPES}")
+
+    # 이름 중복 방지
+    from ..models import ApiKey
+    if db.query(ApiKey).filter(ApiKey.name == body.name, ApiKey.is_active == True).first():  # noqa: E712
+        raise HTTPException(400, f"'{body.name}' 이름의 활성 API 키가 이미 존재합니다.")
 
     # itsm_live_ + 32자 랜덤
     raw_key = "itsm_live_" + _secrets.token_urlsafe(24)

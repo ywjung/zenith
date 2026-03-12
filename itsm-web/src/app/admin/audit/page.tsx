@@ -88,13 +88,14 @@ function AuditContent() {
       page,
       per_page: PER_PAGE,
       action: actionFilter || undefined,
+      actor_username: actorSearch || undefined,
       from_date: fromDate ? new Date(fromDate).toISOString() : undefined,
       to_date: toDate ? new Date(toDate + 'T23:59:59').toISOString() : undefined,
     })
       .then((data) => { setLogs(data.logs); setTotal(data.total) })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [isAgent, page, actionFilter, fromDate, toDate])
+  }, [isAgent, page, actionFilter, actorSearch, fromDate, toDate])
 
   useEffect(() => { load() }, [load])
 
@@ -110,11 +111,8 @@ function AuditContent() {
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
   const hasFilter = !!(actionFilter || actorSearch || fromDate || toDate)
 
-  const filtered = actorSearch
-    ? logs.filter((l) =>
-        l.actor_username.toLowerCase().includes(actorSearch.toLowerCase()) ||
-        (l.actor_name ?? '').toLowerCase().includes(actorSearch.toLowerCase()))
-    : logs
+  // actor_username은 서버사이드 필터로 처리 — logs가 이미 필터링된 결과
+  const filtered = logs
 
   async function handleDownload() {
     setDownloading(true)
