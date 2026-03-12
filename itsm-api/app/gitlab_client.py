@@ -457,9 +457,9 @@ def add_note(
         return resp.json()
 
 
-def delete_issue(iid: int, project_id: Optional[str] = None) -> None:
+def delete_issue(iid: int, project_id: Optional[str] = None, gitlab_token: Optional[str] = None) -> None:
     with _http_ctx() as client:
-        resp = client.delete(f"{_base(project_id)}/issues/{iid}", headers=_headers())
+        resp = client.delete(f"{_base(project_id)}/issues/{iid}", headers=_get_headers(gitlab_token))
         resp.raise_for_status()
 
 

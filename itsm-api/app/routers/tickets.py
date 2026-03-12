@@ -1122,6 +1122,11 @@ def get_ticket(
             if creator in name_map:
                 ticket["employee_name"] = name_map[creator]
         return ticket
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+        logger.error("GitLab get_ticket %d error: %s", iid, e)
+        raise HTTPException(status_code=502, detail="티켓 조회 중 오류가 발생했습니다.")
     except Exception as e:
         logger.error("GitLab get_ticket %d error: %s", iid, e)
         raise HTTPException(status_code=502, detail="티켓 조회 중 오류가 발생했습니다.")
@@ -1220,7 +1225,13 @@ def delete_ticket(
             )
 
     try:
-        gitlab_client.delete_issue(iid, project_id=project_id)
+        gitlab_token = user.get("gitlab_token") or None
+        gitlab_client.delete_issue(iid, project_id=project_id, gitlab_token=gitlab_token)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+        logger.error("GitLab delete_issue %d error: %s", iid, e)
+        raise HTTPException(status_code=502, detail="티켓 삭제 중 오류가 발생했습니다.")
     except Exception as e:
         logger.error("GitLab delete_issue %d error: %s", iid, e)
         raise HTTPException(status_code=502, detail="티켓 삭제 중 오류가 발생했습니다.")
