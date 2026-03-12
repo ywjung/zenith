@@ -385,6 +385,8 @@ def get_all_issues(
     order_by: str = "created_at",
     sort: str = "desc",
     max_results: int = 1000,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
 ) -> list[dict]:
     """Fetch all matching issues across pages (max_results safety cap).
 
@@ -399,6 +401,7 @@ def get_all_issues(
             search=search, project_id=project_id,
             page=page, per_page=per_page,
             order_by=order_by, sort=sort,
+            created_after=created_after, created_before=created_before,
         )
         if not issues:
             break
