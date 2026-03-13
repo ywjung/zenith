@@ -1,0 +1,14 @@
+# 로컬 개발 전용 오버라이드
+# docker compose up 시 자동으로 적용됨
+# CI/CD 배포 시에는 이 파일을 사용하지 않음
+
+services:
+  itsm-api:
+    build: ./itsm-api
+
+  itsm-web:
+    build:
+      context: ./itsm-web
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8111/api}
+        NEXT_PUBLIC_GITLAB_URL: ${NEXT_PUBLIC_GITLAB_URL:-http://localhost:8929}

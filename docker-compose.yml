@@ -50,10 +50,12 @@ services:
       --maxmemory-policy allkeys-lru
     volumes:
       - itsm_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # ClamAV 바이러스 스캔 데몬 (파일 업로드 보안)
-  # ARM64(Apple Silicon) 환경: platform linux/amd64 → Rosetta 에뮬레이션
-  # CLAMAV_ENABLED=false 환경변수로 비활성화 가능 (fail-open)
   clamav:
     image: clamav/clamav:1.4
     platform: linux/amd64
@@ -67,12 +69,18 @@ services:
       retries: 3
       start_period: 180s
 
+  # ---------------------------------------------------------------------
+  # itsm-api
+  # 로컬 개발: docker-compose.override.yml 의 build: 지시어가 우선 적용됨
+  # CI 배포:  IMAGE_API / IMAGE_API_TAG 환경변수로 레지스트리 이미지 사용
+  # ---------------------------------------------------------------------
   itsm-api:
-    build: ./itsm-api
+    image: ${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      GITLAB_API_URL: http://gitlab:8929
+      GITLAB_API_URL: ${GITLAB_API_URL:-http://gitlab:8929}
+      GITLAB_EXTERNAL_URL: ${GITLAB_EXTERNAL_URL:-http://localhost:8929}
       GITLAB_PROJECT_ID: ${GITLAB_PROJECT_ID}
       GITLAB_PROJECT_TOKEN: ${GITLAB_PROJECT_TOKEN}
       GITLAB_GROUP_ID: ${GITLAB_GROUP_ID:-}
@@ -97,7 +105,9 @@ services:
       TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8111}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      MAX_ACTIVE_SESSIONS: ${MAX_ACTIVE_SESSIONS:-5}
       CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       CLAMAV_ENABLED: ${CLAMAV_ENABLED:-true}
@@ -107,32 +117,38 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       clamav:
         condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 60s
+      interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 60s
 
+  # ---------------------------------------------------------------------
+  # itsm-web
+  # NEXT_PUBLIC_* 변수는 빌드 시 바이너리에 삽입됨 (런타임 변경 불가)
+  # CI에서 환경별 이미지를 각각 빌드해 IMAGE_WEB_TAG로 구분
+  # ---------------------------------------------------------------------
   itsm-web:
-    build:
-      context: ./itsm-web
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
-        NEXT_PUBLIC_GITLAB_URL: ${NEXT_PUBLIC_GITLAB_URL}
+    image: ${IMAGE_WEB:-itsm-web}:${IMAGE_WEB_TAG:-latest}
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
-      NEXT_PUBLIC_GITLAB_URL: ${NEXT_PUBLIC_GITLAB_URL}
+      NODE_ENV: production
     depends_on:
       itsm-api:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   nginx:
-    image: nginx:latest
+    image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8111}:80"
@@ -141,8 +157,12 @@ services:
     depends_on:
       - itsm-web
       - itsm-api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  # Prometheus 메트릭 수집 (항상 활성화)
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
@@ -161,7 +181,6 @@ services:
       retries: 3
       start_period: 15s
 
-  # Grafana 대시보드 (항상 활성화)
   grafana:
     image: grafana/grafana:latest
     restart: unless-stopped
@@ -187,7 +206,6 @@ services:
       retries: 3
       start_period: 15s
 
-  # PostgreSQL 자동 백업 (24시간 주기, 7일 이상 삭제)
   pg-backup:
     image: postgres:17
     profiles: ["backup"]

@@ -232,8 +232,6 @@ deploy:dev:
         export IMAGE_WEB_TAG=$IMAGE_TAG
         docker compose pull
         docker compose up -d --remove-orphans
-        # DB 마이그레이션
-        docker compose exec -T api alembic upgrade head
         echo "✅ 개발기 배포 완료: $IMAGE_TAG"
       ENDSSH
   after_script:
@@ -295,8 +293,6 @@ deploy:staging:
         export IMAGE_WEB_TAG=$IMAGE_TAG
         docker compose pull
         docker compose up -d --remove-orphans
-        # DB 마이그레이션
-        docker compose exec -T api alembic upgrade head
         echo "✅ 테스트기 배포 완료: $IMAGE_TAG"
       ENDSSH
   retry:
@@ -356,8 +352,6 @@ deploy:production:
         export IMAGE_WEB_TAG=$IMAGE_TAG
         docker compose pull
         docker compose up -d --remove-orphans
-        # DB 마이그레이션
-        docker compose exec -T api alembic upgrade head
         echo "✅ 운영기 배포 완료: $IMAGE_TAG"
       ENDSSH
   after_script:
