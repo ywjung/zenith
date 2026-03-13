@@ -13,7 +13,7 @@ from ..auth import get_current_user
 from ..config import get_settings
 from ..database import get_db
 from ..models import KBArticle
-from ..rbac import require_agent, require_admin
+from ..rbac import require_pl, require_agent, require_admin
 from ..rate_limit import user_limiter, LIMIT_KB_CREATE, LIMIT_UPLOAD
 from ..redis_client import get_redis as _get_redis
 
@@ -257,7 +257,7 @@ def create_article(
     request: Request,
     data: ArticleCreate,
     db: Session = Depends(get_db),
-    user: dict = Depends(require_agent),
+    user: dict = Depends(require_pl),
 ):
     base_slug = _slug_from_title(data.title)
     slug = _ensure_unique_slug(db, base_slug)
@@ -283,7 +283,7 @@ def update_article(
     article_id: int,
     data: ArticleCreate,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_agent),
+    _user: dict = Depends(require_pl),
 ):
     article = db.query(KBArticle).filter(KBArticle.id == article_id).first()
     if not article:
@@ -326,7 +326,7 @@ def publish_article(
     article_id: int,
     published: bool = True,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_agent),
+    _user: dict = Depends(require_pl),
 ):
     article = db.query(KBArticle).filter(KBArticle.id == article_id).first()
     if not article:
@@ -344,7 +344,7 @@ async def upload_kb_attachment(
     request: Request,
     file: UploadFile = File(...),
     project_id: Optional[str] = Query(default=None),
-    _user: dict = Depends(require_agent),
+    _user: dict = Depends(require_pl),
 ):
     """KB 아티클용 파일 첨부 업로드.
 

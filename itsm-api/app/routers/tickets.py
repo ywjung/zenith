@@ -17,7 +17,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..schemas import TicketCreate, TicketResponse, CommentResponse, TicketUpdate, CommentCreate, BulkUpdate, SLARecordResponse
 from .. import gitlab_client
-from ..rbac import require_developer, require_agent, require_admin
+from ..rbac import require_developer, require_pl, require_agent, require_admin
 from .. import sla as sla_module
 from ..models import SLARecord, AuditLog
 from ..notifications import (
@@ -929,7 +929,7 @@ def export_tickets_csv(
     priority: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
     project_id: Optional[str] = Query(default=None),
-    _user: dict = Depends(require_agent),
+    _user: dict = Depends(require_pl),
 ):
     """현재 필터 기준 티켓 목록을 CSV로 내보낸다 (agent 이상)."""
     import csv
@@ -1064,7 +1064,7 @@ def _sla_to_dict(record) -> dict:
 def get_linked_mrs(
     iid: int,
     project_id: Optional[str] = Query(default=None),
-    _user: dict = Depends(require_agent),  # G-2: agent 이상만 조회 가능
+    _user: dict = Depends(require_pl),  # G-2: agent 이상만 조회 가능
 ):
     """G-2: Return GitLab Merge Requests related to this ticket/issue."""
     pid = project_id or get_settings().GITLAB_PROJECT_ID
@@ -1107,7 +1107,7 @@ def update_ticket_sla(
     body: dict,
     project_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_agent),
+    _user: dict = Depends(require_pl),
 ):
     """IT 관리자 이상 — SLA 기한 수동 변경."""
     from datetime import date as date_type
@@ -1282,7 +1282,7 @@ def update_ticket(
     from ..rbac import ROLE_LEVELS
     role = user.get("role", "user")
     is_developer = ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS["developer"]
-    is_agent = ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS["agent"]
+    is_pl = ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS["pl"]
 
     if not is_developer:
         # developer 미만 — 작성자 + open 상태인지 확인
@@ -1304,7 +1304,7 @@ def update_ticket(
             )
 
     # 담당자 변경은 agent 이상만 가능
-    if data.assignee_id is not None and not is_agent:
+    if data.assignee_id is not None and not is_pl:
         raise HTTPException(status_code=403, detail="담당자 변경은 IT 관리자 이상만 가능합니다.")
     try:
         issue = gitlab_client.get_issue(iid, project_id=project_id)
@@ -1520,7 +1520,7 @@ def convert_resolution_to_kb(
     iid: int,
     project_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    user: dict = Depends(require_agent),
+    user: dict = Depends(require_pl),
 ):
     """해결 노트를 KB 아티클 초안으로 변환."""
     from ..models import ResolutionNote, KBArticle
@@ -1762,7 +1762,7 @@ def bulk_update_tickets(
     request: Request,
     data: BulkUpdate,
     background_tasks: BackgroundTasks,
-    user: dict = Depends(require_agent),
+    user: dict = Depends(require_pl),
     db: Session = Depends(get_db),
 ):
     """일괄 상태 변경 / 담당자 배정 — ThreadPoolExecutor로 병렬 처리."""
