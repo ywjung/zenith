@@ -2155,11 +2155,14 @@ const PROCESS_ROLES = [
 const TERM_MAP = [
   { term: 'Epic (상위 단위, 현업 요청)', itsm: 'ITSM 티켓', note: 'GitLab ITSM 프로젝트 Issue', color: 'bg-blue-50 border-blue-200' },
   { term: 'Issue (하위 단위, 개발 작업)', itsm: '개발 전달 이슈', note: 'GitLab 개발 프로젝트 Issue (개발 전달 기능)', color: 'bg-teal-50 border-teal-200' },
-  { term: 'Epic: open', itsm: '티켓 상태 · 접수됨', note: 'status::open', color: 'bg-yellow-50 border-yellow-200' },
-  { term: 'Epic: approved + in-progress', itsm: '티켓 상태 · 처리중', note: 'status::in_progress (승인 = 담당자 배정 + 처리중 전환)', color: 'bg-blue-50 border-blue-200' },
-  { term: 'Epic: testing', itsm: '티켓 상태 · 대기중', note: 'status::waiting (SLA 자동 일시정지)', color: 'bg-purple-50 border-purple-200' },
-  { term: 'Epic: ready-for-release', itsm: '티켓 상태 · 처리완료', note: 'status::resolved', color: 'bg-teal-50 border-teal-200' },
-  { term: 'Epic: released + done', itsm: '티켓 Closed', note: 'GitLab issue closed', color: 'bg-green-50 border-green-200' },
+  { term: 'Epic: open',              itsm: '티켓 상태 · 접수됨',       note: 'status::open',              color: 'bg-yellow-50 border-yellow-200' },
+  { term: 'Epic: approved',          itsm: '티켓 상태 · 승인완료',     note: 'status::approved',          color: 'bg-teal-50 border-teal-200' },
+  { term: 'Epic: in-progress',       itsm: '티켓 상태 · 처리중',       note: 'status::in_progress',       color: 'bg-blue-50 border-blue-200' },
+  { term: 'Epic: testing',           itsm: '티켓 상태 · 대기중',       note: 'status::waiting (SLA 자동 일시정지)', color: 'bg-purple-50 border-purple-200' },
+  { term: 'Epic: resolved',          itsm: '티켓 상태 · 처리완료',     note: 'status::resolved',          color: 'bg-green-50 border-green-200' },
+  { term: 'Epic: ready-for-release', itsm: '티켓 상태 · 운영배포전',   note: 'status::ready_for_release', color: 'bg-amber-50 border-amber-200' },
+  { term: 'Epic: released',          itsm: '티켓 상태 · 운영반영완료', note: 'status::released',          color: 'bg-indigo-50 border-indigo-200' },
+  { term: 'Epic: done',              itsm: '티켓 Closed',              note: 'GitLab issue closed',       color: 'bg-slate-50 border-slate-200' },
 ]
 
 type ProcessStep = {
@@ -2182,7 +2185,7 @@ const PROCESS_STEPS: ProcessStep[] = [
     actorColor: 'text-blue-700',
     steps: [
       { who: '현업', color: 'bg-blue-100 text-blue-800', action: '요청 등록', detail: '포털(/) 또는 티켓 등록에서 서비스 유형·제목·내용·우선순위 입력 후 제출 → 티켓 생성 (상태: 접수됨/open)' },
-      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '검토 및 승인', detail: '티켓 상세 → 댓글로 승인 의사 기록 → 담당자(협력사 PL) 배정 → 상태를 처리중으로 변경', code: '티켓 담당자 드롭다운 → 협력사 PL 선택 → 상태 "처리중"으로 변경' },
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '검토 및 승인', detail: '티켓 상세 → 댓글로 승인 의사 기록 → 담당자(협력사 PL) 배정 → 상태를 승인완료로 변경 (이후 협력사 PL이 처리중으로 전환)', code: '티켓 담당자 드롭다운 → 협력사 PL 선택 → 상태 "승인완료(approved)"로 변경' },
       { who: '협력사 PL', color: 'bg-teal-100 text-teal-800', action: '개발 전달 (Issue 생성)', detail: '티켓 상세 → 사이드바 "전달" 탭 → 대상 개발 프로젝트 선택 → 작업 내용·담당자 입력 → 전달', code: '티켓 상세 우측 → 개발 전달 탭 → "전달하기" 버튼' },
       { who: 'GitLab', color: 'bg-gray-100 text-gray-700', action: 'feature 브랜치 생성', detail: 'GitLab 개발 프로젝트 → Issues → 해당 Issue → "Create branch" 버튼 → feature/이슈번호-설명 형식', code: 'GitLab > Issues > Create branch' },
     ],
@@ -2239,7 +2242,7 @@ const PROCESS_STEPS: ProcessStep[] = [
       { who: 'GitLab', color: 'bg-gray-100 text-gray-700', action: '테스트기 자동 배포', detail: 'stg-* 태그 트리거 → build → deploy:staging → healthcheck 자동 실행', code: 'CI/CD: deploy:staging 자동 실행' },
       { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '현업에 테스트 요청', detail: 'ITSM 티켓 → 댓글로 안내 → 상태를 "대기중(waiting)"으로 변경 (SLA 자동 일시정지)', code: '상태 → 대기중(waiting)으로 변경' },
       { who: '현업', color: 'bg-blue-100 text-blue-800', action: '테스트기에서 테스트 수행', detail: 'ITSM 포털 → 내 요청 → 해당 티켓 → 테스트 후 댓글로 결과 전달', code: '티켓 댓글: "테스트 완료 확인했습니다."' },
-      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '테스트 확인 완료 처리', detail: 'ITSM 티켓 → 상태를 "처리완료(resolved)"로 변경', code: '상태 → 처리완료(resolved)로 변경' },
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '테스트 확인 완료 처리', detail: 'ITSM 티켓 → 상태를 "운영배포전(ready_for_release)"으로 변경 (운영 배포 준비 완료 신호)', code: '상태 → 운영배포전(ready_for_release)으로 변경' },
     ],
   },
   {
@@ -2266,7 +2269,7 @@ const PROCESS_STEPS: ProcessStep[] = [
       { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '운영 배포 태그 생성', detail: 'GitLab → release 브랜치 → Tags → New tag → v1.2.3 형식으로 생성', code: 'Tag name: v0.1.0\nCreate from: release 브랜치' },
       { who: 'GitLab', color: 'bg-gray-100 text-gray-700', action: 'CI: deploy:production 대기', detail: 'v*.*.* 태그 트리거 → build 완료 → deploy:production 잡이 수동(manual) 상태로 대기', code: 'CI/CD > Pipelines > deploy:production ▶ 클릭' },
       { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '운영 배포 수동 승인', detail: 'GitLab → CI/CD → Pipelines → 해당 파이프라인 → deploy:production → ▶ 실행 버튼 클릭', code: 'GitLab Pipelines > ▶ deploy:production' },
-      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '운영 최종 확인 및 ITSM 기록', detail: 'ITSM 티켓 → 댓글: "운영 배포 완료. 확인 요청드립니다."', code: '티켓 댓글 등록' },
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '운영 배포 확인 및 ITSM 기록', detail: 'ITSM 티켓 → 댓글: "운영 배포 완료. 확인 요청드립니다." → 상태를 "운영반영완료(released)"로 변경', code: '상태 → 운영반영완료(released)로 변경 후 댓글 등록' },
       { who: '현업', color: 'bg-blue-100 text-blue-800', action: '최종 완료 처리', detail: 'ITSM 포털 → 해당 티켓 → 완료 처리 → 티켓 Closed (Epic: done)', code: '티켓 상태 → 종료(closed)' },
     ],
   },
