@@ -33,6 +33,7 @@ const WORKFLOW_STEPS = [
   { key: 'approved',          label: '승인완료' },
   { key: 'in_progress',       label: '처리중' },
   { key: 'resolved',          label: '처리완료' },
+  { key: 'testing',           label: '테스트중' },
   { key: 'ready_for_release', label: '운영배포전' },
   { key: 'released',          label: '운영반영완료' },
   { key: 'closed',            label: '종료' },
@@ -44,9 +45,10 @@ const STEP_INDEX: Record<string, number> = {
   waiting:           2,
   in_progress:       2,
   resolved:          3,
-  ready_for_release: 4,
-  released:          5,
-  closed:            6,
+  testing:           4,
+  ready_for_release: 5,
+  released:          6,
+  closed:            7,
 }
 
 function WorkflowStepper({ status, state }: { status: string | undefined; state: string }) {

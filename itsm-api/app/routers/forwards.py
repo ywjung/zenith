@@ -96,8 +96,9 @@ _STATUS_RANK: dict[str, int] = {
     "in_progress": 1,
     "waiting": 1,
     "resolved": 2,
-    "ready_for_release": 3,
-    "released": 4,
+    "testing": 3,
+    "ready_for_release": 4,
+    "released": 5,
     "closed": 2,    # dev closed → ITSM resolved 로 취급
 }
 # 전달 이슈 상태 → ITSM 메인 티켓 상태 매핑
@@ -107,6 +108,7 @@ _FORWARD_TO_ITSM: dict[str, str] = {
     "in_progress": "in_progress",
     "waiting": "in_progress",
     "resolved": "resolved",
+    "testing": "testing",
     "ready_for_release": "ready_for_release",
     "released": "released",
     "closed": "resolved",   # dev 완료 = ITSM 해결됨 (종결은 에이전트가 결정)

@@ -1204,6 +1204,7 @@ def get_filter_options(db: Session = Depends(get_db)):
         {"key": "in_progress",       "label": "처리중",      "color": "blue"},
         {"key": "waiting",           "label": "대기중",      "color": "orange"},
         {"key": "resolved",          "label": "처리완료",    "color": "purple"},
+        {"key": "testing",           "label": "테스트중",    "color": "violet"},
         {"key": "ready_for_release", "label": "운영배포전",  "color": "amber"},
         {"key": "released",          "label": "운영반영완료","color": "indigo"},
         {"key": "closed",            "label": "종료됨",      "color": "green"},

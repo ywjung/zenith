@@ -9,6 +9,7 @@ const STATUS_STYLES: Record<string, string> = {
   in_progress:       'bg-blue-100 text-blue-800 border-blue-200',
   waiting:           'bg-orange-100 text-orange-800 border-orange-200',
   resolved:          'bg-purple-100 text-purple-800 border-purple-200',
+  testing:           'bg-violet-100 text-violet-800 border-violet-200',
   ready_for_release: 'bg-amber-100 text-amber-800 border-amber-200',
   released:          'bg-indigo-100 text-indigo-800 border-indigo-200',
   closed:            'bg-green-100 text-green-800 border-green-200',

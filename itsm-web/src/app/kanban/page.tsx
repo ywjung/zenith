@@ -15,6 +15,7 @@ const COLUMNS: { id: string; label: string; bg: string; header: string; wip: num
   { id: 'in_progress',       label: '처리 중',      bg: 'bg-blue-50',    header: 'bg-blue-200 text-blue-800',     wip: 10 },
   { id: 'waiting',           label: '추가정보 대기', bg: 'bg-yellow-50',  header: 'bg-yellow-200 text-yellow-800', wip: 10 },
   { id: 'resolved',          label: '처리 완료',    bg: 'bg-green-50',   header: 'bg-green-200 text-green-800',   wip: 30 },
+  { id: 'testing',           label: '테스트중',     bg: 'bg-violet-50',  header: 'bg-violet-200 text-violet-800', wip: 10 },
   { id: 'ready_for_release', label: '운영배포전',   bg: 'bg-amber-50',   header: 'bg-amber-200 text-amber-800',   wip: 20 },
   { id: 'released',          label: '운영반영완료', bg: 'bg-indigo-50',  header: 'bg-indigo-200 text-indigo-800', wip: 20 },
   { id: 'closed',            label: '종료됨',       bg: 'bg-slate-50',   header: 'bg-slate-200 text-slate-700',   wip: 50 },
@@ -26,7 +27,8 @@ const VALID_TRANSITIONS: Record<string, Set<string>> = {
   approved:          new Set(['in_progress', 'waiting', 'closed']),
   in_progress:       new Set(['resolved', 'waiting', 'closed']),
   waiting:           new Set(['in_progress', 'approved', 'closed']),
-  resolved:          new Set(['in_progress', 'ready_for_release', 'closed']),
+  resolved:          new Set(['testing', 'in_progress', 'ready_for_release', 'closed']),
+  testing:           new Set(['ready_for_release', 'in_progress', 'closed']),
   ready_for_release: new Set(['released', 'in_progress', 'closed']),
   released:          new Set(['closed']),
   closed:            new Set(['open']),  // reopened → open으로 표시됨
@@ -382,7 +384,7 @@ function KanbanContent() {
       {/* Board */}
       <div className="flex-1 min-h-0 px-4 py-4">
         {loading ? (
-          <div className="grid grid-cols-8 gap-3 h-full">
+          <div className="grid grid-cols-9 gap-3 h-full">
             {[1,2,3,4,5].map(i => (
               <div key={i} className="flex flex-col rounded-lg overflow-hidden border border-gray-200 shadow-sm animate-pulse">
                 <div className="h-9 bg-gray-200 shrink-0" />
@@ -403,7 +405,7 @@ function KanbanContent() {
           </div>
         ) : (
           <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
-            <div className="grid grid-cols-8 gap-3 h-full">
+            <div className="grid grid-cols-9 gap-3 h-full">
               {COLUMNS.map(col => {
                 const colTickets = getColTickets(col.id)
                 const overWip = colTickets.length > col.wip

@@ -29,6 +29,7 @@ class StatusEnum(str, Enum):
     IN_PROGRESS = "in_progress"
     WAITING = "waiting"
     RESOLVED = "resolved"
+    TESTING = "testing"
     READY_FOR_RELEASE = "ready_for_release"
     RELEASED = "released"
     CLOSED = "closed"

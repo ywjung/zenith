@@ -268,6 +268,7 @@ function HomeContent() {
     { key: 'in_progress',       label: '처리중',      count: stats?.in_progress ?? 0,        ring: 'ring-blue-400',   active: 'bg-blue-50 border-blue-400',     num: 'text-blue-700'   },
     { key: 'waiting',           label: '대기중',      count: stats?.waiting ?? 0,            ring: 'ring-orange-400', active: 'bg-orange-50 border-orange-400', num: 'text-orange-700' },
     { key: 'resolved',          label: '처리완료',    count: stats?.resolved ?? 0,           ring: 'ring-purple-400', active: 'bg-purple-50 border-purple-400', num: 'text-purple-700' },
+    { key: 'testing',           label: '테스트중',    count: stats?.testing ?? 0,            ring: 'ring-violet-400', active: 'bg-violet-50 border-violet-400', num: 'text-violet-700' },
     { key: 'ready_for_release', label: '운영배포전',  count: stats?.ready_for_release ?? 0,  ring: 'ring-amber-400',  active: 'bg-amber-50 border-amber-400',   num: 'text-amber-700'  },
     { key: 'released',          label: '운영반영완료', count: stats?.released ?? 0,          ring: 'ring-indigo-400', active: 'bg-indigo-50 border-indigo-400', num: 'text-indigo-700' },
     { key: 'closed',            label: '종료',        count: stats?.closed ?? 0,             ring: 'ring-green-400',  active: 'bg-green-50 border-green-400',   num: 'text-green-700'  },
@@ -276,7 +277,7 @@ function HomeContent() {
   return (
     <div>
       {/* Status Tabs */}
-      <div className="grid grid-cols-9 gap-2 mb-5">
+      <div className="grid grid-cols-10 gap-2 mb-5">
         {statTabs.map(tab => (
           <button
             key={tab.key}

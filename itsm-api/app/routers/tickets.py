@@ -216,6 +216,7 @@ STATUS_KO = {
     "in_progress":       "처리 중",
     "waiting":           "추가정보 대기 중",
     "resolved":          "처리 완료",
+    "testing":           "테스트 중",
     "ready_for_release": "운영배포전",
     "released":          "운영반영완료",
     "closed":            "종료됨",
@@ -228,7 +229,8 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
     "approved":          {"in_progress", "waiting", "closed"},
     "in_progress":       {"resolved", "waiting", "closed"},
     "waiting":           {"in_progress", "approved", "closed"},
-    "resolved":          {"in_progress", "ready_for_release", "closed"},
+    "resolved":          {"testing", "in_progress", "ready_for_release", "closed"},
+    "testing":           {"ready_for_release", "in_progress", "closed"},
     "ready_for_release": {"released", "in_progress", "closed"},
     "released":          {"closed"},
     "closed":            {"reopened"},
@@ -503,7 +505,7 @@ def get_ticket_stats(
                     count += 1
                 return count
 
-            _all_sl = "status::approved,status::in_progress,status::waiting,status::resolved,status::ready_for_release,status::released"
+            _all_sl = "status::approved,status::in_progress,status::waiting,status::resolved,status::testing,status::ready_for_release,status::released"
             _result = {
                 "all":              _count_in("all"),
                 "open":             _count_in("opened", not_label=_all_sl),
@@ -511,6 +513,7 @@ def get_ticket_stats(
                 "in_progress":      _count_in("opened", label="status::in_progress"),
                 "waiting":          _count_in("opened", label="status::waiting"),
                 "resolved":         _count_in("opened", label="status::resolved"),
+                "testing":          _count_in("opened", label="status::testing"),
                 "ready_for_release":_count_in("opened", label="status::ready_for_release"),
                 "released":         _count_in("opened", label="status::released"),
                 "closed":           _count_in("closed"),
@@ -528,14 +531,15 @@ def get_ticket_stats(
             )
             return total
 
-        _all_sl = "status::approved,status::in_progress,status::waiting,status::resolved,status::ready_for_release,status::released"
-        with ThreadPoolExecutor(max_workers=9) as pool:
+        _all_sl = "status::approved,status::in_progress,status::waiting,status::resolved,status::testing,status::ready_for_release,status::released"
+        with ThreadPoolExecutor(max_workers=10) as pool:
             f_all               = pool.submit(_count, "all")
             f_open              = pool.submit(_count, "opened", None, _all_sl)
             f_approved          = pool.submit(_count, "opened", "status::approved")
             f_in_progress       = pool.submit(_count, "opened", "status::in_progress")
             f_waiting           = pool.submit(_count, "opened", "status::waiting")
             f_resolved          = pool.submit(_count, "opened", "status::resolved")
+            f_testing           = pool.submit(_count, "opened", "status::testing")
             f_ready_for_release = pool.submit(_count, "opened", "status::ready_for_release")
             f_released          = pool.submit(_count, "opened", "status::released")
             f_closed            = pool.submit(_count, "closed")
@@ -546,6 +550,7 @@ def get_ticket_stats(
                 "in_progress":      f_in_progress.result(),
                 "waiting":          f_waiting.result(),
                 "resolved":         f_resolved.result(),
+                "testing":          f_testing.result(),
                 "ready_for_release":f_ready_for_release.result(),
                 "released":         f_released.result(),
                 "closed":           f_closed.result(),

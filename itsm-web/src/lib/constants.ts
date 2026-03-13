@@ -43,6 +43,7 @@ export type TicketStatus =
   | 'in_progress'
   | 'waiting'
   | 'resolved'
+  | 'testing'
   | 'ready_for_release'
   | 'released'
   | 'closed'
@@ -54,6 +55,7 @@ export const STATUS_LABELS: Record<string, string> = {
   in_progress: '처리중',
   waiting: '대기중',
   resolved: '처리완료',
+  testing: '테스트중',
   ready_for_release: '운영배포전',
   released: '운영반영완료',
   closed: '종료',
@@ -89,6 +91,11 @@ export const STATUS_INFO: Record<
     label: '해결됨',
     color: 'text-green-700 bg-green-50 border-green-200',
     icon: '🔧',
+  },
+  testing: {
+    label: '테스트중',
+    color: 'text-violet-700 bg-violet-50 border-violet-200',
+    icon: '🧪',
   },
   ready_for_release: {
     label: '운영배포전',
