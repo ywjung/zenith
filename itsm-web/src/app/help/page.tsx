@@ -115,6 +115,8 @@ const SECURITY_FEATURES: { emoji: string; title: string; desc: string; isNew?: b
   { emoji: '🔒', title: 'CSP / HSTS 보안 헤더',                  desc: 'Nginx에서 Content-Security-Policy, Strict-Transport-Security(max-age=31536000), X-Frame-Options: DENY, X-Content-Type-Options: nosniff 헤더를 자동 설정합니다.' },
   { emoji: '⚡', title: 'Rate Limiting (엔드포인트별)',           desc: 'slowapi로 엔드포인트별 Rate Limit을 적용합니다. 포털 제출 5건/분, 티켓 생성 10건/분 등 서비스별로 세분화됩니다.' },
   { emoji: '🦊', title: 'GitLab OAuth SSO',                       desc: '모든 인증은 GitLab OAuth 2.0 Authorization Code Flow를 통합니다. 별도 비밀번호 관리 없이 GitLab 계정으로 로그인합니다.' },
+  { emoji: '📏', title: 'API 입력 길이 검증 (Pydantic)',          desc: '모든 API 입력값에 최대 길이 제한이 적용됩니다. 필터 이름 200자, 빠른 답변 내용 5,000자, 개발 전달 메모 2,000자 등 필드별 Pydantic Field(max_length=N) 검증으로 과도하게 큰 입력이 API 레벨에서 422로 즉시 거부됩니다.', isNew: true },
+  { emoji: '🔇', title: 'ClamAV 내부 오류 정보 차단',             desc: '파일에서 악성코드가 탐지된 경우 ClamAV 엔진의 내부 응답(바이러스 시그니처 명 등 상세 정보)이 API 에러 메시지에 포함되지 않습니다. 공격자가 스캐너 버전·패턴 정보를 수집하는 것을 방지합니다.', isNew: true },
 ]
 
 /* ─── 워크플로우 & SLA 데이터 ────────────────────────────────────────── */
@@ -338,7 +340,7 @@ const COMPARISON_SECTIONS: { category: string; rows: { feature: string; itsm: st
     rows: [
       { feature: 'Docker Compose 배포',                    itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '❌' },
       { feature: 'Prometheus 메트릭 (/metrics)',            itsm: '✅', zammad: '⚠️', glpi: '❌', jira: '✅', sn: '✅' },
-      { feature: 'Grafana 자동 프로비저닝 대시보드 3개',   itsm: '✅', zammad: '❌', glpi: '❌', jira: '✅', sn: '✅', isNew: true },
+      { feature: 'Grafana 자동 프로비저닝 대시보드 4개',   itsm: '✅', zammad: '❌', glpi: '❌', jira: '✅', sn: '✅', isNew: true },
       { feature: 'ClamAV 바이러스 스캔 (상시)',            itsm: '✅', zammad: '❌', glpi: '⚠️', jira: '❌', sn: '✅', isNew: true },
       { feature: 'PostgreSQL 자동 백업',                   itsm: '✅', zammad: '⚠️', glpi: '⚠️', jira: '✅', sn: '✅' },
       { feature: 'GitLab CI/CD 파이프라인',                itsm: '✅', zammad: '⚠️', glpi: '❌', jira: '✅', sn: '✅' },
@@ -569,6 +571,7 @@ const SW_COMPONENTS = [
       'MAX_ACTIVE_SESSIONS=5: 세션 초과 시 오래된 세션 자동 폐기',
       'httpx 공유 커넥션 풀 (max_connections=30): GitLab API 요청 TCP 재사용',
       'label_sync 쿨다운 5분: 30초 주기 Prometheus 스크레이프 시 GitLab API 과호출 방지',
+      'non-root 컨테이너 실행 (appuser): Dockerfile에 useradd로 전용 사용자 생성 후 USER 전환',
     ],
   },
   {
@@ -636,7 +639,7 @@ const SW_COMPONENTS = [
     category: '모니터링 (상시)', badge: 'bg-orange-100 text-orange-700',
     border: 'border-orange-200', bg: 'bg-orange-50',
     role: '메트릭 수집 · 시계열 저장',
-    desc: 'FastAPI /metrics 엔드포인트를 15초 간격으로 스크래핑하여 API 응답 시간·요청 수·에러율을 수집합니다. 30일 데이터를 보관하며, 별도 profile 없이 항상 기동됩니다.',
+    desc: 'FastAPI /metrics 엔드포인트를 60초 간격으로 스크래핑하여 API 응답 시간·요청 수·에러율을 수집합니다. 30일 데이터를 보관하며, 별도 profile 없이 항상 기동됩니다.',
     details: [
       'scrape_interval: 60s (성능 최적화 — 이전 15s에서 변경)',
       'evaluation_interval: 60s',
@@ -780,6 +783,14 @@ const STABILITY_FIXES = [
     fix: 'VACUUM ANALYZE 전체 실행 후 dead tuple 0건 확인',
   },
   {
+    emoji: '🟠',
+    title: 'Redis 연결 풀 누수 수정 (타임라인)',
+    severity: '중간',
+    symptom: '타임라인 탭 반복 클릭 시 Redis 연결 수 무한 증가 → 연결 거부 가능성',
+    cause: 'get_timeline() 함수에서 redis.from_url()로 요청마다 신규 연결 풀 생성 — 싱글턴 _get_redis() 미사용',
+    fix: 'from_url() 제거, _get_redis() 싱글턴 풀 재사용으로 교체. 연결 수 일정 유지.',
+  },
+  {
     emoji: '🟢',
     title: 'SSE 연결 끊김 nginx 에러 로그',
     severity: '정보',
@@ -848,7 +859,7 @@ const CONNECTIONS = [
   { from: 'itsm-api',                 to: 'ClamAV',                 protocol: 'TCP',            port: ':3310',      direction: '→', detail: '파일 업로드 시 ClamAV 데몬으로 바이러스 스캔 요청.', color: 'bg-red-50' },
   { from: 'GitLab',                   to: 'itsm-api',               protocol: 'HTTP POST',      port: ':8000/webhooks', direction: '←', detail: 'Push·MR·이슈 이벤트 웹훅 수신. X-Gitlab-Token 헤더로 검증. UUID 중복 방지.', color: 'bg-orange-50' },
   { from: 'Redis',                    to: 'itsm-api (SSE 구독)',    protocol: 'TCP',            port: ':6379',      direction: '←', detail: '알림 발행 시 구독 중인 SSE 핸들러로 이벤트 전달 → 브라우저에 실시간 스트리밍.', color: 'bg-red-50' },
-  { from: 'Prometheus',               to: 'itsm-api /metrics',      protocol: 'HTTP GET',       port: ':8000/metrics', direction: '←', detail: '15초 간격 스크래핑. prometheus-fastapi-instrumentator가 요청 수·응답 시간·에러율 노출.', color: 'bg-orange-50' },
+  { from: 'Prometheus',               to: 'itsm-api /metrics',      protocol: 'HTTP GET',       port: ':8000/metrics', direction: '←', detail: '60초 간격 스크래핑. prometheus-fastapi-instrumentator가 요청 수·응답 시간·에러율 노출.', color: 'bg-orange-50' },
   { from: 'Grafana',                  to: 'Prometheus',             protocol: 'HTTP PromQL',    port: ':9090',      direction: '←', detail: 'Prometheus를 데이터소스로 연결. PromQL 쿼리로 시계열 메트릭 조회 및 대시보드 시각화.', color: 'bg-purple-50' },
   { from: 'pg-backup',               to: 'PostgreSQL',             protocol: 'TCP',            port: ':5432',      direction: '→', detail: '24시간 주기로 pg_dump 실행 → /backups/itsm_YYYYMMDD.sql.gz 저장. 7일 경과 파일 자동 삭제.', color: 'bg-gray-50' },
 ]
