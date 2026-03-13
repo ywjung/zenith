@@ -18,18 +18,21 @@ def upgrade():
         'ix_refresh_tokens_user_active',
         'refresh_tokens',
         ['gitlab_user_id', 'revoked', 'expires_at'],
+        if_not_exists=True,
     )
-    # 티켓 상세에서 링크 조회 경로
+    # 티켓 상세에서 링크 조회 경로 (0011에서 이미 생성됐을 수 있으므로 IF NOT EXISTS)
     op.create_index(
         'ix_ticket_links_source',
         'ticket_links',
         ['source_iid', 'project_id'],
+        if_not_exists=True,
     )
     # 티켓 상세에서 작업시간 조회 경로
     op.create_index(
         'ix_time_entries_issue_project',
         'time_entries',
         ['issue_iid', 'project_id'],
+        if_not_exists=True,
     )
 
 
