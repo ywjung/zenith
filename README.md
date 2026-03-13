@@ -52,9 +52,10 @@ GitLab CE 기반 IT 서비스 관리(ITSM) 플랫폼.
 15. [운영 관리](#15-운영-관리)
 16. [도메인 · HTTPS 적용 (운영 서버)](#16-도메인--https-적용-운영-서버)
 17. [개발 환경](#17-개발-환경)
-18. [트러블슈팅](#18-트러블슈팅)
-19. [버전 이력](#19-버전-이력)
-20. [라이선스](#20-라이선스)
+18. [CI/CD 파이프라인](#18-cicd-파이프라인)
+19. [트러블슈팅](#19-트러블슈팅)
+20. [버전 이력](#20-버전-이력)
+21. [라이선스](#21-라이선스)
 
 ---
 
@@ -95,14 +96,17 @@ GitLab CE 기반 IT 서비스 관리(ITSM) 플랫폼.
 | 컨테이너 | 이미지 | 포트(외부) | 역할 |
 |---------|--------|-----------|------|
 | `gitlab` | `gitlab/gitlab-ce:latest` | 8929(HTTP), 2224(SSH) | OAuth 제공자 · 이슈 백엔드 |
-| `itsm-api` | 로컬 빌드 | 8000(내부) | FastAPI REST API |
-| `itsm-web` | 로컬 빌드 | 3000(내부) | Next.js 웹 UI |
-| `nginx` | `nginx:latest` | **8111** | 리버스 프록시 |
+| `itsm-api` | `${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}` | 8000(내부) | FastAPI REST API |
+| `itsm-web` | `${IMAGE_WEB:-itsm-web}:${IMAGE_WEB_TAG:-latest}` | 3000(내부) | Next.js 웹 UI |
+| `nginx` | `nginx:1.27-alpine` | **8111** | 리버스 프록시 |
 | `postgres` | `postgres:17` | 5432(내부) | 주 데이터베이스 |
 | `redis` | `redis:7.4-alpine` | 6379(내부) | 캐시 · 알림 Pub/Sub |
 | `clamav` | `clamav/clamav:1.4` | 3310(내부) | 파일 바이러스 스캔 |
 | `prometheus` | `prom/prometheus:latest` | **9090** | 메트릭 수집 |
 | `grafana` | `grafana/grafana:latest` | **3001** | 대시보드 |
+
+> **로컬 개발 시**: `docker-compose.override.yml`이 자동 적용되어 `itsm-api` · `itsm-web`을 소스에서 직접 빌드합니다.
+> **CI/CD 배포 시**: 레지스트리에 푸시된 이미지를 `IMAGE_API_TAG` / `IMAGE_WEB_TAG` 환경변수로 지정합니다.
 
 ### 기술 스택
 
@@ -330,6 +334,7 @@ GITLAB_OAUTH_REDIRECT_URI=http://<HOST>:8111/api/auth/callback
 GITLAB_PROJECT_TOKEN=<프로젝트 Access Token>
 GITLAB_PROJECT_ID=1                    # ZENITH 전용 GitLab 프로젝트 ID
 GITLAB_API_URL=http://gitlab:8929      # 내부 Docker 통신용 (변경 불필요)
+GITLAB_EXTERNAL_URL=http://<HOST>:8929 # 브라우저에서 GitLab에 직접 접근하는 외부 URL
 
 # ── Redis ───────────────────────────────────────────────────
 REDIS_PASSWORD=<openssl rand -hex 16>
@@ -339,6 +344,7 @@ SECRET_KEY=<openssl rand -hex 32>          # JWT 서명 키 (최소 32자)
 TOKEN_ENCRYPTION_KEY=<Fernet 키>           # Refresh Token 암호화
 ENVIRONMENT=production                      # development | production
 REFRESH_TOKEN_EXPIRE_DAYS=30               # Refresh Token 유효 기간
+FRONTEND_URL=http://<HOST>:8111            # 이메일 알림 링크에 사용되는 ZENITH URL
 
 # ── 프론트엔드 빌드 시 주입 ────────────────────────────────
 NEXT_PUBLIC_API_BASE_URL=http://<HOST>:8111/api
@@ -348,6 +354,13 @@ NEXT_PUBLIC_GITLAB_URL=http://<HOST>:8929
 ### 선택 항목
 
 ```bash
+# ── Docker 이미지 (CI/CD 배포 시 설정) ──────────────────────
+IMAGE_API=registry.gitlab.com/<org>/zenith/itsm-api  # 레지스트리 이미지 경로
+IMAGE_WEB=registry.gitlab.com/<org>/zenith/itsm-web
+IMAGE_API_TAG=latest               # CI가 자동 주입 (dev-20260313, v1.2.3 등)
+IMAGE_WEB_TAG=latest
+# 로컬 개발 시에는 docker-compose.override.yml이 build: 지시어를 자동 적용하므로 불필요
+
 # ── Nginx 포트 ──────────────────────────────────────────────
 APP_PORT=8111                          # ZENITH 포털 외부 포트
 
@@ -498,20 +511,32 @@ docker compose restart clamav       # ClamAV 바이러스 스캐너
 docker compose exec nginx nginx -s reload
 ```
 
-### 이미지 재빌드 후 배포
+### 이미지 업데이트 후 배포
+
+**CI/CD 배포 (권장)** — GitLab 태그로 자동 트리거됩니다. [CI/CD 파이프라인](#18-cicd-파이프라인) 참고.
+
+**로컬 개발 시 재빌드** — `docker-compose.override.yml`의 `build:` 지시어가 자동 적용됩니다:
 
 ```bash
-# 코드 변경 후 전체 재빌드
+# 코드 변경 후 전체 재빌드 (로컬 개발)
 docker compose build itsm-api itsm-web
 docker compose up -d
 
-# API만 재빌드·교체 (무중단 아님)
+# API만 재빌드·교체
 docker compose build itsm-api
 docker compose up -d --no-deps itsm-api
 
 # 웹만 재빌드·교체
 docker compose build itsm-web
 docker compose up -d --no-deps itsm-web
+```
+
+**레지스트리 이미지로 특정 태그 배포 (프로덕션 환경)**:
+
+```bash
+# IMAGE_API_TAG / IMAGE_WEB_TAG 지정 후 pull & 재기동
+IMAGE_API_TAG=v1.2.3 IMAGE_WEB_TAG=v1.2.3 docker compose pull
+IMAGE_API_TAG=v1.2.3 IMAGE_WEB_TAG=v1.2.3 docker compose up -d
 ```
 
 ### Make 단축키
@@ -1094,6 +1119,25 @@ GITLAB_API_URL=https://gitlab.example.com
 
 ## 17. 개발 환경
 
+### docker-compose.override.yml (로컬 개발 전용)
+
+`docker compose up` 시 `docker-compose.override.yml`이 자동으로 병합됩니다.
+이 파일에는 `itsm-api` · `itsm-web`의 `build:` 지시어가 정의되어 있어,
+로컬에서는 소스를 직접 빌드하고, CI/CD 환경에서는 레지스트리 이미지를 사용합니다.
+
+```yaml
+# docker-compose.override.yml (자동 적용, 수정 불필요)
+services:
+  itsm-api:
+    build: ./itsm-api
+  itsm-web:
+    build:
+      context: ./itsm-web
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8111/api}
+        NEXT_PUBLIC_GITLAB_URL: ${NEXT_PUBLIC_GITLAB_URL:-http://localhost:8929}
+```
+
 ### 로컬 개발 설정
 
 ```bash
@@ -1162,7 +1206,79 @@ docker compose exec itsm-api alembic upgrade head
 
 ---
 
-## 18. 트러블슈팅
+## 18. CI/CD 파이프라인
+
+GitLab CI/CD로 린트 → 테스트 → 빌드 → 배포 단계가 자동화됩니다.
+
+### 브랜치 전략
+
+```
+feature/xxx  →  main  →  release
+```
+
+| 브랜치 | 용도 | 파이프라인 |
+|--------|------|-----------|
+| `feature/*` | 기능 개발 | MR 생성 시 lint + test |
+| `main` | 통합 브랜치 | lint + test + build |
+| `release` | 운영 배포 기준 | lint + test + build |
+
+### 태그 기반 환경 배포
+
+| 태그 패턴 | 환경 | 실행 방식 | 예시 |
+|-----------|------|---------|------|
+| `dev-YYYYMMDD[-N]` | 개발기 | 자동 | `dev-20260313` |
+| `stg-YYYYMMDD[-N]` | 테스트기 | 자동 | `stg-20260313` |
+| `v*.*.*` | 운영기 | **수동 승인** | `v1.2.3` |
+
+### 파이프라인 흐름
+
+```
+MR 생성/업데이트   ──→  lint + test
+main/release push ──→  lint + test + build
+dev-* 태그        ──→  build → deploy:dev → healthcheck
+stg-* 태그        ──→  build → deploy:staging → healthcheck
+v*.*.* 태그       ──→  build → deploy:production (수동 승인) → healthcheck
+                              └→ rollback:production (수동, ROLLBACK_TAG 지정)
+```
+
+### 이미지 빌드 규칙
+
+- 태그 이름 = `CI_COMMIT_TAG` (있으면) 또는 `CI_COMMIT_SHORT_SHA`
+- `itsm-api` · `itsm-web` 두 이미지를 GitLab Container Registry에 푸시
+- 빌드 레이블: `git.commit`, `git.ref`, `built.at` 자동 삽입
+
+### GitLab CI/CD 변수 설정 (Settings → CI/CD → Variables)
+
+| 변수 | 환경 | 설명 |
+|------|------|------|
+| `SSH_PRIVATE_KEY` | 공통 | 배포 서버 SSH 개인 키 |
+| `DEPLOY_USER` | 공통 | 배포 서버 SSH 사용자 |
+| `DEV_HOST` | dev | 개발기 서버 IP |
+| `DEV_DEPLOY_PATH` | dev | 개발기 배포 경로 |
+| `DEV_URL` | dev | 개발기 헬스체크 URL |
+| `STG_HOST` | staging | 테스트기 서버 IP |
+| `STG_DEPLOY_PATH` | staging | 테스트기 배포 경로 |
+| `STG_URL` | staging | 테스트기 헬스체크 URL |
+| `DEPLOY_HOST` | production | 운영기 서버 IP |
+| `DEPLOY_PATH` | production | 운영기 배포 경로 |
+| `PROD_URL` | production | 운영기 헬스체크 URL |
+
+### 운영기 배포 절차
+
+```bash
+# 1. release 브랜치에서 태그 생성
+git checkout release
+git tag v1.2.3
+git push origin v1.2.3
+
+# 2. GitLab → CI/CD → Pipelines → deploy:production 수동 실행 (IT팀 승인)
+
+# 3. 롤백 필요 시: rollback:production 잡 수동 실행 + ROLLBACK_TAG=v1.2.2 입력
+```
+
+---
+
+## 19. 트러블슈팅
 
 ### GitLab 초기 기동이 느림
 
@@ -1282,9 +1398,9 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ---
 
-## 19. 버전 이력
+## 20. 버전 이력
 
-### 현재 버전 (2026-03-12)
+### 현재 버전 (2026-03-13)
 
 - **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22
 - **DB 마이그레이션**: 41단계 (0001~0041)
@@ -1328,6 +1444,12 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **타임라인** | 댓글·감사로그·시스템 노트 통합 뷰 + 마크다운 렌더링 |
 | **칸반** | 드래그 전환 규칙 강제 (이동 불가 컬럼 자동 비활성화·🚫 표시) |
 | **안정성** | label drift 쿨다운 (5분) / 중복 인덱스 제거 / Dead tuple VACUUM |
+| **보안** | Pydantic 입력 길이 검증 전면 적용 (filters·quick_replies·forwards·tickets) |
+| **보안** | ClamAV 내부 오류 정보 API 응답 노출 제거 |
+| **보안** | itsm-api 컨테이너 non-root 실행 (`appuser`) |
+| **Redis** | `get_timeline` Redis 연결 풀 누수 수정 → 싱글턴 `_get_redis()` 통일 |
+| **CI/CD** | 3-환경 파이프라인 (개발기·테스트기·운영기) — 태그 기반 자동/수동 배포 |
+| **Docker** | 로컬 빌드·레지스트리 배포 분리 (`docker-compose.override.yml`) |
 
 ### 주요 버그 수정 이력
 
@@ -1347,7 +1469,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ---
 
-## 20. 라이선스
+## 21. 라이선스
 
 이 프로젝트는 **Apache License 2.0** 하에 배포됩니다.
 
