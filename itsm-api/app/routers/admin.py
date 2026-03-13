@@ -2,7 +2,7 @@
 import csv
 import io
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ def update_user_role(
 
     old_role = record.role
     record.role = data.role
-    record.updated_at = datetime.utcnow()
+    record.updated_at = datetime.now(timezone.utc)
     db.commit()
 
     write_audit_log(
@@ -207,31 +207,42 @@ def download_audit_logs(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_agent),
 ):
-    """감사 로그 CSV 다운로드 (최대 10,000건)."""
+    """감사 로그 CSV 다운로드 (최대 10,000건, 청크 스트리밍)."""
     q = _build_audit_query(db, resource_type, actor_id, action, from_date, to_date)
-    rows = q.limit(10000).all()
 
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["ID", "시간", "행위자(username)", "이름", "역할", "액션", "대상 유형", "대상 ID", "IP"])
-    for r in rows:
-        log, display_name = r
-        writer.writerow([
-            log.id,
-            log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else "",
-            log.actor_username,
-            display_name or "",
-            log.actor_role,
-            log.action,
-            log.resource_type,
-            log.resource_id,
-            str(log.ip_address) if log.ip_address else "",
-        ])
+    def _generate():
+        # BOM + 헤더
+        header = io.StringIO()
+        csv.writer(header).writerow(["ID", "시간", "행위자(username)", "이름", "역할", "액션", "대상 유형", "대상 ID", "IP"])
+        yield header.getvalue().encode("utf-8-sig")
 
-    output.seek(0)
+        # 500건씩 청크 스트리밍 — 전체를 메모리에 올리지 않음
+        batch_size = 500
+        offset = 0
+        while offset < 10000:
+            batch = q.offset(offset).limit(batch_size).all()
+            if not batch:
+                break
+            chunk = io.StringIO()
+            w = csv.writer(chunk)
+            for log, display_name in batch:
+                w.writerow([
+                    log.id,
+                    log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else "",
+                    log.actor_username,
+                    display_name or "",
+                    log.actor_role,
+                    log.action,
+                    log.resource_type,
+                    log.resource_id,
+                    str(log.ip_address) if log.ip_address else "",
+                ])
+            yield chunk.getvalue().encode("utf-8")
+            offset += batch_size
+
     filename = f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     return StreamingResponse(
-        iter([output.getvalue().encode("utf-8-sig")]),
+        _generate(),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
@@ -392,7 +403,7 @@ def update_sla_policy(
         policy.response_hours = data.response_hours
         policy.resolve_hours = data.resolve_hours
         policy.updated_by = user.get("username", "")
-        policy.updated_at = datetime.utcnow()
+        policy.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(policy)
@@ -443,11 +454,12 @@ def get_service_type_usage(
 
     # Redis 캐시 확인
     try:
-        import redis as _redis
-        _r = _redis.from_url(_gs().REDIS_URL, socket_connect_timeout=1, decode_responses=True)
-        cached = _r.get(_CACHE_KEY)
-        if cached:
-            return _json.loads(cached)
+        from ..redis_client import get_redis as _get_redis
+        _r = _get_redis()
+        if _r:
+            cached = _r.get(_CACHE_KEY)
+            if cached:
+                return _json.loads(cached)
     except Exception:
         _r = None
 
@@ -591,7 +603,8 @@ def cleanup_labels(
         result = gitlab_client.cleanup_duplicate_project_labels(project_id)
         return result
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"라벨 정리 실패: {e}")
+        logger.error("cleanup_duplicate_project_labels error: %s", e)
+        raise HTTPException(status_code=502, detail="라벨 정리 중 오류가 발생했습니다.")
 
 
 # ---------------------------------------------------------------------------

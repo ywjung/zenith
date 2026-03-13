@@ -84,7 +84,8 @@ def _snapshot_scheduler_loop():
 
 
 def _run_daily_snapshots(reason: str = "scheduled"):
-    """등록된 모든 프로젝트에 대해 스냅샷을 생성."""
+    """등록된 모든 프로젝트에 대해 스냅샷을 병렬 생성."""
+    import concurrent.futures
     settings = get_settings()
     try:
         all_projects = gitlab_client.get_user_projects("0") or []
@@ -95,13 +96,21 @@ def _run_daily_snapshots(reason: str = "scheduled"):
     if not project_ids:
         project_ids = [str(settings.GITLAB_PROJECT_ID)]
 
-    for pid in project_ids:
+    def _snap(pid: str) -> None:
         try:
             with SessionLocal() as db:
                 result = take_snapshot(pid, db)
                 logger.info("Daily snapshot [%s] project=%s → %s", reason, pid, result["message"])
         except Exception as e:
             logger.error("Daily snapshot failed for project %s: %s", pid, e)
+
+    # 프로젝트가 1개면 직접 실행, 여러 개면 병렬 처리
+    if len(project_ids) <= 1:
+        for pid in project_ids:
+            _snap(pid)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(project_ids), 4)) as pool:
+            pool.map(_snap, project_ids)
 
 
 def _user_sync_loop():
@@ -291,7 +300,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Cookie"],
 )
 
@@ -369,7 +378,7 @@ except ImportError:
 try:
     from .business_metrics import start_background_refresh
     from .database import SessionLocal
-    start_background_refresh(SessionLocal, interval=600)
+    start_background_refresh(SessionLocal, interval=900)
 except Exception as _bm_err:
     logger.warning("Business metrics init failed: %s", _bm_err)
 
@@ -386,16 +395,19 @@ def health():
             db.execute(__import__("sqlalchemy").text("SELECT 1"))
         checks["db"] = "ok"
     except Exception as e:
-        checks["db"] = f"error: {e}"
+        logger.error("Health check DB error: %s", e)
+        checks["db"] = "error"
 
     # Redis
     try:
-        import redis as _redis
-        r = _redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
-        r.ping()
+        from .routers.tickets import _get_redis as _get_ticket_redis
+        _r = _get_ticket_redis()
+        if _r is None:
+            raise RuntimeError("connection failed")
         checks["redis"] = "ok"
     except Exception as e:
-        checks["redis"] = f"error: {e}"
+        logger.error("Health check Redis error: %s", e)
+        checks["redis"] = "error"
 
     # GitLab (lightweight) — 30초 캐시로 Prometheus/nginx 헬스체크 부하 방지
     global _gitlab_health_cache
@@ -412,7 +424,8 @@ def health():
                 )
                 result = "ok" if resp.is_success else f"status {resp.status_code}"
         except Exception as e:
-            result = f"error: {e}"
+            logger.error("Health check GitLab error: %s", e)
+            result = "error"
         _gitlab_health_cache = (result, now_mono)
         checks["gitlab"] = result
 
@@ -420,7 +433,8 @@ def health():
     try:
         checks["label_sync"] = _check_label_drift()
     except Exception as e:
-        checks["label_sync"] = f"error: {e}"
+        logger.error("Health check label_sync error: %s", e)
+        checks["label_sync"] = "error"
 
     all_ok = all(v == "ok" for v in checks.values())
     return JSONResponse(
@@ -462,5 +476,6 @@ def _check_label_drift() -> str:
         _label_drift_last_result = "ok"
         return "ok"
     except Exception as e:
-        _label_drift_last_result = f"check_failed:{e}"
+        logger.warning("Label drift check error: %s", e)
+        _label_drift_last_result = "check_failed"
         return _label_drift_last_result

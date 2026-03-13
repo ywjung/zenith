@@ -1,8 +1,12 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import get_db
 from .. import gitlab_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -23,7 +27,8 @@ def list_projects(user: dict = Depends(get_current_user)):
             for p in projects
         ]
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
+        logger.error("list_projects error: %s", e)
+        raise HTTPException(status_code=502, detail="프로젝트 목록을 불러오지 못했습니다.")
 
 
 @router.get("/{project_id}/members", response_model=list[dict])
@@ -62,4 +67,5 @@ def list_project_members(
             if m["id"] in assignable_ids
         ]
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
+        logger.error("list_project_members project=%s error: %s", project_id, e)
+        raise HTTPException(status_code=502, detail="프로젝트 멤버 목록을 불러오지 못했습니다.")

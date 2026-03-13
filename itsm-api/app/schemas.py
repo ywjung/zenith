@@ -100,7 +100,7 @@ class TicketUpdate(BaseModel):
     priority: Optional[PriorityEnum] = Field(default=None, description="우선순위")
     assignee_id: Optional[int] = Field(default=None, description="담당자 GitLab 사용자 ID (-1 = 해제)")
     title: Optional[str] = Field(default=None, min_length=5, max_length=200)
-    description: Optional[str] = Field(default=None, min_length=10)
+    description: Optional[str] = Field(default=None, min_length=10, max_length=10000)
     category: Optional[str] = Field(default=None, description="카테고리")
     # 해결 노트 — resolved/closed 전환 시 에이전트 이상 권장 입력
     resolution_note: Optional[str] = Field(default=None, max_length=5000, description="해결 방법 요약")
@@ -142,7 +142,7 @@ class RatingCreate(BaseModel):
     employee_name: Optional[str] = Field(default=None, max_length=100)
     employee_email: Optional[str] = Field(default=None, max_length=200)
     score: int = Field(..., ge=1, le=5, description="만족도 점수 (1~5)")
-    comment: Optional[str] = Field(default=None, description="추가 의견")
+    comment: Optional[str] = Field(default=None, max_length=2000, description="추가 의견")
 
 
 class RatingUpdate(BaseModel):

@@ -31,6 +31,22 @@ SUPPORTED_EVENTS = {
 _MAX_RETRIES = 3
 _RETRY_DELAYS = [1, 3, 7]  # seconds
 
+# 공유 HTTP 클라이언트 — 매 요청마다 새 TCP 연결 생성 방지
+_http_client: httpx.Client | None = None
+_http_client_lock = __import__("threading").Lock()
+
+
+def _get_http_client() -> httpx.Client:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        with _http_client_lock:
+            if _http_client is None or _http_client.is_closed:
+                _http_client = httpx.Client(
+                    timeout=httpx.Timeout(10.0, connect=5.0),
+                    limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+                )
+    return _http_client
+
 
 def _sign_payload(secret: str, body: bytes) -> str:
     """HMAC-SHA256으로 페이로드를 서명한다.
@@ -51,20 +67,20 @@ def _send_one(url: str, payload: dict, secret: str | None) -> int:
     if secret:
         headers["X-ITSM-Signature"] = _sign_payload(secret, body)
 
+    client = _get_http_client()
     for attempt, delay in enumerate(_RETRY_DELAYS, 1):
         try:
-            with httpx.Client(timeout=10) as client:
-                resp = client.post(url, content=body, headers=headers)
-                if resp.is_success:
-                    return resp.status_code
-                logger.warning(
-                    "Outbound webhook attempt %d failed: url=%s status=%d",
-                    attempt, url, resp.status_code,
-                )
-                if attempt < _MAX_RETRIES:
-                    time.sleep(delay)
-                else:
-                    return resp.status_code
+            resp = client.post(url, content=body, headers=headers)
+            if resp.is_success:
+                return resp.status_code
+            logger.warning(
+                "Outbound webhook attempt %d failed: url=%s status=%d",
+                attempt, url, resp.status_code,
+            )
+            if attempt < _MAX_RETRIES:
+                time.sleep(delay)
+            else:
+                return resp.status_code
         except Exception as e:
             logger.warning("Outbound webhook attempt %d error: url=%s err=%s", attempt, url, e)
             if attempt < _MAX_RETRIES:
@@ -75,13 +91,19 @@ def _send_one(url: str, payload: dict, secret: str | None) -> int:
 
 
 def fire_event(event_type: str, payload: dict[str, Any]) -> None:
-    """등록된 모든 아웃바운드 웹훅 중 이 이벤트를 구독하는 것을 비동기 전송.
+    """등록된 모든 아웃바운드 웹훅 중 이 이벤트를 구독하는 것을 데몬 스레드로 비동기 전송.
 
-    백그라운드 스레드에서 호출되므로 DB 세션을 직접 열어야 한다.
+    호출자가 블로킹되지 않도록 백그라운드 스레드에서 실제 전송을 수행한다.
     """
     if event_type not in SUPPORTED_EVENTS:
         return
+    import threading
+    t = threading.Thread(target=_fire_event_worker, args=(event_type, payload), daemon=True)
+    t.start()
 
+
+def _fire_event_worker(event_type: str, payload: dict[str, Any]) -> None:
+    """아웃바운드 웹훅 실제 전송 (백그라운드 스레드 전용)."""
     try:
         from .database import SessionLocal
         from .models import OutboundWebhook

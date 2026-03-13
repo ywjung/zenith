@@ -1,7 +1,7 @@
 """Knowledge Base router."""
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
@@ -15,28 +15,18 @@ from ..database import get_db
 from ..models import KBArticle
 from ..rbac import require_agent, require_admin
 from ..rate_limit import user_limiter, LIMIT_KB_CREATE, LIMIT_UPLOAD
+from ..redis_client import get_redis as _get_redis
 
 _KB_CACHE_TTL = 300        # KB 목록 Redis 캐시 5분
 _KB_ARTICLE_CACHE_TTL = 300  # KB 개별 아티클 캐시 5분
 _KB_VIEW_COOLDOWN = 300    # 조회수 중복 카운트 방지 쿨다운 (5분)
 
 
-def _get_redis():
-    try:
-        import redis as _r
-        r = _r.from_url(get_settings().REDIS_URL, socket_connect_timeout=1, decode_responses=True)
-        r.ping()
-        return r
-    except Exception:
-        return None
-
-
 def _invalidate_kb_cache():
-    r = _get_redis()
+    from ..redis_client import get_redis, scan_delete
+    r = get_redis()
     if r:
-        keys = r.keys("itsm:kb:*")
-        if keys:
-            r.delete(*keys)
+        scan_delete(r, "itsm:kb:*")
 
 router = APIRouter(prefix="/kb", tags=["knowledge-base"])
 
@@ -310,7 +300,7 @@ def update_article(
         base_slug = _slug_from_title(data.title)
         article.slug = _ensure_unique_slug(db, base_slug, exclude_id=article_id)
 
-    article.updated_at = datetime.utcnow()
+    article.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(article)
     _invalidate_kb_cache()
@@ -342,7 +332,7 @@ def publish_article(
     if not article:
         raise HTTPException(status_code=404, detail="아티클을 찾을 수 없습니다.")
     article.published = published
-    article.updated_at = datetime.utcnow()
+    article.updated_at = datetime.now(timezone.utc)
     db.commit()
     _invalidate_kb_cache()
     return {"id": article.id, "published": article.published}

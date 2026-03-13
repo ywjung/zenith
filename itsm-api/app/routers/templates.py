@@ -2,7 +2,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -196,8 +196,8 @@ time_router = APIRouter(prefix="/tickets", tags=["time-tracking"])
 
 
 class TimeEntryCreate(BaseModel):
-    minutes: int
-    description: Optional[str] = None
+    minutes: int = Field(..., ge=1, le=10080, description="작업 시간(분), 최대 1주일(10080분)")
+    description: Optional[str] = Field(default=None, max_length=1000)
 
 
 @time_router.get("/{iid}/time")
@@ -226,8 +226,6 @@ def log_time(
     db: Session = Depends(get_db),
     user: dict = Depends(require_developer),
 ):
-    if data.minutes <= 0:
-        raise HTTPException(status_code=400, detail="작업 시간은 1분 이상이어야 합니다.")
     entry = TimeEntry(
         issue_iid=iid,
         project_id=project_id,

@@ -59,10 +59,10 @@ def _is_duplicate(message_id: str) -> bool:
     if not message_id:
         return False
     try:
-        import redis as _redis
-        from .config import get_settings
-        settings = get_settings()
-        r = _redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
+        from .redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return False
         key = f"{_REDIS_MSGID_PREFIX}{message_id}"
         result = r.set(key, "1", ex=_REDIS_MSGID_TTL, nx=True)
         return result is None
@@ -99,6 +99,7 @@ def process_inbox() -> int:
         return 0
 
     created = 0
+    imap = None
     try:
         imap = imaplib.IMAP4_SSL(settings.IMAP_HOST, settings.IMAP_PORT)
         imap.login(settings.IMAP_USER, settings.IMAP_PASSWORD)
@@ -180,8 +181,13 @@ def process_inbox() -> int:
             except Exception as e:
                 logger.error("Failed to process email %s: %s", num, e)
 
-        imap.logout()
     except Exception as e:
         logger.error("IMAP connection error: %s", e)
+    finally:
+        if imap is not None:
+            try:
+                imap.logout()
+            except Exception:
+                pass
 
     return created

@@ -106,4 +106,4 @@ def validate_external_url(url: str, field_name: str = "URL") -> None:
     ok, reason = is_safe_external_url(url, allow_internal=allow_internal)
     if not ok:
         logger.warning("SSRF attempt blocked: %s=%r reason=%s", field_name, url, reason)
-        raise HTTPException(status_code=400, detail=f"{field_name}: {reason}")
+        raise HTTPException(status_code=400, detail=f"{field_name}이(가) 허용되지 않는 주소를 가리킵니다.")

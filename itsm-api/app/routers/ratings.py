@@ -33,7 +33,8 @@ def _assert_ratable(iid: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GitLab 연결 오류: {e}")
+        logger.error("_assert_ratable(%d) error: %s", iid, e)
+        raise HTTPException(status_code=502, detail="티켓 상태를 확인할 수 없습니다.")
 
 
 @router.get("/tickets/{iid}/ratings/me", response_model=Optional[RatingResponse])
@@ -102,7 +103,11 @@ def update_rating(
 
 
 @router.get("/tickets/{iid}/ratings", response_model=Optional[RatingResponse])
-def get_rating(iid: int, db: Session = Depends(get_db)):
+def get_rating(
+    iid: int,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
     """하위 호환용 — 해당 티켓의 첫 번째 평가 반환."""
     return db.query(Rating).filter(Rating.gitlab_issue_iid == iid).first()
 

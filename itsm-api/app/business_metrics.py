@@ -153,7 +153,10 @@ def start_background_refresh(session_factory, interval: int = 300):
     def _loop():
         time.sleep(30)  # 기동 직후 30초 대기 — 스타트업 부하 분산
         while True:
-            _refresh(session_factory)
+            try:
+                _refresh(session_factory)
+            except Exception as e:
+                logger.warning("business_metrics loop error: %s", e)
             time.sleep(interval)
 
     t = threading.Thread(target=_loop, daemon=True, name="biz-metrics-refresh")

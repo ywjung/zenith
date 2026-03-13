@@ -120,6 +120,7 @@ def list_my_watches(
         db.query(TicketWatcher)
         .filter(TicketWatcher.user_id == user_id, TicketWatcher.project_id == project_id)
         .order_by(TicketWatcher.created_at.desc())
+        .limit(100)
         .all()
     )
     if not watches:
@@ -174,7 +175,7 @@ def list_my_watches(
             }
 
     results = []
-    with ThreadPoolExecutor(max_workers=min(len(watches), 8)) as pool:
+    with ThreadPoolExecutor(max_workers=min(len(watches), 4)) as pool:
         futures = {pool.submit(_fetch_issue, w): w for w in watches}
         for future in as_completed(futures):
             results.append(future.result())

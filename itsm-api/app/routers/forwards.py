@@ -4,7 +4,7 @@ from typing import Optional
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import gitlab_client, models
@@ -145,13 +145,14 @@ def _sync_main_ticket_status(iid: int, project_id: str, desired_status: str) -> 
         )
         # 티켓 상세 페이지 SSE 구독자에게 갱신 신호 발행
         try:
-            import redis as _redis, json as _json
-            from ..config import get_settings as _gs
-            _r = _redis.from_url(_gs().REDIS_URL, socket_connect_timeout=2)
-            _r.publish(
-                f"ticket:events:{project_id}:{iid}",
-                _json.dumps({"type": "status_synced", "status": desired_status}),
-            )
+            import json as _json
+            from ..redis_client import get_redis as _get_redis
+            _r = _get_redis()
+            if _r:
+                _r.publish(
+                    f"ticket:events:{project_id}:{iid}",
+                    _json.dumps({"type": "status_synced", "status": desired_status}),
+                )
         except Exception:
             pass  # Redis 발행 실패는 무시
     except Exception as e:
@@ -159,9 +160,9 @@ def _sync_main_ticket_status(iid: int, project_id: str, desired_status: str) -> 
 
 
 class ForwardCreate(BaseModel):
-    target_project_id: str
-    target_project_name: str
-    note: Optional[str] = None
+    target_project_id: str = Field(..., min_length=1, max_length=100)
+    target_project_name: str = Field(..., min_length=1, max_length=300)
+    note: Optional[str] = Field(default=None, max_length=2000)
 
 
 def _fmt(f: models.ProjectForward, target_issue: dict | None = None) -> dict:
@@ -296,7 +297,8 @@ def create_forward(
             gitlab_token=gitlab_token,
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"개발 프로젝트 이슈 생성 실패: {e}")
+        logger.error("create_forward: GitLab issue creation failed for project %s: %s", data.target_project_id, e)
+        raise HTTPException(status_code=502, detail="개발 프로젝트 이슈 생성에 실패했습니다.")
 
     fwd = models.ProjectForward(
         source_iid=iid,

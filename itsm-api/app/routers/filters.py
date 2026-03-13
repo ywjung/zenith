@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/filters", tags=["filters"])
 
 
 class FilterCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1, max_length=200)
     filters: dict[str, Any]
 
 

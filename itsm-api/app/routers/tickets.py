@@ -30,15 +30,7 @@ from ..notifications import (
 from ..assignment import evaluate_rules
 from ..rate_limit import user_limiter, LIMIT_TICKET_CREATE, LIMIT_UPLOAD
 
-def _get_redis():
-    """Redis 클라이언트 반환. 연결 실패 시 None."""
-    try:
-        import redis as _redis
-        r = _redis.from_url(get_settings().REDIS_URL, socket_connect_timeout=1, decode_responses=True)
-        r.ping()
-        return r
-    except Exception:
-        return None
+from ..redis_client import get_redis as _get_redis, scan_delete as _scan_delete
 
 
 def _invalidate_ticket_list_cache(project_id: Optional[str] = None) -> None:
@@ -50,24 +42,18 @@ def _invalidate_ticket_list_cache(project_id: Optional[str] = None) -> None:
     _r = _get_redis()
     if _r:
         pid_part = project_id or ''
-        # 모든 관련 캐시 키 삭제 (프로젝트별 + all)
-        patterns = [f"itsm:tickets:{pid_part}:v*"]
+        # SCAN 기반 비블로킹 삭제 (KEYS 대체)
+        _scan_delete(_r, f"itsm:tickets:{pid_part}:v*")
         if pid_part:
-            patterns.append("itsm:tickets::v*")  # project_id 없이 로드된 캐시도 삭제
-        for pattern in patterns:
-            old_keys = _r.keys(pattern)
-            if old_keys:
-                _r.delete(*old_keys)
+            _scan_delete(_r, "itsm:tickets::v*")
         # 버전 증가 (프로젝트별 + all 모두)
         _r.incr(f"itsm:tickets:v:{pid_part or 'all'}")
         _r.expire(f"itsm:tickets:v:{pid_part or 'all'}", 3600)
         if pid_part:
             _r.incr("itsm:tickets:v:all")
             _r.expire("itsm:tickets:v:all", 3600)
-        # stats/requesters 캐시도 무효화
-        stat_keys = _r.keys(f"itsm:stats:{pid_part}*")
-        if stat_keys:
-            _r.delete(*stat_keys)
+        # stats 캐시도 SCAN으로 무효화
+        _scan_delete(_r, f"itsm:stats:{pid_part}*")
 
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -199,7 +185,7 @@ def _scan_with_clamav(content: bytes, filename: str) -> None:
             response = s.recv(1024).decode("utf-8", errors="replace").strip()
         if "OK" not in response:
             logger.error("ClamAV threat detected in %s: %s", filename, response)
-            raise HTTPException(status_code=400, detail=f"파일에서 악성코드가 감지됐습니다: {response}")
+            raise HTTPException(status_code=400, detail="파일에서 악성코드가 감지됐습니다.")
         logger.debug("ClamAV scan passed: %s", filename)
     except HTTPException:
         raise
@@ -688,21 +674,37 @@ def list_tickets(
             if _cached:
                 return _json.loads(_cached)
 
-        # in-memory filter conditions
-        needs_in_memory = False
-        if role in ("user", "developer"):
-            needs_in_memory = True
-        if created_by_username:
-            needs_in_memory = True
-        if sla:
-            needs_in_memory = True
+        # developer 역할은 GitLab API assignee_username 파라미터로 서버 필터링 (in-memory 불필요)
+        # user 역할은 description 메타데이터 기반이므로 in-memory 유지 (단 max_results=300으로 제한)
+        # sla 필터, created_by_username은 in-memory 필요
+        needs_in_memory = role == "user" or bool(created_by_username) or bool(sla)
+        api_assignee_username = _user.get("username") if role == "developer" else None
 
-        if needs_in_memory:
+        if needs_in_memory or role == "developer":
+            if role == "developer" and not needs_in_memory:
+                # GitLab API 서버 필터링 후 페이지네이션 — 1,000개 전체 로드 불필요
+                issues, total = gitlab_client.get_issues(
+                    state=gl_state, labels=labels, not_labels=not_labels,
+                    search=search, project_id=project_id,
+                    page=page, per_page=per_page,
+                    order_by=sort_by, sort=order,
+                    created_after=created_after, created_before=created_before,
+                    assignee_username=api_assignee_username,
+                )
+                tickets_page = [_issue_to_response(i) for i in issues]
+                _attach_sla_deadlines(tickets_page, db)
+                _result = {"tickets": tickets_page, "total": total, "page": page, "per_page": per_page}
+                if _r:
+                    _r.setex(_list_cache_key, 180, _json.dumps(_result))
+                return _result
+
+            # in-memory 필터링 경로 (user 역할 / sla 필터 / created_by_username)
             issues = gitlab_client.get_all_issues(
                 state=gl_state, labels=labels, not_labels=not_labels,
                 search=search, project_id=project_id,
                 order_by=sort_by, sort=order,
                 created_after=created_after, created_before=created_before,
+                max_results=300,  # user 역할은 자신의 티켓만 보이므로 300개로 제한
             )
             filtered_issues = issues
             if role == "user":
@@ -710,11 +712,6 @@ def list_tickets(
                 filtered_issues = [
                     i for i in filtered_issues
                     if _get_issue_requester(i)[0] == my_username
-                ]
-            elif role == "developer":
-                filtered_issues = [
-                    i for i in filtered_issues
-                    if _is_issue_assigned_to_user(i, _user)
                 ]
             if created_by_username:
                 filtered_issues = [
@@ -739,7 +736,7 @@ def list_tickets(
                         continue
                     elapsed_hours = (now - created_dt).total_seconds() / 3600.0
                     ratio = elapsed_hours / sla_hours
-                    
+
                     status = "good"
                     if ratio > 1.0:
                         status = "over"
@@ -747,7 +744,7 @@ def list_tickets(
                         status = "imminent"
                     elif ratio >= 0.5:
                         status = "warning"
-                    
+
                     if status == sla:
                         filtered.append(t)
                 all_tickets = filtered
@@ -1651,13 +1648,12 @@ def get_timeline(
     _TTL = 60  # 60초 캐시
 
     # Redis 캐시 확인
-    _r = None
+    _r = _get_redis()
     try:
-        import redis as _redis
-        _r = _redis.from_url(_gs().REDIS_URL, socket_connect_timeout=1, decode_responses=True)
-        _cached = _r.get(_cache_key)
-        if _cached:
-            return _json.loads(_cached)
+        if _r:
+            _cached = _r.get(_cache_key)
+            if _cached:
+                return _json.loads(_cached)
     except Exception as _re:
         logger.warning("Timeline #%d: Redis error: %s", iid, _re)
         _r = None
@@ -1819,16 +1815,22 @@ async def ticket_event_stream(
             r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
             pubsub = r.pubsub()
             await pubsub.subscribe(channel)
+        except ImportError:
+            while not await request.is_disconnected():
+                yield ": keep-alive\n\n"
+                await asyncio.sleep(30)
+            return
+        except Exception as e:
+            logger.error("Ticket SSE: Redis 연결 실패 (iid=%s): %s", iid, e)
+            return
 
-            keepalive_interval = 30.0
-            last_keepalive = asyncio.get_event_loop().time()
-
+        keepalive_interval = 30.0
+        last_keepalive = asyncio.get_event_loop().time()
+        try:
             while True:
                 if await request.is_disconnected():
                     break
 
-                # get_message()는 메시지 없으면 즉시 None 반환 → tight loop 방지
-                # 1초 대기로 이벤트 루프 반환, 30초마다 keep-alive 전송
                 message = await pubsub.get_message(
                     ignore_subscribe_messages=True, timeout=1.0
                 )
@@ -1841,15 +1843,14 @@ async def ticket_event_stream(
                     if now - last_keepalive >= keepalive_interval:
                         yield ": keep-alive\n\n"
                         last_keepalive = now
-
-            await pubsub.unsubscribe(channel)
-            await r.aclose()
-        except ImportError:
-            while not await request.is_disconnected():
-                yield ": keep-alive\n\n"
-                await asyncio.sleep(30)
         except Exception as e:
             logger.error("Ticket SSE stream error (iid=%s): %s", iid, e)
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+                await r.aclose()
+            except Exception:
+                pass
 
     return StreamingResponse(
         event_generator(),

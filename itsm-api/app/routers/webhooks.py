@@ -9,7 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ..config import get_settings
-from ..database import get_db
+from ..database import SessionLocal
 from .. import sla as sla_module
 from ..notifications import (
     notify_status_changed,
@@ -43,11 +43,11 @@ def _is_duplicate(event_uuid: str) -> bool:
     if not event_uuid:
         return False
     try:
-        import redis as _redis
-        settings = get_settings()
-        r = _redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
+        from ..redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return False
         key = f"webhook:uuid:{event_uuid}"
-        # SET NX EX — only set if not exists; returns True if set, None if already existed
         result = r.set(key, "1", ex=_IDEMPOTENCY_TTL, nx=True)
         return result is None  # None means key already existed → duplicate
     except Exception as e:
@@ -108,7 +108,7 @@ def _handle_issue_hook(payload: dict) -> None:
             # ── ITSM 메인 프로젝트 이벤트 ─────────────────────────────────
             # Update SLA record when issue is closed/resolved
             if action in ("close",):
-                for db in get_db():
+                with SessionLocal() as db:
                     sla_module.mark_resolved(db, iid, project_id)
 
             # Handle externally created issues (not from ITSM web UI)
@@ -155,7 +155,7 @@ def _handle_external_issue(iid: int, project_id: str, attrs: dict, payload: dict
         title = attrs.get("title", "")
         author = payload.get("user", {})
 
-        for db in get_db():
+        with SessionLocal() as db:
             # Create SLA record
             sla_module.create_sla_record(db, iid, project_id, priority)
 
@@ -196,7 +196,7 @@ def _sync_forwarded_issue(target_project_id: str, target_iid: int, payload: dict
 
     try:
         # 이 개발 이슈와 연결된 ITSM 전달 기록 조회
-        for db in get_db():
+        with SessionLocal() as db:
             fwd = (
                 db.query(ProjectForward)
                 .filter(
@@ -260,7 +260,7 @@ def _get_gitlab_user_id_by_username(username: str) -> str | None:
         return None
     try:
         from ..models import UserRole
-        for db in get_db():
+        with SessionLocal() as db:
             record = db.query(UserRole).filter(UserRole.username == username).first()
             if record:
                 return str(record.gitlab_user_id)
@@ -301,7 +301,7 @@ def _handle_note_hook(payload: dict) -> None:
             return
 
         # SLA first response 기록
-        for db in get_db():
+        with SessionLocal() as db:
             sla_module.mark_first_response(db, iid, project_id)
 
         logger.info("Note hook: issue #%s author=%s internal=%s", iid, author_name, is_internal)
@@ -319,7 +319,7 @@ def _handle_note_hook(payload: dict) -> None:
         if submitter_user_id and submitter_user_id != author_id:
             preview = note_body[:100] + ("..." if len(note_body) > 100 else "")
             label = "내부 메모" if is_internal else "새 댓글"
-            for db in get_db():
+            with SessionLocal() as db:
                 create_db_notification(
                     db,
                     recipient_id=submitter_user_id,
@@ -421,7 +421,7 @@ def _handle_mr_hook(payload: dict) -> None:
                     project_id=main_project_id,
                 )
 
-                for db in get_db():
+                with SessionLocal() as db:
                     sla_module.mark_resolved(db, ticket_iid, main_project_id)
 
                 logger.info("MR !%s merge auto-resolved ticket #%s", mr_iid, ticket_iid)

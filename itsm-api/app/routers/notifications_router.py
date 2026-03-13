@@ -4,7 +4,7 @@ import json
 import logging
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_notifications(
-    limit: int = 30,
+    limit: int = Query(default=30, ge=1, le=200),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
@@ -91,11 +91,20 @@ async def notification_stream(
             r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
             pubsub = r.pubsub()
             await pubsub.subscribe(f"notifications:{recipient_id}")
+        except ImportError:
+            # Redis not available – just keep the connection alive
+            while not await request.is_disconnected():
+                yield ": keep-alive\n\n"
+                await asyncio.sleep(30)
+            return
+        except Exception as e:
+            logger.error("SSE stream: Redis 연결 실패 %s", e)
+            return
 
-            # get_message(timeout=1.0)으로 1초 대기 → tight loop 방지
-            keepalive_interval = 30.0
-            last_keepalive = asyncio.get_event_loop().time()
-
+        # get_message(timeout=1.0)으로 1초 대기 → tight loop 방지
+        keepalive_interval = 30.0
+        last_keepalive = asyncio.get_event_loop().time()
+        try:
             while True:
                 if await request.is_disconnected():
                     break
@@ -113,16 +122,15 @@ async def notification_stream(
                     if now - last_keepalive >= keepalive_interval:
                         yield ": keep-alive\n\n"
                         last_keepalive = now
-
-            await pubsub.unsubscribe(f"notifications:{recipient_id}")
-            await r.aclose()
-        except ImportError:
-            # Redis not available – just keep the connection alive
-            while not await request.is_disconnected():
-                yield ": keep-alive\n\n"
-                await asyncio.sleep(30)
         except Exception as e:
             logger.error("SSE stream error: %s", e)
+        finally:
+            # 클라이언트 강제 종료(탭 닫기 등) 시에도 반드시 정리
+            try:
+                await pubsub.unsubscribe(f"notifications:{recipient_id}")
+                await r.aclose()
+            except Exception:
+                pass
 
     return StreamingResponse(
         event_generator(),

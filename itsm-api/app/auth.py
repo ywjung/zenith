@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # S-1: GitLab account state TTL cache
 # ---------------------------------------------------------------------------
 _USER_STATE_CACHE: dict[str, tuple[str, float]] = {}  # user_id → (state, expiry)
+_USER_STATE_CACHE_MAX = 2000  # 최대 항목 수 (메모리 누수 방지)
 
 
 def _get_gitlab_user_state(user_id: str) -> str:
@@ -48,6 +49,11 @@ def _get_gitlab_user_state(user_id: str) -> str:
         logger.warning("GitLab user state check failed for %s: %s", user_id, e)
         state = "active"
 
+    # 캐시 크기 초과 시 만료된 항목 정리 (메모리 누수 방지)
+    if len(_USER_STATE_CACHE) >= _USER_STATE_CACHE_MAX:
+        expired = [k for k, (_, exp) in _USER_STATE_CACHE.items() if now >= exp]
+        for k in expired:
+            _USER_STATE_CACHE.pop(k, None)
     _USER_STATE_CACHE[user_id] = (state, now + interval)
     return state
 
@@ -80,12 +86,10 @@ def create_token(user: dict, gitlab_token: str = "", role: str = "user") -> str:
 def _is_token_blacklisted(jti: str) -> bool:
     """Redis JWT 블랙리스트에 해당 JTI가 있는지 확인한다."""
     try:
-        import redis as redis_lib
-        r = redis_lib.from_url(
-            get_settings().REDIS_URL,
-            decode_responses=True,
-            socket_connect_timeout=2,
-        )
+        from .redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return False
         return r.exists(f"jwt:blacklist:{jti}") == 1
     except Exception as e:
         logger.warning("JWT blacklist check failed (fail-open): %s", e)
@@ -97,12 +101,10 @@ def blacklist_token(jti: str, ttl_seconds: int) -> None:
     if not jti or ttl_seconds <= 0:
         return
     try:
-        import redis as redis_lib
-        r = redis_lib.from_url(
-            get_settings().REDIS_URL,
-            decode_responses=True,
-            socket_connect_timeout=2,
-        )
+        from .redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return
         r.setex(f"jwt:blacklist:{jti}", ttl_seconds, "1")
     except Exception as e:
         logger.warning("JWT blacklist write failed: %s", e)

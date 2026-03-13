@@ -2,7 +2,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -14,9 +14,9 @@ router = APIRouter(prefix="/quick-replies", tags=["quick-replies"])
 
 
 class QuickReplyCreate(BaseModel):
-    name: str
-    content: str
-    category: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1, max_length=5000)
+    category: Optional[str] = Field(default=None, max_length=100)
 
 
 @router.get("")

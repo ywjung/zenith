@@ -113,6 +113,10 @@ class DailyStatsSnapshot(Base):
     total_breached = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+    __table_args__ = (
+        Index("ix_daily_snapshot_date_project", "snapshot_date", "project_id", unique=True),
+    )
+
 
 class AssignmentRule(Base):
     __tablename__ = "assignment_rules"
@@ -160,6 +164,10 @@ class RefreshToken(Base):
     ip_address = Column(String(45), nullable=True)
     last_used_at = Column(DateTime, nullable=True)
 
+    __table_args__ = (
+        Index("ix_refresh_tokens_user_active", "gitlab_user_id", "revoked", "expires_at"),
+    )
+
 
 class TicketTemplate(Base):
     __tablename__ = "ticket_templates"
@@ -184,6 +192,10 @@ class TicketLink(Base):
     created_by = Column(String(50), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+    __table_args__ = (
+        Index("ix_ticket_links_source", "source_iid", "project_id"),
+    )
+
 
 class TimeEntry(Base):
     __tablename__ = "time_entries"
@@ -196,6 +208,10 @@ class TimeEntry(Base):
     minutes = Column(Integer, nullable=False)
     description = Column(String(500), nullable=True)
     logged_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_time_entries_issue_project", "issue_iid", "project_id"),
+    )
 
 
 class ProjectForward(Base):

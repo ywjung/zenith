@@ -79,14 +79,14 @@ def send_email(to: str | list[str], subject: str, body_html: str) -> None:
 
     try:
         if settings.SMTP_TLS:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
                 server.ehlo()
                 server.starttls()
                 if settings.SMTP_USER and settings.SMTP_PASSWORD:
                     server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                 server.sendmail(settings.SMTP_FROM, recipients, msg.as_string())
         else:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
                 if settings.SMTP_USER and settings.SMTP_PASSWORD:
                     server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                 server.sendmail(settings.SMTP_FROM, recipients, msg.as_string())
@@ -405,9 +405,9 @@ def create_db_notification(
 def push_to_redis(recipient_id: str, payload: dict) -> None:
     """Publish a notification payload to Redis channel for SSE consumers."""
     try:
-        import redis as redis_lib
-        settings = get_settings()
-        r = redis_lib.from_url(settings.REDIS_URL, decode_responses=True)
-        r.publish(f"notifications:{recipient_id}", json.dumps(payload))
+        from .redis_client import get_redis
+        r = get_redis()
+        if r:
+            r.publish(f"notifications:{recipient_id}", json.dumps(payload))
     except Exception as e:
         logger.warning("Redis publish failed: %s", e)

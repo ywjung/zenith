@@ -3,11 +3,12 @@ import csv
 import io
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, time as dt_time, timedelta
+from datetime import date, datetime, time as dt_time, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -121,7 +122,7 @@ def get_current_stats(
                 "resolved":    f_resolved.result(),
                 "closed":      f_closed.result(),
                 "sla_breached":f_breached.result(),
-                "fetched_at":  datetime.utcnow().isoformat() + "Z",
+                "fetched_at":  datetime.now(timezone.utc).isoformat(),
             }
     except Exception as e:
         logger.error("current-stats GitLab error: %s", e)
@@ -227,7 +228,7 @@ def get_breakdown(
             created_after=from_iso, created_before=to_iso,
         )
         all_issues.extend(issues)
-        if len(all_issues) >= total or not issues:
+        if not issues or len(all_issues) >= total or page >= 50:  # 5,000건 안전 캡
             break
         page += 1
 
@@ -495,7 +496,12 @@ def take_snapshot(project_id: str, db) -> dict:
         total_breached=total_breached,
     )
     db.add(snapshot)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # 동시 실행(스케줄러 + on-access)으로 인한 중복 → 무시
+        db.rollback()
+        return {"message": "already_exists", "date": str(today)}
     return {"message": "created", "date": str(today)}
 
 

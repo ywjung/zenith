@@ -113,18 +113,10 @@ def _get_headers(gitlab_token: Optional[str] = None) -> dict:
 
 _USER_CACHE_TTL = 3600  # 1 hour
 
-
 def _redis_client():
-    """Redis 클라이언트 반환. 연결 실패 시 None."""
-    try:
-        import redis as _redis
-        return _redis.from_url(
-            get_settings().REDIS_URL,
-            decode_responses=True,
-            socket_connect_timeout=2,
-        )
-    except Exception:
-        return None
+    """공유 ConnectionPool 기반 Redis 클라이언트 반환. 연결 실패 시 None."""
+    from .redis_client import get_redis
+    return get_redis()
 
 
 def get_users_by_usernames(usernames: list[str]) -> dict[str, str]:
@@ -178,7 +170,7 @@ def get_users_by_usernames(usernames: list[str]) -> dict[str, str]:
         return username, None
 
     fetched: dict[str, str] = {}
-    with ThreadPoolExecutor(max_workers=min(len(to_fetch), 10)) as pool:
+    with ThreadPoolExecutor(max_workers=min(len(to_fetch), 5)) as pool:
         for uname, name in pool.map(_fetch, to_fetch):
             if name is not None:
                 fetched[uname] = name
@@ -341,6 +333,8 @@ def get_issues(
     created_before: Optional[str] = None,
     updated_after: Optional[str] = None,
     updated_before: Optional[str] = None,
+    author_username: Optional[str] = None,
+    assignee_username: Optional[str] = None,
 ) -> tuple[list[dict], int]:
     """이슈 목록과 전체 개수를 반환한다. (issues, total)"""
     safe_order_by = order_by if order_by in _ALLOWED_ORDER_BY else "created_at"
@@ -362,6 +356,10 @@ def get_issues(
         params["updated_after"] = updated_after
     if updated_before:
         params["updated_before"] = updated_before
+    if author_username:
+        params["author_username"] = author_username
+    if assignee_username:
+        params["assignee_username"] = assignee_username
 
     _check_circuit()
     try:
@@ -387,6 +385,8 @@ def get_all_issues(
     max_results: int = 1000,
     created_after: Optional[str] = None,
     created_before: Optional[str] = None,
+    author_username: Optional[str] = None,
+    assignee_username: Optional[str] = None,
 ) -> list[dict]:
     """Fetch all matching issues across pages (max_results safety cap).
 
@@ -402,6 +402,7 @@ def get_all_issues(
             page=page, per_page=per_page,
             order_by=order_by, sort=sort,
             created_after=created_after, created_before=created_before,
+            author_username=author_username, assignee_username=assignee_username,
         )
         if not issues:
             break

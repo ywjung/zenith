@@ -246,53 +246,71 @@ def check_and_escalate(db: Session) -> list[dict]:
     if not policies:
         return []
 
-    for policy in policies:
-        # 트리거에 맞는 SLA 레코드 조회
-        base_q = db.query(SLARecord).filter(
-            SLARecord.resolved_at == None,  # noqa: E711
-            SLARecord.paused_at == None,    # noqa: E711
-        )
-        if policy.priority:
-            base_q = base_q.filter(SLARecord.priority == policy.priority)
+    # 정책 전체의 후보 레코드를 단일 쿼리로 조회 (정책당 쿼리 반복 방지)
+    breach_policies = [p for p in policies if p.trigger == "breach"]
+    warning_policies = [p for p in policies if p.trigger == "warning"]
 
+    base_q = db.query(SLARecord).filter(
+        SLARecord.resolved_at == None,  # noqa: E711
+        SLARecord.paused_at == None,    # noqa: E711
+    )
+
+    # 위반 후보 레코드: 한 번에 조회
+    breach_candidates: list[SLARecord] = []
+    if breach_policies:
+        breach_candidates = base_q.filter(SLARecord.breached == True).all()  # noqa: E712
+
+    # 경고 임박 후보 레코드: 한 번에 조회
+    warning_candidates: list[SLARecord] = []
+    if warning_policies:
+        warning_cutoff = now + timedelta(minutes=60)
+        warning_candidates = base_q.filter(
+            SLARecord.breached == False,  # noqa: E712
+            SLARecord.warning_sent == True,  # noqa: E712
+            SLARecord.sla_deadline <= warning_cutoff,
+        ).all()
+
+    # 이미 실행된 (policy_id, ticket_iid, project_id) 조합을 배치 조회
+    all_candidate_keys = [
+        (p.id, r.gitlab_issue_iid, r.project_id)
+        for p in breach_policies for r in breach_candidates
+    ] + [
+        (p.id, r.gitlab_issue_iid, r.project_id)
+        for p in warning_policies for r in warning_candidates
+    ]
+
+    done_set: set[tuple] = set()
+    if all_candidate_keys:
+        policy_ids_list = list({k[0] for k in all_candidate_keys})
+        existing_records = db.query(EscalationRecord).filter(
+            EscalationRecord.policy_id.in_(policy_ids_list)
+        ).all()
+        done_set = {(r.policy_id, r.ticket_iid, r.project_id) for r in existing_records}
+
+    def _process(policy, candidates):
         if policy.trigger == "breach":
-            # 이미 위반된 티켓 대상
             cutoff = now - timedelta(minutes=policy.delay_minutes)
-            candidates = base_q.filter(
-                SLARecord.breached == True,  # noqa: E712
-                SLARecord.sla_deadline <= cutoff,
-            ).all()
-        elif policy.trigger == "warning":
-            # 위반 임박(60분 이내) 티켓 대상
-            warning_cutoff = now + timedelta(minutes=60)
-            delay_cutoff = now - timedelta(minutes=policy.delay_minutes)
-            candidates = base_q.filter(
-                SLARecord.breached == False,  # noqa: E712
-                SLARecord.warning_sent == True,   # 경고가 이미 발송된 것
-                SLARecord.sla_deadline > delay_cutoff,
-                SLARecord.sla_deadline <= warning_cutoff,
-            ).all()
+            eligible = [r for r in candidates if r.sla_deadline <= cutoff]
+            if policy.priority:
+                eligible = [r for r in eligible if r.priority == policy.priority]
         else:
-            continue
+            delay_cutoff = now - timedelta(minutes=policy.delay_minutes)
+            eligible = [r for r in candidates if r.sla_deadline > delay_cutoff]
+            if policy.priority:
+                eligible = [r for r in eligible if r.priority == policy.priority]
 
-        for record in candidates:
-            # 중복 실행 방지
-            already_done = db.query(EscalationRecord).filter(
-                EscalationRecord.policy_id == policy.id,
-                EscalationRecord.ticket_iid == record.gitlab_issue_iid,
-                EscalationRecord.project_id == record.project_id,
-            ).first()
-            if already_done:
+        for record in eligible:
+            key = (policy.id, record.gitlab_issue_iid, record.project_id)
+            if key in done_set:
                 continue
-
             try:
                 _execute_escalation(db, policy, record, now)
-                # 실행 기록 저장
                 db.add(EscalationRecord(
                     policy_id=policy.id,
                     ticket_iid=record.gitlab_issue_iid,
                     project_id=record.project_id,
                 ))
+                done_set.add(key)
                 executed.append({
                     "policy": policy.name,
                     "ticket_iid": record.gitlab_issue_iid,
@@ -303,6 +321,11 @@ def check_and_escalate(db: Session) -> list[dict]:
                     "Escalation failed: policy=%s ticket=#%s: %s",
                     policy.name, record.gitlab_issue_iid, e,
                 )
+
+    for policy in breach_policies:
+        _process(policy, breach_candidates)
+    for policy in warning_policies:
+        _process(policy, warning_candidates)
 
     if executed:
         db.commit()
