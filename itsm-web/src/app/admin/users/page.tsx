@@ -149,7 +149,7 @@ function AdminUsersContent() {
   return (
     <div>
       {/* Role stats */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-5 gap-3 mb-6">
         {ROLES.map((role) => (
           <button
             key={role}
