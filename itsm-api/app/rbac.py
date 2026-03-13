@@ -5,7 +5,7 @@ from .auth import get_current_user
 from .database import SessionLocal
 from .models import UserRole
 
-ROLE_LEVELS = {"user": 0, "developer": 1, "agent": 2, "admin": 3}
+ROLE_LEVELS = {"user": 0, "developer": 1, "pl": 2, "agent": 3, "admin": 4}
 
 
 def get_user_role(user_id: int) -> str:
@@ -33,5 +33,6 @@ def require_role(min_role: str):
 
 # Pre-built dependencies
 require_developer = require_role("developer")
+require_pl = require_role("pl")
 require_agent = require_role("agent")
 require_admin = require_role("admin")

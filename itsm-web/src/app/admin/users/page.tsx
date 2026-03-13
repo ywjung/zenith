@@ -19,6 +19,7 @@ type Session = {
 const ROLE_ICONS: Record<string, string> = {
   admin: '🔑',
   agent: '🎧',
+  pl: '🗂️',
   developer: '💻',
   user: '👤',
 }
@@ -26,6 +27,7 @@ const ROLE_ICONS: Record<string, string> = {
 const ROLE_BADGE: Record<string, string> = {
   admin: 'bg-red-50 text-red-700 border-red-200',
   agent: 'bg-purple-50 text-purple-700 border-purple-200',
+  pl: 'bg-teal-50 text-teal-700 border-teal-200',
   developer: 'bg-blue-50 text-blue-700 border-blue-200',
   user: 'bg-gray-100 text-gray-600 border-gray-200',
 }
@@ -33,6 +35,7 @@ const ROLE_BADGE: Record<string, string> = {
 const ROLE_AVATAR: Record<string, string> = {
   admin: 'bg-red-500',
   agent: 'bg-purple-500',
+  pl: 'bg-teal-500',
   developer: 'bg-blue-500',
   user: 'bg-gray-400',
 }
@@ -40,6 +43,7 @@ const ROLE_AVATAR: Record<string, string> = {
 const STAT_BG: Record<string, string> = {
   admin: 'border-red-200 hover:border-red-300',
   agent: 'border-purple-200 hover:border-purple-300',
+  pl: 'border-teal-200 hover:border-teal-300',
   developer: 'border-blue-200 hover:border-blue-300',
   user: 'border-gray-200 hover:border-gray-300',
 }

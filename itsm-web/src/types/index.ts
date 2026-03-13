@@ -130,7 +130,7 @@ export interface UserRole {
   name?: string
   email?: string
   organization?: string
-  role: 'admin' | 'agent' | 'developer' | 'user'
+  role: 'admin' | 'agent' | 'pl' | 'developer' | 'user'
   created_at: string
   updated_at: string
 }

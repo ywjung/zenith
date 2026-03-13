@@ -46,7 +46,7 @@ def list_project_members(
 
     # ITSM developer 이상 활성 사용자 ID 집합
     # (관리 > 사용자 관리와 동일하게 gitlab_user_id=1(root) 제외)
-    _ASSIGNABLE_ROLES = {"developer", "agent", "admin"}
+    _ASSIGNABLE_ROLES = {"developer", "pl", "agent", "admin"}
     assignable = db.query(UserRole).filter(
         UserRole.role.in_(_ASSIGNABLE_ROLES),
         UserRole.is_active == True,  # noqa: E712

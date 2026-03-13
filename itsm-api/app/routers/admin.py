@@ -98,7 +98,7 @@ def update_user_role(
     if str(user.get("sub")) == str(gitlab_user_id):
         raise HTTPException(status_code=400, detail="자기 자신의 역할은 변경할 수 없습니다.")
 
-    allowed = {"admin", "agent", "developer", "user"}
+    allowed = {"admin", "agent", "pl", "developer", "user"}
     if data.role not in allowed:
         raise HTTPException(status_code=400, detail=f"허용된 역할: {', '.join(allowed)}")
 

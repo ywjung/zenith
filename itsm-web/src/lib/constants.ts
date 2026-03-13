@@ -118,14 +118,15 @@ export const STATUS_INFO: Record<
 // 사용자 역할
 // ---------------------------------------------------------------------------
 
-export const ROLES = ['admin', 'agent', 'developer', 'user'] as const
+export const ROLES = ['admin', 'agent', 'pl', 'developer', 'user'] as const
 
 export type UserRole = (typeof ROLES)[number]
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: '시스템 관리자',
   agent: 'IT 담당자',
-  developer: '개발자',
+  pl: '협력사 PL',
+  developer: '협력사 개발자',
   user: '일반 사용자',
 }
 
