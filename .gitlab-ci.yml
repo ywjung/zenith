@@ -1,17 +1,40 @@
+# =============================================================================
+# ITSM GitLab CI/CD Pipeline
+#
+# 브랜치 전략: feature → main → release
+# 태그 규칙:
+#   dev-YYYYMMDD[-N]   main 브랜치에서 생성 → 개발기 자동 배포
+#   stg-YYYYMMDD[-N]   main 브랜치에서 생성 → 테스트기 자동 배포
+#   v0.0.0             release 브랜치에서 생성 → 운영기 수동 배포 (IT팀 승인)
+#
+# 파이프라인 흐름:
+#   MR 생성/업데이트          : lint + test
+#   main/release push        : lint + test + build
+#   dev-* 태그 push          : build + deploy:dev (자동)
+#   stg-* 태그 push          : build + deploy:staging (자동)
+#   v*.*.* 태그 push         : build + deploy:production (수동 — IT팀)
+# =============================================================================
+
 stages:
   - lint
   - test
   - build
   - deploy
 
+# ── Variables ─────────────────────────────────────────────────────────────────
+
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  NODE_MODULES_CACHE: "$CI_PROJECT_DIR/itsm-web/node_modules"
   DOCKER_DRIVER: overlay2
   IMAGE_API: $CI_REGISTRY_IMAGE/itsm-api
   IMAGE_WEB: $CI_REGISTRY_IMAGE/itsm-web
+  # 배포 환경별 변수는 GitLab Settings > CI/CD > Variables 에 등록
+  # DEV_HOST, DEV_DEPLOY_PATH, DEV_URL
+  # STG_HOST, STG_DEPLOY_PATH, STG_URL
+  # DEPLOY_HOST, DEPLOY_PATH, PROD_URL
+  # SSH_PRIVATE_KEY, DEPLOY_USER
 
-# ── Caches ────────────────────────────────────────────────────────────────────
+# ── Cache anchors ─────────────────────────────────────────────────────────────
 
 .python-cache: &python-cache
   cache:
@@ -19,127 +42,386 @@ variables:
     paths:
       - .cache/pip
       - itsm-api/.venv
+    policy: pull-push
 
 .node-cache: &node-cache
   cache:
     key: node-$CI_COMMIT_REF_SLUG
     paths:
       - itsm-web/node_modules
+    policy: pull-push
 
-# ── Lint ──────────────────────────────────────────────────────────────────────
+# ── Rule anchors ──────────────────────────────────────────────────────────────
+
+# MR + main + release 브랜치: lint·test 실행
+.rules-lint-test: &rules-lint-test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "release"
+
+# main·release 브랜치 push 또는 임의 태그: build 실행
+.rules-build: &rules-build
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "release"
+    - if: $CI_COMMIT_TAG
+
+# ── SSH deploy base ───────────────────────────────────────────────────────────
+
+.ssh-deploy-base: &ssh-deploy-base
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache openssh-client curl
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H $DEPLOY_TARGET_HOST >> ~/.ssh/known_hosts
+
+# =============================================================================
+# LINT
+# =============================================================================
 
 lint:backend:
   stage: lint
   image: python:3.12-slim
-  <<: *python-cache
+  <<: [*python-cache, *rules-lint-test]
   before_script:
     - cd itsm-api
     - pip install ruff --quiet
   script:
     - ruff check app/
+  allow_failure: false
 
 lint:frontend:
   stage: lint
   image: node:20-alpine
-  <<: *node-cache
+  <<: [*node-cache, *rules-lint-test]
   before_script:
     - cd itsm-web
     - npm ci --prefer-offline
   script:
     - npm run lint
+  allow_failure: false
 
-# ── Test ──────────────────────────────────────────────────────────────────────
+# =============================================================================
+# TEST
+# =============================================================================
 
 test:backend:
   stage: test
   image: python:3.12-slim
-  <<: *python-cache
+  <<: [*python-cache, *rules-lint-test]
+  needs: [lint:backend]
+  variables:
+    DATABASE_URL: "sqlite:///./test.db"
+    SECRET_KEY: "test-secret-key-for-ci"
+    GITLAB_API_URL: "http://localhost"
+    GITLAB_PROJECT_TOKEN: "test-token"
+    GITLAB_PROJECT_ID: "1"
   before_script:
     - cd itsm-api
     - pip install -r requirements-dev.txt --quiet
   script:
-    - pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml
+    - pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml -x
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
+    when: always
     reports:
       coverage_report:
         coverage_format: cobertura
         path: itsm-api/coverage.xml
-    expire_in: 1 week
+      junit: itsm-api/test-results.xml
+    expire_in: 2 weeks
 
 test:frontend:
   stage: test
   image: node:20-alpine
-  <<: *node-cache
+  <<: [*node-cache, *rules-lint-test]
+  needs: [lint:frontend]
   before_script:
     - cd itsm-web
     - npm ci --prefer-offline
   script:
     - npm run test:ci
   artifacts:
+    when: always
     reports:
       coverage_report:
         coverage_format: cobertura
         path: itsm-web/coverage/cobertura-coverage.xml
-    expire_in: 1 week
+    expire_in: 2 weeks
 
-# ── Build ─────────────────────────────────────────────────────────────────────
+# =============================================================================
+# BUILD
+# Docker 이미지 빌드 & 레지스트리 푸시
+# 태그: CI_COMMIT_TAG(있으면) 또는 CI_COMMIT_SHORT_SHA
+# =============================================================================
 
-.build-rules: &build-rules
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_TAG
+.build-docker: &build-docker
+  stage: build
+  image: docker:26
+  services:
+    - docker:26-dind
+  <<: *rules-build
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  retry:
+    max: 2
+    when: [runner_system_failure, stuck_or_timeout_failure]
 
 build:api:
-  stage: build
-  image: docker:26
-  services:
-    - docker:26-dind
-  <<: *build-rules
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  <<: *build-docker
   script:
     - |
       TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
-      docker build -t $IMAGE_API:$TAG -t $IMAGE_API:latest itsm-api/
+      docker build \
+        --label "git.commit=$CI_COMMIT_SHA" \
+        --label "git.ref=$CI_COMMIT_REF_NAME" \
+        --label "built.at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        -t $IMAGE_API:$TAG \
+        -t $IMAGE_API:$CI_COMMIT_REF_SLUG \
+        itsm-api/
       docker push $IMAGE_API:$TAG
-      docker push $IMAGE_API:latest
+      docker push $IMAGE_API:$CI_COMMIT_REF_SLUG
+  artifacts:
+    reports:
+      dotenv: build-api.env
+    expire_in: 1 day
 
 build:web:
-  stage: build
-  image: docker:26
-  services:
-    - docker:26-dind
-  <<: *build-rules
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  <<: *build-docker
   script:
     - |
       TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
-      docker build -t $IMAGE_WEB:$TAG -t $IMAGE_WEB:latest itsm-web/
+      docker build \
+        --label "git.commit=$CI_COMMIT_SHA" \
+        --label "git.ref=$CI_COMMIT_REF_NAME" \
+        --label "built.at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        -t $IMAGE_WEB:$TAG \
+        -t $IMAGE_WEB:$CI_COMMIT_REF_SLUG \
+        itsm-web/
       docker push $IMAGE_WEB:$TAG
-      docker push $IMAGE_WEB:latest
+      docker push $IMAGE_WEB:$CI_COMMIT_REF_SLUG
 
-# ── Deploy ────────────────────────────────────────────────────────────────────
+# =============================================================================
+# DEPLOY — 개발기 (태그: dev-*)
+# 협력사 PL이 main 브랜치에서 dev-YYYYMMDD 태그 생성 시 자동 실행
+# =============================================================================
 
-deploy:production:
+deploy:dev:
+  <<: *ssh-deploy-base
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^dev-.*/
+  needs: [build:api, build:web]
+  variables:
+    DEPLOY_TARGET_HOST: $DEV_HOST
+    IMAGE_TAG: $CI_COMMIT_TAG
+  environment:
+    name: development
+    url: $DEV_URL
+    deployment_tier: development
+  script:
+    - |
+      echo "▶ 개발기 배포: $IMAGE_TAG → $DEV_HOST"
+      ssh $DEPLOY_USER@$DEV_HOST bash -s << ENDSSH
+        set -e
+        cd $DEV_DEPLOY_PATH
+        export IMAGE_API_TAG=$IMAGE_TAG
+        export IMAGE_WEB_TAG=$IMAGE_TAG
+        docker compose pull
+        docker compose up -d --remove-orphans
+        # DB 마이그레이션
+        docker compose exec -T api alembic upgrade head
+        echo "✅ 개발기 배포 완료: $IMAGE_TAG"
+      ENDSSH
+  after_script:
+    - |
+      STATUS=$?
+      if [ $STATUS -ne 0 ]; then
+        echo "❌ 개발기 배포 실패 — 태그: $CI_COMMIT_TAG"
+      fi
+  retry:
+    max: 1
+    when: [runner_system_failure]
+
+deploy:dev:healthcheck:
   stage: deploy
   image: alpine:3.19
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
+    - if: $CI_COMMIT_TAG =~ /^dev-.*/
+  needs: [deploy:dev]
+  script:
+    - apk add --no-cache curl
+    - |
+      for i in $(seq 1 10); do
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEV_URL/health" || echo "000")
+        if [ "$STATUS" = "200" ]; then
+          echo "✅ 개발기 health check 통과 (시도: $i)"
+          exit 0
+        fi
+        echo "⏳ health check 대기 중... ($i/10, status=$STATUS)"
+        sleep 10
+      done
+      echo "❌ 개발기 health check 실패"
+      exit 1
+
+# =============================================================================
+# DEPLOY — 테스트기 (태그: stg-*)
+# 협력사 PL이 main 브랜치에서 stg-YYYYMMDD 태그 생성 시 자동 실행
+# =============================================================================
+
+deploy:staging:
+  <<: *ssh-deploy-base
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^stg-.*/
+  needs: [build:api, build:web]
+  variables:
+    DEPLOY_TARGET_HOST: $STG_HOST
+    IMAGE_TAG: $CI_COMMIT_TAG
   environment:
-    name: production
-  before_script:
-    - apk add --no-cache openssh-client
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY" | ssh-add -
-    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
-    - ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+    name: staging
+    url: $STG_URL
+    deployment_tier: staging
   script:
     - |
-      ssh $DEPLOY_USER@$DEPLOY_HOST "
-        cd $DEPLOY_PATH &&
-        docker compose pull &&
+      echo "▶ 테스트기 배포: $IMAGE_TAG → $STG_HOST"
+      ssh $DEPLOY_USER@$STG_HOST bash -s << ENDSSH
+        set -e
+        cd $STG_DEPLOY_PATH
+        export IMAGE_API_TAG=$IMAGE_TAG
+        export IMAGE_WEB_TAG=$IMAGE_TAG
+        docker compose pull
         docker compose up -d --remove-orphans
-      "
+        # DB 마이그레이션
+        docker compose exec -T api alembic upgrade head
+        echo "✅ 테스트기 배포 완료: $IMAGE_TAG"
+      ENDSSH
+  retry:
+    max: 1
+    when: [runner_system_failure]
+
+deploy:staging:healthcheck:
+  stage: deploy
+  image: alpine:3.19
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^stg-.*/
+  needs: [deploy:staging]
+  script:
+    - apk add --no-cache curl
+    - |
+      for i in $(seq 1 10); do
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$STG_URL/health" || echo "000")
+        if [ "$STATUS" = "200" ]; then
+          echo "✅ 테스트기 health check 통과 (시도: $i)"
+          exit 0
+        fi
+        echo "⏳ health check 대기 중... ($i/10, status=$STATUS)"
+        sleep 10
+      done
+      echo "❌ 테스트기 health check 실패"
+      exit 1
+
+# =============================================================================
+# DEPLOY — 운영기 (태그: v*.*.*)
+# IT팀이 release 브랜치에서 v1.2.3 태그 생성 후 수동 승인 시 실행
+# =============================================================================
+
+deploy:production:
+  <<: *ssh-deploy-base
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+      when: manual  # IT팀이 GitLab UI에서 수동 승인
+  needs: [build:api, build:web]
+  variables:
+    DEPLOY_TARGET_HOST: $DEPLOY_HOST
+    IMAGE_TAG: $CI_COMMIT_TAG
+  environment:
+    name: production
+    url: $PROD_URL
+    deployment_tier: production
+  script:
+    - |
+      echo "▶ 운영기 배포: $IMAGE_TAG → $DEPLOY_HOST"
+      ssh $DEPLOY_USER@$DEPLOY_HOST bash -s << ENDSSH
+        set -e
+        cd $DEPLOY_PATH
+        # 현재 이미지 태그 백업 (롤백용)
+        CURRENT_TAG=$(docker compose images -q api | xargs docker inspect --format='{{index .RepoTags 0}}' 2>/dev/null | head -1 || echo "unknown")
+        echo "현재 운영 이미지: $CURRENT_TAG" > /tmp/last_deploy.txt
+        export IMAGE_API_TAG=$IMAGE_TAG
+        export IMAGE_WEB_TAG=$IMAGE_TAG
+        docker compose pull
+        docker compose up -d --remove-orphans
+        # DB 마이그레이션
+        docker compose exec -T api alembic upgrade head
+        echo "✅ 운영기 배포 완료: $IMAGE_TAG"
+      ENDSSH
+  after_script:
+    - |
+      if [ $? -ne 0 ]; then
+        echo "❌ 운영기 배포 실패 — 태그: $CI_COMMIT_TAG"
+        echo "롤백이 필요하면 deploy:production:rollback 잡을 실행하세요."
+      fi
+
+deploy:production:healthcheck:
+  stage: deploy
+  image: alpine:3.19
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+      when: on_success
+  needs: [deploy:production]
+  script:
+    - apk add --no-cache curl
+    - |
+      for i in $(seq 1 12); do
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$PROD_URL/health" || echo "000")
+        if [ "$STATUS" = "200" ]; then
+          echo "✅ 운영기 health check 통과 (시도: $i)"
+          exit 0
+        fi
+        echo "⏳ health check 대기 중... ($i/12, status=$STATUS)"
+        sleep 15
+      done
+      echo "❌ 운영기 health check 실패 — 롤백을 고려하세요"
+      exit 1
+
+# =============================================================================
+# ROLLBACK — 운영기 (수동 실행, ROLLBACK_TAG 변수 지정 필요)
+# GitLab UI: CI/CD > Pipelines > 해당 파이프라인 > rollback:production 수동 실행
+# Variables에 ROLLBACK_TAG=v1.2.2 입력
+# =============================================================================
+
+rollback:production:
+  <<: *ssh-deploy-base
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+      when: manual
+  needs: []  # 독립 실행 — build/deploy 완료 불필요
+  variables:
+    DEPLOY_TARGET_HOST: $DEPLOY_HOST
+    ROLLBACK_TAG: ""  # 실행 시 GitLab UI에서 직접 입력 (예: v1.2.2)
+  environment:
+    name: production
+    url: $PROD_URL
+    action: rollback
+  script:
+    - |
+      if [ -z "$ROLLBACK_TAG" ]; then
+        echo "❌ ROLLBACK_TAG 변수를 지정해야 합니다. (예: v1.2.2)"
+        exit 1
+      fi
+      echo "⏪ 운영기 롤백: → $ROLLBACK_TAG"
+      ssh $DEPLOY_USER@$DEPLOY_HOST bash -s << ENDSSH
+        set -e
+        cd $DEPLOY_PATH
+        export IMAGE_API_TAG=$ROLLBACK_TAG
+        export IMAGE_WEB_TAG=$ROLLBACK_TAG
+        docker compose pull
+        docker compose up -d --remove-orphans
+        echo "✅ 롤백 완료: $ROLLBACK_TAG"
+      ENDSSH
