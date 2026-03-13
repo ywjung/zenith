@@ -8,6 +8,7 @@ import { useState } from 'react'
 const TABS = [
   { id: 'start',    label: '시작하기' },
   { id: 'features', label: '기능 안내' },
+  { id: 'process',  label: '업무 프로세스' },
   { id: 'workflow', label: '워크플로우 & SLA' },
   { id: 'rbac',     label: '권한 & 비교' },
   { id: 'perf',     label: '성능 & 안정화' },
@@ -2084,6 +2085,393 @@ function TabApi() {
   )
 }
 
+/* ─── 탭: 업무 프로세스 ──────────────────────────────────────────────── */
+
+const PROCESS_ROLES = [
+  {
+    role: '현업',
+    color: 'bg-blue-50 border-blue-300 text-blue-800',
+    badge: 'bg-blue-100 text-blue-700',
+    itsmRole: 'user',
+    actions: ['요청 등록', '테스트 수행', '최종 완료 처리'],
+    screens: ['포털 (/portal)', '티켓 상세'],
+  },
+  {
+    role: 'IT팀',
+    color: 'bg-purple-50 border-purple-300 text-purple-800',
+    badge: 'bg-purple-100 text-purple-700',
+    itsmRole: 'agent / admin',
+    actions: ['요청 승인 (담당자 배정)', '테스트 완료 전달', '운영 배포 승인 (GitLab MR)', '최종 확인'],
+    screens: ['티켓 목록', '티켓 상세', 'GitLab MR'],
+  },
+  {
+    role: '협력사 PL',
+    color: 'bg-teal-50 border-teal-300 text-teal-800',
+    badge: 'bg-teal-100 text-teal-700',
+    itsmRole: 'agent',
+    actions: ['Issue 생성 (개발 전달)', 'feature 브랜치 생성', 'MR 승인 (main)', '개발기/테스트기 태그 생성', 'release MR 생성'],
+    screens: ['티켓 상세 → 개발 전달', 'GitLab 직접'],
+  },
+  {
+    role: '협력사 개발자',
+    color: 'bg-orange-50 border-orange-300 text-orange-800',
+    badge: 'bg-orange-100 text-orange-700',
+    itsmRole: 'developer',
+    actions: ['기능 개발', '로컬 검증', 'MR 생성 (main)'],
+    screens: ['티켓 목록 (본인 할당분)', 'GitLab 직접'],
+  },
+  {
+    role: 'GitLab 시스템',
+    color: 'bg-gray-50 border-gray-300 text-gray-700',
+    badge: 'bg-gray-100 text-gray-600',
+    itsmRole: '—',
+    actions: ['브랜치 생성', '빌드/테스트 자동화', '서버 배포 (CI/CD)', 'ITSM 웹훅 이벤트 전달'],
+    screens: ['GitLab CI/CD 파이프라인'],
+  },
+]
+
+const TERM_MAP = [
+  { term: 'Epic (상위 단위, 현업 요청)', itsm: 'ITSM 티켓', note: 'GitLab ITSM 프로젝트 Issue', color: 'bg-blue-50 border-blue-200' },
+  { term: 'Issue (하위 단위, 개발 작업)', itsm: '개발 전달 이슈', note: 'GitLab 개발 프로젝트 Issue (개발 전달 기능)', color: 'bg-teal-50 border-teal-200' },
+  { term: 'Epic: open', itsm: '티켓 상태 · 접수됨', note: 'status::open', color: 'bg-yellow-50 border-yellow-200' },
+  { term: 'Epic: approved + in-progress', itsm: '티켓 상태 · 처리중', note: 'status::in_progress (승인 = 담당자 배정 + 처리중 전환)', color: 'bg-blue-50 border-blue-200' },
+  { term: 'Epic: testing', itsm: '티켓 상태 · 대기중', note: 'status::waiting (SLA 자동 일시정지)', color: 'bg-purple-50 border-purple-200' },
+  { term: 'Epic: ready-for-release', itsm: '티켓 상태 · 처리완료', note: 'status::resolved', color: 'bg-teal-50 border-teal-200' },
+  { term: 'Epic: released + done', itsm: '티켓 Closed', note: 'GitLab issue closed', color: 'bg-green-50 border-green-200' },
+]
+
+type ProcessStep = {
+  id: string
+  phase: string
+  title: string
+  actor: string
+  actorColor: string
+  gitlabDirect?: boolean
+  steps: { who: string; color: string; action: string; detail: string; code?: string }[]
+  note?: string
+}
+
+const PROCESS_STEPS: ProcessStep[] = [
+  {
+    id: '4-1',
+    phase: '4.1',
+    title: '요청 등록 및 승인',
+    actor: '현업 → IT팀 → 협력사 PL',
+    actorColor: 'text-blue-700',
+    steps: [
+      { who: '현업', color: 'bg-blue-100 text-blue-800', action: '요청 등록', detail: '포털(/) 또는 티켓 등록에서 서비스 유형·제목·내용·우선순위 입력 후 제출 → 티켓 생성 (상태: 접수됨/open)' },
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '검토 및 승인', detail: '티켓 상세 → 댓글로 승인 의사 기록 → 담당자(협력사 PL) 배정 → 상태를 처리중으로 변경', code: '티켓 담당자 드롭다운 → 협력사 PL 선택 → 상태 "처리중"으로 변경' },
+      { who: '협력사 PL', color: 'bg-teal-100 text-teal-800', action: '개발 전달 (Issue 생성)', detail: '티켓 상세 → 사이드바 "전달" 탭 → 대상 개발 프로젝트 선택 → 작업 내용·담당자 입력 → 전달', code: '티켓 상세 우측 → 개발 전달 탭 → "전달하기" 버튼' },
+      { who: 'GitLab', color: 'bg-gray-100 text-gray-700', action: 'feature 브랜치 생성', detail: 'GitLab 개발 프로젝트 → Issues → 해당 Issue → "Create branch" 버튼 → feature/이슈번호-설명 형식', code: 'GitLab > Issues > Create branch' },
+    ],
+  },
+  {
+    id: '4-2',
+    phase: '4.2',
+    title: '기능 개발 및 로컬 검증',
+    actor: '협력사 개발자',
+    actorColor: 'text-orange-700',
+    gitlabDirect: true,
+    steps: [
+      { who: '협력사 개발자', color: 'bg-orange-100 text-orange-800', action: 'feature 브랜치 checkout', detail: '로컬에서 feature 브랜치를 내려받아 개발 시작', code: 'git checkout feature/이슈번호-설명' },
+      { who: '협력사 개발자', color: 'bg-orange-100 text-orange-800', action: '기능 개발 및 커밋', detail: '기능 개발 완료 후 커밋 메시지에 이슈 번호 포함 → ITSM 자동 참조 댓글 등록', code: 'git commit -m "feat: 기능 설명 (#이슈번호)"\ngit push origin feature/이슈번호-설명' },
+    ],
+    note: '커밋 메시지에 "#이슈번호" 포함 시 ITSM 티켓에 커밋 링크가 자동 기록됩니다.',
+  },
+  {
+    id: '4-3',
+    phase: '4.3',
+    title: 'main 반영 (MR 생성 → 승인 → 병합)',
+    actor: '협력사 개발자 → 협력사 PL → GitLab',
+    actorColor: 'text-orange-700',
+    gitlabDirect: true,
+    steps: [
+      { who: '협력사 개발자', color: 'bg-orange-100 text-orange-800', action: 'MR 생성 (feature → main)', detail: 'GitLab → Merge Requests → New → source: feature/... → target: main → Assignee: 협력사 PL', code: 'GitLab > MR > New MR\nsource: feature/... → target: main' },
+      { who: 'GitLab', color: 'bg-gray-100 text-gray-700', action: 'CI 자동 실행', detail: 'MR 생성 트리거 → lint + test 파이프라인 자동 실행', code: '.gitlab-ci.yml → rules-lint-test' },
+      { who: '협력사 PL', color: 'bg-teal-100 text-teal-800', action: 'MR 코드 리뷰 및 승인·병합', detail: 'GitLab → MR 상세 → 코드 리뷰 → "Approve" → "Merge" → feature 브랜치 자동 삭제', code: 'GitLab MR > Approve > Merge' },
+      { who: 'GitLab → ITSM', color: 'bg-gray-100 text-gray-700', action: 'Issue 자동 Closed', detail: 'MR 병합 → 웹훅 이벤트 → ITSM 개발 전달 이슈 상태 자동 업데이트 (MR 설명에 "Closes #N" 포함 시 티켓도 resolved 자동 전환)', code: 'MR 설명: "Closes #N" → 티켓 자동 resolved' },
+    ],
+  },
+  {
+    id: '4-4',
+    phase: '4.4',
+    title: '개발기 배포 및 확인',
+    actor: '협력사 PL',
+    actorColor: 'text-teal-700',
+    gitlabDirect: true,
+    steps: [
+      { who: '협력사 PL', color: 'bg-teal-100 text-teal-800', action: '개발기 배포 태그 생성', detail: 'GitLab → 개발 프로젝트 → Repository → Tags → New tag → dev-YYYYMMDD → Create from: main', code: 'Tag name: dev-20260313\nCreate from: main 브랜치' },
+      { who: 'GitLab', color: 'bg-gray-100 text-gray-700', action: '개발기 자동 배포', detail: 'dev-* 태그 트리거 → build:api + build:web → deploy:dev → healthcheck 자동 실행', code: 'CI/CD: deploy:dev 자동 실행' },
+      { who: '협력사 PL', color: 'bg-teal-100 text-teal-800', action: 'ITSM 확인 기록', detail: 'ITSM 티켓 → 댓글: "개발기 배포 완료. 확인 요청드립니다."', code: '티켓 댓글 등록' },
+    ],
+  },
+  {
+    id: '4-5',
+    phase: '4.5',
+    title: '테스트기 배포 및 테스트',
+    actor: '협력사 PL → IT팀 → 현업',
+    actorColor: 'text-teal-700',
+    gitlabDirect: true,
+    steps: [
+      { who: '협력사 PL', color: 'bg-teal-100 text-teal-800', action: '테스트기 배포 태그 생성', detail: 'GitLab → Tags → New tag → stg-YYYYMMDD → Create from: main', code: 'Tag name: stg-20260313\nCreate from: main 브랜치' },
+      { who: 'GitLab', color: 'bg-gray-100 text-gray-700', action: '테스트기 자동 배포', detail: 'stg-* 태그 트리거 → build → deploy:staging → healthcheck 자동 실행', code: 'CI/CD: deploy:staging 자동 실행' },
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '현업에 테스트 요청', detail: 'ITSM 티켓 → 댓글로 안내 → 상태를 "대기중(waiting)"으로 변경 (SLA 자동 일시정지)', code: '상태 → 대기중(waiting)으로 변경' },
+      { who: '현업', color: 'bg-blue-100 text-blue-800', action: '테스트기에서 테스트 수행', detail: 'ITSM 포털 → 내 요청 → 해당 티켓 → 테스트 후 댓글로 결과 전달', code: '티켓 댓글: "테스트 완료 확인했습니다."' },
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '테스트 확인 완료 처리', detail: 'ITSM 티켓 → 상태를 "처리완료(resolved)"로 변경', code: '상태 → 처리완료(resolved)로 변경' },
+    ],
+  },
+  {
+    id: '4-6',
+    phase: '4.6',
+    title: 'release 반영 (운영 브랜치)',
+    actor: '협력사 PL → IT팀',
+    actorColor: 'text-teal-700',
+    gitlabDirect: true,
+    steps: [
+      { who: '협력사 PL', color: 'bg-teal-100 text-teal-800', action: 'MR 생성 (main → release)', detail: 'GitLab → Merge Requests → New → source: main → target: release → Assignee: IT팀', code: 'GitLab > MR > New\nsource: main → target: release' },
+      { who: 'GitLab', color: 'bg-gray-100 text-gray-700', action: 'CI 자동 실행', detail: 'release 브랜치 대상 lint + test 파이프라인 자동 실행', code: 'CI/CD: lint + test 자동 실행' },
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: 'release MR 승인·병합', detail: 'GitLab → MR 상세 → 코드 리뷰 → "Approve" → "Merge" → release 브랜치에 main 병합 완료', code: 'GitLab MR > Approve > Merge' },
+    ],
+  },
+  {
+    id: '4-7',
+    phase: '4.7',
+    title: '운영 배포 및 종료',
+    actor: 'IT팀 → 현업',
+    actorColor: 'text-purple-700',
+    gitlabDirect: true,
+    steps: [
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '운영 배포 태그 생성', detail: 'GitLab → release 브랜치 → Tags → New tag → v1.2.3 형식으로 생성', code: 'Tag name: v0.1.0\nCreate from: release 브랜치' },
+      { who: 'GitLab', color: 'bg-gray-100 text-gray-700', action: 'CI: deploy:production 대기', detail: 'v*.*.* 태그 트리거 → build 완료 → deploy:production 잡이 수동(manual) 상태로 대기', code: 'CI/CD > Pipelines > deploy:production ▶ 클릭' },
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '운영 배포 수동 승인', detail: 'GitLab → CI/CD → Pipelines → 해당 파이프라인 → deploy:production → ▶ 실행 버튼 클릭', code: 'GitLab Pipelines > ▶ deploy:production' },
+      { who: 'IT팀', color: 'bg-purple-100 text-purple-800', action: '운영 최종 확인 및 ITSM 기록', detail: 'ITSM 티켓 → 댓글: "운영 배포 완료. 확인 요청드립니다."', code: '티켓 댓글 등록' },
+      { who: '현업', color: 'bg-blue-100 text-blue-800', action: '최종 완료 처리', detail: 'ITSM 포털 → 해당 티켓 → 완료 처리 → 티켓 Closed (Epic: done)', code: '티켓 상태 → 종료(closed)' },
+    ],
+  },
+]
+
+const STATUS_GAP_ROWS = [
+  { desired: 'open (요청등록)',            itsm: '접수됨 (open)',          match: true,  note: '' },
+  { desired: 'approved (승인완료)',         itsm: '처리중 (in_progress)',   match: false, note: '담당자 배정 + 처리중 전환으로 표현. 전용 approved 상태 없음' },
+  { desired: 'in-progress (개발진행)',      itsm: '처리중 (in_progress)',   match: true,  note: '동일 상태 사용' },
+  { desired: 'testing (테스트)',            itsm: '대기중 (waiting)',       match: false, note: 'SLA 자동 일시정지. testing 전용 상태 없음' },
+  { desired: 'ready-for-release (운영배포전)', itsm: '처리완료 (resolved)', match: false, note: '운영 배포 준비 의미를 resolved로 표현' },
+  { desired: 'released (운영반영완료)',     itsm: '— (댓글로 기록)',        match: false, note: 'released 전용 상태 없음. 댓글로 기록 후 closed 전환' },
+  { desired: 'done (종료)',                 itsm: '종료 (closed)',          match: true,  note: '' },
+]
+
+function ProcessStepCard({ step, index }: { step: ProcessStep; index: number }) {
+  const [open, setOpen] = useState(index === 0)
+  return (
+    <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+      <button
+        type="button"
+        className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+      >
+        <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+          {step.phase}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-gray-800">{step.title}</div>
+          <div className={`text-xs mt-0.5 font-medium ${step.actorColor}`}>{step.actor}</div>
+        </div>
+        {step.gitlabDirect && (
+          <span className="shrink-0 text-xs bg-orange-100 text-orange-700 border border-orange-200 rounded px-2 py-0.5">GitLab 직접</span>
+        )}
+        <span className="text-gray-400 shrink-0">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="px-5 pb-5 border-t bg-gray-50">
+          <div className="space-y-3 mt-4">
+            {step.steps.map((s, i) => (
+              <div key={i} className="flex gap-3">
+                <div className="flex flex-col items-center shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-white border-2 border-blue-300 flex items-center justify-center text-xs font-bold text-blue-600 shrink-0">
+                    {i + 1}
+                  </div>
+                  {i < step.steps.length - 1 && <div className="w-0.5 flex-1 bg-blue-100 my-1 min-h-[12px]" />}
+                </div>
+                <div className="flex-1 pb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${s.color}`}>{s.who}</span>
+                    <span className="text-sm font-semibold text-gray-800">{s.action}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 leading-relaxed">{s.detail}</p>
+                  {s.code && (
+                    <pre className="mt-2 text-xs bg-gray-800 text-green-300 rounded-lg px-3 py-2 font-mono whitespace-pre-wrap leading-relaxed">{s.code}</pre>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {step.note && (
+            <div className="mt-3 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+              <span className="text-blue-500 text-xs shrink-0 mt-0.5">💡</span>
+              <p className="text-xs text-blue-700 leading-relaxed">{step.note}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TabProcess() {
+  return (
+    <>
+      {/* 개요 */}
+      <section className="mb-8">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+          <h2 className="text-lg font-bold mb-2">🔄 전체 업무 프로세스</h2>
+          <p className="text-sm text-blue-100 leading-relaxed">
+            현업 요청 등록부터 개발 · 테스트 · 운영 반영 · 종료까지의 전체 흐름입니다.
+            <strong className="text-white"> Epic(요청 단위)</strong>은 ITSM 티켓으로,
+            <strong className="text-white"> Issue(개발 작업 단위)</strong>는 개발 전달 이슈로 관리합니다.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs">
+            {['요청 등록', '승인', '개발', 'main 반영', '개발기 배포', '테스트기 배포', 'release 반영', '운영 배포', '종료'].map((s, i, arr) => (
+              <span key={s} className="flex items-center gap-1">
+                <span className="bg-white/20 rounded px-2 py-0.5 font-medium">{s}</span>
+                {i < arr.length - 1 && <span className="text-blue-300">→</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 참여 주체 역할 */}
+      <section className="mb-8">
+        <SectionTitle number="1" title="참여 주체 및 역할" />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {PROCESS_ROLES.map((r) => (
+            <div key={r.role} className={`rounded-xl border-2 p-4 ${r.color}`}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="font-bold text-base">{r.role}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-bold ${r.badge}`}>{r.itsmRole}</span>
+              </div>
+              <ul className="space-y-1 mb-3">
+                {r.actions.map((a) => (
+                  <li key={a} className="text-xs flex items-start gap-1.5">
+                    <span className="mt-0.5 shrink-0">·</span>
+                    <span>{a}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-current/20 pt-2 mt-2">
+                <p className="text-xs opacity-70 font-medium">주요 화면</p>
+                <p className="text-xs opacity-90 mt-0.5">{r.screens.join(' · ')}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 용어 매핑 */}
+      <section className="mb-8">
+        <SectionTitle number="2" title="용어 매핑 (Epic · Issue ↔ ITSM)" />
+        <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+          <div className="grid grid-cols-3 bg-gray-100 px-4 py-2 text-xs font-bold text-gray-600 uppercase tracking-wide">
+            <span>프로세스 용어</span>
+            <span>ITSM 구현체</span>
+            <span>상세</span>
+          </div>
+          {TERM_MAP.map((row, i) => (
+            <div key={i} className={`grid grid-cols-3 px-4 py-3 text-sm border-t ${row.color}`}>
+              <span className="font-medium text-gray-800 leading-snug pr-2">{row.term}</span>
+              <span className="font-semibold text-gray-900 pr-2">{row.itsm}</span>
+              <span className="text-gray-500 text-xs leading-snug">{row.note}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 단계별 프로세스 */}
+      <section className="mb-8">
+        <SectionTitle number="3" title="단계별 프로세스 (아코디언)" />
+        <p className="text-sm text-gray-500 mb-4">각 단계를 클릭하면 상세 수행 방법을 확인합니다.</p>
+        <div className="space-y-3">
+          {PROCESS_STEPS.map((step, i) => (
+            <ProcessStepCard key={step.id} step={step} index={i} />
+          ))}
+        </div>
+      </section>
+
+      {/* 브랜치 전략 */}
+      <section className="mb-8">
+        <SectionTitle number="4" title="브랜치 · 태그 전략" />
+        <div className="bg-white border rounded-xl shadow-sm p-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+            {[
+              { branch: 'feature/*', color: 'border-orange-400 bg-orange-50', textColor: 'text-orange-800', badge: 'bg-orange-100 text-orange-700', desc: '개별 기능 개발용. GitLab Issue에서 생성. 개발 완료 후 main으로 MR.', from: 'Issue', to: 'main' },
+              { branch: 'main',      color: 'border-blue-400 bg-blue-50',    textColor: 'text-blue-800',   badge: 'bg-blue-100 text-blue-700',   desc: '통합 개발 기준 브랜치. 개발기/테스트기 배포 기준. 검증 후 release로 MR.', from: 'feature/*', to: 'release' },
+              { branch: 'release',   color: 'border-green-400 bg-green-50',  textColor: 'text-green-800',  badge: 'bg-green-100 text-green-700', desc: '운영 반영 기준 브랜치. v*.*.* 태그를 이 브랜치에서 생성.', from: 'main', to: '운영 서버' },
+            ].map((b) => (
+              <div key={b.branch} className={`rounded-xl border-2 p-4 ${b.color}`}>
+                <code className={`font-bold text-base font-mono ${b.textColor}`}>{b.branch}</code>
+                <p className={`text-xs mt-2 leading-relaxed ${b.textColor} opacity-90`}>{b.desc}</p>
+                <div className="mt-3 flex items-center gap-1 text-xs">
+                  <span className={`px-2 py-0.5 rounded font-mono ${b.badge}`}>{b.from}</span>
+                  <span className="text-gray-400">→</span>
+                  <span className={`px-2 py-0.5 rounded font-mono ${b.badge}`}>{b.to}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="border-t pt-4">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">배포 태그 규칙</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { tag: 'dev-YYYYMMDD', env: '개발기', auto: true, color: 'bg-cyan-50 border-cyan-300 text-cyan-800', badge: 'bg-cyan-100 text-cyan-700', who: '협력사 PL', from: 'main' },
+                { tag: 'stg-YYYYMMDD', env: '테스트기', auto: true, color: 'bg-yellow-50 border-yellow-300 text-yellow-800', badge: 'bg-yellow-100 text-yellow-700', who: '협력사 PL', from: 'main' },
+                { tag: 'v1.2.3',       env: '운영기', auto: false, color: 'bg-red-50 border-red-300 text-red-800', badge: 'bg-red-100 text-red-700', who: 'IT팀', from: 'release' },
+              ].map((t) => (
+                <div key={t.tag} className={`rounded-lg border p-3 ${t.color}`}>
+                  <code className="font-bold font-mono text-sm">{t.tag}</code>
+                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${t.badge}`}>{t.env}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${t.badge}`}>{t.auto ? '🤖 자동 배포' : '👆 수동 승인'}</span>
+                  </div>
+                  <p className="text-xs mt-2 opacity-80">생성자: {t.who} · {t.from} 브랜치에서</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Epic 상태 vs ITSM 상태 */}
+      <section className="mb-8">
+        <SectionTitle number="5" title="Epic 상태 흐름 ↔ ITSM 티켓 상태" />
+        <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+          <div className="grid grid-cols-12 bg-gray-100 px-4 py-2 text-xs font-bold text-gray-600 uppercase tracking-wide">
+            <span className="col-span-4">프로세스 Epic 상태</span>
+            <span className="col-span-4">ITSM 티켓 상태</span>
+            <span className="col-span-1 text-center">일치</span>
+            <span className="col-span-3">비고</span>
+          </div>
+          {STATUS_GAP_ROWS.map((row, i) => (
+            <div key={i} className="grid grid-cols-12 px-4 py-3 text-sm border-t items-start">
+              <span className="col-span-4 font-medium text-gray-800 leading-snug pr-2">{row.desired}</span>
+              <span className="col-span-4 font-semibold text-gray-900 pr-2">{row.itsm}</span>
+              <span className="col-span-1 text-center text-base">{row.match ? '✅' : '⚠️'}</span>
+              <span className="col-span-3 text-xs text-gray-500 leading-snug">{row.note}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <span className="text-amber-500 shrink-0 mt-0.5 text-base">⚠️</span>
+          <div className="text-sm text-amber-800 leading-relaxed">
+            <strong>현재 시스템 한계:</strong> <code className="bg-amber-100 px-1 rounded text-xs">approved</code> · <code className="bg-amber-100 px-1 rounded text-xs">ready-for-release</code> · <code className="bg-amber-100 px-1 rounded text-xs">released</code> 상태가 없어 인접 상태로 대체합니다.
+            이 상태들을 정식 추가하려면 백엔드 <code className="bg-amber-100 px-1 rounded text-xs">STATUS_LABELS</code> 확장 + 상태 전환 규칙 수정이 필요합니다.
+          </div>
+        </div>
+      </section>
+    </>
+  )
+}
+
 /* ─── 탭: FAQ ────────────────────────────────────────────────────────── */
 
 function TabFaq() {
@@ -2163,6 +2551,7 @@ export default function HelpPage() {
       <div className="w-full px-4 py-8">
         {activeTab === 'start'    && <TabStart />}
         {activeTab === 'features' && <TabFeatures />}
+        {activeTab === 'process'  && <TabProcess />}
         {activeTab === 'workflow' && <TabWorkflow />}
         {activeTab === 'rbac'     && <TabRbac />}
         {activeTab === 'perf'     && <TabPerf />}
