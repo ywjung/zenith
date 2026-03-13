@@ -29,18 +29,24 @@ function StarDisplay({ score }: { score: number }) {
 
 // 워크플로우 단계 정의
 const WORKFLOW_STEPS = [
-  { key: 'open', label: '접수됨' },
-  { key: 'in_progress', label: '처리중' },
-  { key: 'resolved', label: '처리완료' },
-  { key: 'closed', label: '종료' },
+  { key: 'open',              label: '접수됨' },
+  { key: 'approved',          label: '승인완료' },
+  { key: 'in_progress',       label: '처리중' },
+  { key: 'resolved',          label: '처리완료' },
+  { key: 'ready_for_release', label: '운영배포전' },
+  { key: 'released',          label: '운영반영완료' },
+  { key: 'closed',            label: '종료' },
 ]
 
 const STEP_INDEX: Record<string, number> = {
-  open: 0,
-  waiting: 1,
-  in_progress: 1,
-  resolved: 2,
-  closed: 3,
+  open:              0,
+  approved:          1,
+  waiting:           2,
+  in_progress:       2,
+  resolved:          3,
+  ready_for_release: 4,
+  released:          5,
+  closed:            6,
 }
 
 function WorkflowStepper({ status, state }: { status: string | undefined; state: string }) {
@@ -58,7 +64,7 @@ function WorkflowStepper({ status, state }: { status: string | undefined; state:
                 i < currentIdx
                   ? 'bg-blue-500 border-blue-500 text-white'
                   : i === currentIdx
-                  ? isWaiting && i === 1
+                  ? isWaiting && i === 2
                     ? 'bg-orange-400 border-orange-400 text-white'
                     : 'bg-blue-50 border-blue-500 text-blue-600'
                   : 'bg-white border-gray-300 text-gray-400'
@@ -69,7 +75,7 @@ function WorkflowStepper({ status, state }: { status: string | undefined; state:
             <span
               className={`text-xs mt-1 whitespace-nowrap font-medium ${
                 i === currentIdx
-                  ? isWaiting && i === 1
+                  ? isWaiting && i === 2
                     ? 'text-orange-500'
                     : 'text-blue-600'
                   : i < currentIdx
@@ -77,7 +83,7 @@ function WorkflowStepper({ status, state }: { status: string | undefined; state:
                   : 'text-gray-400'
               }`}
             >
-              {isWaiting && i === 1 ? '대기중' : step.label}
+              {isWaiting && i === 2 ? '대기중' : step.label}
             </span>
           </div>
           {i < WORKFLOW_STEPS.length - 1 && (

@@ -130,12 +130,15 @@ const SLA_ROWS = [
 ]
 
 const WORKFLOW_NODES = [
-  { id: 'open',        label: '접수됨',   emoji: '📥', color: 'bg-yellow-50 border-yellow-400 text-yellow-800', note: null },
-  { id: 'in_progress', label: '처리중',   emoji: '⚙️', color: 'bg-blue-50 border-blue-400 text-blue-800',      note: null },
-  { id: 'waiting',     label: '대기중',   emoji: '⏳', color: 'bg-purple-50 border-purple-400 text-purple-800', note: 'SLA 일시정지' },
-  { id: 'resolved',    label: '처리완료', emoji: '✅', color: 'bg-teal-50 border-teal-400 text-teal-800',       note: null },
-  { id: 'closed',      label: '종료',     emoji: '🔒', color: 'bg-green-50 border-green-400 text-green-800',   note: null },
-  { id: 'reopened',    label: '재개됨',   emoji: '🔄', color: 'bg-orange-50 border-orange-400 text-orange-800', note: '종료 후 재처리' },
+  { id: 'open',              label: '접수됨',       emoji: '📥', color: 'bg-yellow-50 border-yellow-400 text-yellow-800',  note: null },
+  { id: 'approved',          label: '승인완료',     emoji: '✅', color: 'bg-teal-50 border-teal-400 text-teal-800',         note: null },
+  { id: 'in_progress',       label: '처리중',       emoji: '⚙️', color: 'bg-blue-50 border-blue-400 text-blue-800',        note: null },
+  { id: 'waiting',           label: '대기중',       emoji: '⏳', color: 'bg-purple-50 border-purple-400 text-purple-800',  note: 'SLA 일시정지' },
+  { id: 'resolved',          label: '처리완료',     emoji: '🔧', color: 'bg-green-50 border-green-400 text-green-800',     note: null },
+  { id: 'ready_for_release', label: '운영배포전',   emoji: '📦', color: 'bg-amber-50 border-amber-400 text-amber-800',     note: null },
+  { id: 'released',          label: '운영반영완료', emoji: '🚀', color: 'bg-indigo-50 border-indigo-400 text-indigo-800',  note: null },
+  { id: 'closed',            label: '종료',         emoji: '🔒', color: 'bg-slate-50 border-slate-400 text-slate-700',    note: null },
+  { id: 'reopened',          label: '재개됨',       emoji: '🔄', color: 'bg-orange-50 border-orange-400 text-orange-800', note: '종료 후 재처리' },
 ]
 
 const ESCALATION_ACTIONS = [
@@ -2251,13 +2254,13 @@ const PROCESS_STEPS: ProcessStep[] = [
 ]
 
 const STATUS_GAP_ROWS = [
-  { desired: 'open (요청등록)',            itsm: '접수됨 (open)',          match: true,  note: '' },
-  { desired: 'approved (승인완료)',         itsm: '처리중 (in_progress)',   match: false, note: '담당자 배정 + 처리중 전환으로 표현. 전용 approved 상태 없음' },
-  { desired: 'in-progress (개발진행)',      itsm: '처리중 (in_progress)',   match: true,  note: '동일 상태 사용' },
-  { desired: 'testing (테스트)',            itsm: '대기중 (waiting)',       match: false, note: 'SLA 자동 일시정지. testing 전용 상태 없음' },
-  { desired: 'ready-for-release (운영배포전)', itsm: '처리완료 (resolved)', match: false, note: '운영 배포 준비 의미를 resolved로 표현' },
-  { desired: 'released (운영반영완료)',     itsm: '— (댓글로 기록)',        match: false, note: 'released 전용 상태 없음. 댓글로 기록 후 closed 전환' },
-  { desired: 'done (종료)',                 itsm: '종료 (closed)',          match: true,  note: '' },
+  { desired: 'open (요청등록)',            itsm: '접수됨 (open)',                  match: true,  note: '' },
+  { desired: 'approved (승인완료)',         itsm: '승인완료 (approved)',            match: true,  note: '' },
+  { desired: 'in-progress (개발진행)',      itsm: '처리중 (in_progress)',           match: true,  note: '동일 상태 사용' },
+  { desired: 'testing (테스트)',            itsm: '대기중 (waiting)',               match: false, note: 'SLA 자동 일시정지. testing 전용 상태 없음' },
+  { desired: 'ready-for-release (운영배포전)', itsm: '운영배포전 (ready_for_release)', match: true, note: '' },
+  { desired: 'released (운영반영완료)',     itsm: '운영반영완료 (released)',        match: true,  note: '' },
+  { desired: 'done (종료)',                 itsm: '종료 (closed)',                  match: true,  note: '' },
 ]
 
 function ProcessStepCard({ step, index }: { step: ProcessStep; index: number }) {

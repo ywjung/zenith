@@ -4,11 +4,14 @@ import { useServiceTypes } from '@/context/ServiceTypesContext'
 import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants'
 
 const STATUS_STYLES: Record<string, string> = {
-  open: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  in_progress: 'bg-blue-100 text-blue-800 border-blue-200',
-  waiting: 'bg-orange-100 text-orange-800 border-orange-200',
-  resolved: 'bg-purple-100 text-purple-800 border-purple-200',
-  closed: 'bg-green-100 text-green-800 border-green-200',
+  open:              'bg-yellow-100 text-yellow-800 border-yellow-200',
+  approved:          'bg-teal-100 text-teal-800 border-teal-200',
+  in_progress:       'bg-blue-100 text-blue-800 border-blue-200',
+  waiting:           'bg-orange-100 text-orange-800 border-orange-200',
+  resolved:          'bg-purple-100 text-purple-800 border-purple-200',
+  ready_for_release: 'bg-amber-100 text-amber-800 border-amber-200',
+  released:          'bg-indigo-100 text-indigo-800 border-indigo-200',
+  closed:            'bg-green-100 text-green-800 border-green-200',
 }
 
 const PRIORITY_STYLES: Record<string, string> = {

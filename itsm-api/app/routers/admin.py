@@ -1199,11 +1199,14 @@ def get_filter_options(db: Session = Depends(get_db)):
 
     # ── 상태 (워크플로우 정의, 관리자 Label Sync 기준) ──────────────────
     statuses = [
-        {"key": "open",        "label": "접수됨",        "color": "yellow"},
-        {"key": "in_progress", "label": "처리중",        "color": "blue"},
-        {"key": "waiting",     "label": "대기중",        "color": "orange"},
-        {"key": "resolved",    "label": "처리완료",      "color": "purple"},
-        {"key": "closed",      "label": "종료됨",        "color": "green"},
+        {"key": "open",              "label": "접수됨",      "color": "yellow"},
+        {"key": "approved",          "label": "승인완료",    "color": "teal"},
+        {"key": "in_progress",       "label": "처리중",      "color": "blue"},
+        {"key": "waiting",           "label": "대기중",      "color": "orange"},
+        {"key": "resolved",          "label": "처리완료",    "color": "purple"},
+        {"key": "ready_for_release", "label": "운영배포전",  "color": "amber"},
+        {"key": "released",          "label": "운영반영완료","color": "indigo"},
+        {"key": "closed",            "label": "종료됨",      "color": "green"},
     ]
 
     # ── 우선순위 (SLA 정책 테이블에서 동적 생성) ────────────────────────

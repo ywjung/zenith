@@ -211,21 +211,27 @@ PRIORITY_MAP = {
 }
 
 STATUS_KO = {
-    "open": "접수됨",
-    "in_progress": "처리 중",
-    "waiting": "추가정보 대기 중",
-    "resolved": "처리 완료",
-    "closed": "종료됨",
-    "reopened": "재개됨",
+    "open":              "접수됨",
+    "approved":          "승인완료",
+    "in_progress":       "처리 중",
+    "waiting":           "추가정보 대기 중",
+    "resolved":          "처리 완료",
+    "ready_for_release": "운영배포전",
+    "released":          "운영반영완료",
+    "closed":            "종료됨",
+    "reopened":          "재개됨",
 }
 
 # 허용된 워크플로우 전환 (from → set of valid to)
 VALID_TRANSITIONS: dict[str, set[str]] = {
-    "open":        {"in_progress", "waiting", "closed"},
-    "in_progress": {"resolved", "waiting", "closed"},
-    "waiting":     {"in_progress", "closed"},
-    "resolved":    {"in_progress", "closed"},
-    "closed":      {"reopened"},
+    "open":              {"approved", "in_progress", "waiting", "closed"},
+    "approved":          {"in_progress", "waiting", "closed"},
+    "in_progress":       {"resolved", "waiting", "closed"},
+    "waiting":           {"in_progress", "approved", "closed"},
+    "resolved":          {"in_progress", "ready_for_release", "closed"},
+    "ready_for_release": {"released", "in_progress", "closed"},
+    "released":          {"closed"},
+    "closed":            {"reopened"},
 }
 
 
@@ -497,13 +503,17 @@ def get_ticket_stats(
                     count += 1
                 return count
 
+            _all_sl = "status::approved,status::in_progress,status::waiting,status::resolved,status::ready_for_release,status::released"
             _result = {
-                "all": _count_in("all"),
-                "open": _count_in("opened", not_label="status::in_progress,status::waiting,status::resolved"),
-                "in_progress": _count_in("opened", label="status::in_progress"),
-                "waiting": _count_in("opened", label="status::waiting"),
-                "resolved": _count_in("opened", label="status::resolved"),
-                "closed": _count_in("closed"),
+                "all":              _count_in("all"),
+                "open":             _count_in("opened", not_label=_all_sl),
+                "approved":         _count_in("opened", label="status::approved"),
+                "in_progress":      _count_in("opened", label="status::in_progress"),
+                "waiting":          _count_in("opened", label="status::waiting"),
+                "resolved":         _count_in("opened", label="status::resolved"),
+                "ready_for_release":_count_in("opened", label="status::ready_for_release"),
+                "released":         _count_in("opened", label="status::released"),
+                "closed":           _count_in("closed"),
             }
             if _r:
                 _r.setex(_cache_key, 300, _json.dumps(_result))
@@ -518,20 +528,27 @@ def get_ticket_stats(
             )
             return total
 
-        with ThreadPoolExecutor(max_workers=6) as pool:
-            f_all         = pool.submit(_count, "all")
-            f_open        = pool.submit(_count, "opened", None, "status::in_progress,status::waiting,status::resolved")
-            f_in_progress = pool.submit(_count, "opened", "status::in_progress")
-            f_waiting     = pool.submit(_count, "opened", "status::waiting")
-            f_resolved    = pool.submit(_count, "opened", "status::resolved")
-            f_closed      = pool.submit(_count, "closed")
+        _all_sl = "status::approved,status::in_progress,status::waiting,status::resolved,status::ready_for_release,status::released"
+        with ThreadPoolExecutor(max_workers=9) as pool:
+            f_all               = pool.submit(_count, "all")
+            f_open              = pool.submit(_count, "opened", None, _all_sl)
+            f_approved          = pool.submit(_count, "opened", "status::approved")
+            f_in_progress       = pool.submit(_count, "opened", "status::in_progress")
+            f_waiting           = pool.submit(_count, "opened", "status::waiting")
+            f_resolved          = pool.submit(_count, "opened", "status::resolved")
+            f_ready_for_release = pool.submit(_count, "opened", "status::ready_for_release")
+            f_released          = pool.submit(_count, "opened", "status::released")
+            f_closed            = pool.submit(_count, "closed")
             _result = {
-                "all":         f_all.result(),
-                "open":        f_open.result(),
-                "in_progress": f_in_progress.result(),
-                "waiting":     f_waiting.result(),
-                "resolved":    f_resolved.result(),
-                "closed":      f_closed.result(),
+                "all":              f_all.result(),
+                "open":             f_open.result(),
+                "approved":         f_approved.result(),
+                "in_progress":      f_in_progress.result(),
+                "waiting":          f_waiting.result(),
+                "resolved":         f_resolved.result(),
+                "ready_for_release":f_ready_for_release.result(),
+                "released":         f_released.result(),
+                "closed":           f_closed.result(),
             }
             if _r:
                 _r.setex(_cache_key, 300, _json.dumps(_result))
@@ -614,9 +631,13 @@ def list_tickets(
         status_label: Optional[str] = None
         not_labels: Optional[str] = None
 
+        _all_status_labels = "status::approved,status::in_progress,status::waiting,status::resolved,status::ready_for_release,status::released"
         if state == "open":
             gl_state = "opened"
-            not_labels = "status::in_progress,status::waiting,status::resolved"
+            not_labels = _all_status_labels
+        elif state == "approved":
+            gl_state = "opened"
+            status_label = "status::approved"
         elif state == "in_progress":
             gl_state = "opened"
             status_label = "status::in_progress"
@@ -625,10 +646,16 @@ def list_tickets(
             status_label = "status::waiting"
         elif state == "active":
             gl_state = "opened"
-            not_labels = "status::resolved"
+            not_labels = "status::resolved,status::ready_for_release,status::released"
         elif state == "resolved":
             gl_state = "opened"
             status_label = "status::resolved"
+        elif state == "ready_for_release":
+            gl_state = "opened"
+            status_label = "status::ready_for_release"
+        elif state == "released":
+            gl_state = "opened"
+            status_label = "status::released"
         elif state == "closed":
             gl_state = "closed"
 
@@ -1385,7 +1412,7 @@ def update_ticket(
 
         # SLA updates
         pid = project_id or get_settings().GITLAB_PROJECT_ID
-        if data.status in ("resolved", "closed"):
+        if data.status in ("resolved", "ready_for_release", "released", "closed"):
             sla_module.mark_resolved(db, iid, pid)
         if data.status is not None and data.status != old_status:
             if data.status == "waiting":

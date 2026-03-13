@@ -203,8 +203,10 @@ def notify_status_changed(ticket: dict, old_status: str, new_status: str, actor_
     title = html.escape(str(ticket.get("title", "")))  # H-2
     actor_name_e = html.escape(str(actor_name))
     status_map = {
-        "open": "접수됨", "in_progress": "처리 중", "waiting": "추가정보 대기",
-        "resolved": "처리 완료", "closed": "종료됨", "reopened": "재개됨",
+        "open": "접수됨", "approved": "승인완료", "in_progress": "처리 중",
+        "waiting": "추가정보 대기", "resolved": "처리 완료",
+        "ready_for_release": "운영배포전", "released": "운영반영완료",
+        "closed": "종료됨", "reopened": "재개됨",
     }
 
     recipients: list[str] = []

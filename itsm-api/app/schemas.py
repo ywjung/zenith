@@ -25,9 +25,12 @@ class PriorityEnum(str, Enum):
 
 class StatusEnum(str, Enum):
     OPEN = "open"
+    APPROVED = "approved"
     IN_PROGRESS = "in_progress"
     WAITING = "waiting"
     RESOLVED = "resolved"
+    READY_FOR_RELEASE = "ready_for_release"
+    RELEASED = "released"
     CLOSED = "closed"
     REOPENED = "reopened"
 

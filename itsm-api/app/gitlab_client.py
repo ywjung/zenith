@@ -527,11 +527,14 @@ _labels_initialized: set[str] = set()
 
 # status:: / prio:: 는 워크플로우 고정값 — 코드에서 직접 참조하므로 변경 불가
 REQUIRED_LABELS = [
-    ("status::open",        "#5cb85c"),
-    ("status::in_progress", "#0275d8"),
-    ("status::waiting",     "#f0ad4e"),
-    ("status::resolved",    "#5bc0de"),
-    ("prio::low",           "#bdc3c7"),
+    ("status::open",              "#5cb85c"),
+    ("status::approved",          "#27ae60"),
+    ("status::in_progress",       "#0275d8"),
+    ("status::waiting",           "#f0ad4e"),
+    ("status::resolved",          "#5bc0de"),
+    ("status::ready_for_release", "#e67e22"),
+    ("status::released",          "#2980b9"),
+    ("prio::low",                 "#bdc3c7"),
     ("prio::medium",        "#f39c12"),
     ("prio::high",          "#e67e22"),
     ("prio::critical",      "#e74c3c"),
@@ -636,10 +639,13 @@ def get_label_sync_status(project_id: Optional[str] = None) -> dict:
 
     # 고정 라벨 한글 표시명 매핑
     _LABEL_DISPLAY: dict[str, tuple[str, str]] = {
-        "status::open":        ("📥", "접수됨"),
-        "status::in_progress": ("⚙️", "처리중"),
-        "status::waiting":     ("⏳", "대기중"),
-        "status::resolved":    ("✅", "처리완료"),
+        "status::open":              ("📥", "접수됨"),
+        "status::approved":          ("✅", "승인완료"),
+        "status::in_progress":       ("⚙️", "처리중"),
+        "status::waiting":           ("⏳", "대기중"),
+        "status::resolved":          ("🔧", "처리완료"),
+        "status::ready_for_release": ("📦", "운영배포전"),
+        "status::released":          ("🚀", "운영반영완료"),
         "prio::low":           ("⚪", "낮음"),
         "prio::medium":        ("🟡", "보통"),
         "prio::high":          ("🟠", "높음"),

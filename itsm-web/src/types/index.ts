@@ -82,9 +82,12 @@ export interface ProjectMember {
 export interface TicketStats {
   all: number
   open: number
+  approved: number
   in_progress: number
   waiting: number
   resolved: number
+  ready_for_release: number
+  released: number
   closed: number
 }
 

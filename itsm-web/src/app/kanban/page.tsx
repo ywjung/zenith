@@ -10,20 +10,26 @@ import Link from 'next/link'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
 
 const COLUMNS: { id: string; label: string; bg: string; header: string; wip: number }[] = [
-  { id: 'open',        label: '접수됨',       bg: 'bg-gray-50',    header: 'bg-gray-200 text-gray-700',   wip: 20 },
-  { id: 'in_progress', label: '처리 중',      bg: 'bg-blue-50',   header: 'bg-blue-200 text-blue-800',   wip: 10 },
-  { id: 'waiting',     label: '추가정보 대기', bg: 'bg-yellow-50', header: 'bg-yellow-200 text-yellow-800', wip: 10 },
-  { id: 'resolved',    label: '처리 완료',    bg: 'bg-green-50',  header: 'bg-green-200 text-green-800', wip: 30 },
-  { id: 'closed',      label: '종료됨',       bg: 'bg-slate-50',  header: 'bg-slate-200 text-slate-700', wip: 50 },
+  { id: 'open',              label: '접수됨',       bg: 'bg-gray-50',    header: 'bg-gray-200 text-gray-700',     wip: 20 },
+  { id: 'approved',          label: '승인완료',     bg: 'bg-teal-50',    header: 'bg-teal-200 text-teal-800',     wip: 10 },
+  { id: 'in_progress',       label: '처리 중',      bg: 'bg-blue-50',    header: 'bg-blue-200 text-blue-800',     wip: 10 },
+  { id: 'waiting',           label: '추가정보 대기', bg: 'bg-yellow-50',  header: 'bg-yellow-200 text-yellow-800', wip: 10 },
+  { id: 'resolved',          label: '처리 완료',    bg: 'bg-green-50',   header: 'bg-green-200 text-green-800',   wip: 30 },
+  { id: 'ready_for_release', label: '운영배포전',   bg: 'bg-amber-50',   header: 'bg-amber-200 text-amber-800',   wip: 20 },
+  { id: 'released',          label: '운영반영완료', bg: 'bg-indigo-50',  header: 'bg-indigo-200 text-indigo-800', wip: 20 },
+  { id: 'closed',            label: '종료됨',       bg: 'bg-slate-50',   header: 'bg-slate-200 text-slate-700',   wip: 50 },
 ]
 
 // 백엔드 VALID_TRANSITIONS와 동일 — 드래그 중 이동 불가 컬럼 사전 차단
 const VALID_TRANSITIONS: Record<string, Set<string>> = {
-  open:        new Set(['in_progress', 'waiting', 'closed']),
-  in_progress: new Set(['resolved', 'waiting', 'closed']),
-  waiting:     new Set(['in_progress', 'closed']),
-  resolved:    new Set(['in_progress', 'closed']),
-  closed:      new Set(['open']),  // reopened → open으로 표시됨
+  open:              new Set(['approved', 'in_progress', 'waiting', 'closed']),
+  approved:          new Set(['in_progress', 'waiting', 'closed']),
+  in_progress:       new Set(['resolved', 'waiting', 'closed']),
+  waiting:           new Set(['in_progress', 'approved', 'closed']),
+  resolved:          new Set(['in_progress', 'ready_for_release', 'closed']),
+  ready_for_release: new Set(['released', 'in_progress', 'closed']),
+  released:          new Set(['closed']),
+  closed:            new Set(['open']),  // reopened → open으로 표시됨
 }
 
 const PRIORITY_BORDER: Record<string, string> = {
@@ -376,7 +382,7 @@ function KanbanContent() {
       {/* Board */}
       <div className="flex-1 min-h-0 px-4 py-4">
         {loading ? (
-          <div className="grid grid-cols-5 gap-3 h-full">
+          <div className="grid grid-cols-8 gap-3 h-full">
             {[1,2,3,4,5].map(i => (
               <div key={i} className="flex flex-col rounded-lg overflow-hidden border border-gray-200 shadow-sm animate-pulse">
                 <div className="h-9 bg-gray-200 shrink-0" />
@@ -397,7 +403,7 @@ function KanbanContent() {
           </div>
         ) : (
           <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
-            <div className="grid grid-cols-5 gap-3 h-full">
+            <div className="grid grid-cols-8 gap-3 h-full">
               {COLUMNS.map(col => {
                 const colTickets = getColTickets(col.id)
                 const overWip = colTickets.length > col.wip

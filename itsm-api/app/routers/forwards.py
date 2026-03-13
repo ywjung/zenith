@@ -92,17 +92,23 @@ def _forward_attachments(
 # 전달 이슈 상태 순위 (낮을수록 덜 진행된 상태)
 _STATUS_RANK: dict[str, int] = {
     "open": 0,
+    "approved": 0,
     "in_progress": 1,
     "waiting": 1,
     "resolved": 2,
+    "ready_for_release": 3,
+    "released": 4,
     "closed": 2,    # dev closed → ITSM resolved 로 취급
 }
 # 전달 이슈 상태 → ITSM 메인 티켓 상태 매핑
 _FORWARD_TO_ITSM: dict[str, str] = {
     "open": "open",
+    "approved": "approved",
     "in_progress": "in_progress",
     "waiting": "in_progress",
     "resolved": "resolved",
+    "ready_for_release": "ready_for_release",
+    "released": "released",
     "closed": "resolved",   # dev 완료 = ITSM 해결됨 (종결은 에이전트가 결정)
 }
 

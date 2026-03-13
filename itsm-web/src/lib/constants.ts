@@ -39,17 +39,23 @@ export const PRIORITY_ORDER: Record<Priority, number> = {
 
 export type TicketStatus =
   | 'open'
+  | 'approved'
   | 'in_progress'
   | 'waiting'
   | 'resolved'
+  | 'ready_for_release'
+  | 'released'
   | 'closed'
   | 'reopened'
 
 export const STATUS_LABELS: Record<string, string> = {
   open: '접수됨',
+  approved: '승인완료',
   in_progress: '처리중',
   waiting: '대기중',
   resolved: '처리완료',
+  ready_for_release: '운영배포전',
+  released: '운영반영완료',
   closed: '종료',
   reopened: '재개됨',
 }
@@ -64,6 +70,11 @@ export const STATUS_INFO: Record<
     color: 'text-blue-600 bg-blue-50 border-blue-200',
     icon: '📥',
   },
+  approved: {
+    label: '승인완료',
+    color: 'text-teal-700 bg-teal-50 border-teal-200',
+    icon: '✅',
+  },
   in_progress: {
     label: '처리 중',
     color: 'text-yellow-700 bg-yellow-50 border-yellow-200',
@@ -77,7 +88,17 @@ export const STATUS_INFO: Record<
   resolved: {
     label: '해결됨',
     color: 'text-green-700 bg-green-50 border-green-200',
-    icon: '✅',
+    icon: '🔧',
+  },
+  ready_for_release: {
+    label: '운영배포전',
+    color: 'text-orange-700 bg-orange-50 border-orange-200',
+    icon: '📦',
+  },
+  released: {
+    label: '운영반영완료',
+    color: 'text-indigo-700 bg-indigo-50 border-indigo-200',
+    icon: '🚀',
   },
   closed: {
     label: '종료됨',
