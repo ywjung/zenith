@@ -106,18 +106,21 @@ const ALL_FEATURES: { emoji: string; title: string; note: string; desc: string; 
   { emoji: '📋', title: '구독 중인 티켓 목록',                   note: '전체 · /notifications',                                 desc: '헤더 알림 벨 → "구독 중인 티켓" 또는 /notifications 페이지의 첫 번째 탭에서 내가 구독 중인 모든 티켓 목록을 확인하고 구독 취소할 수 있습니다. 각 티켓의 제목·상태·우선순위·담당자·구독일이 표시되며 구독 취소는 🔕 버튼으로 즉시 적용됩니다.', isNew: true },
   { emoji: '🛡️', title: '서비스 유형 삭제 보호',                 note: '시스템관리자',                                         desc: '서비스 유형(카테고리)을 삭제하려 할 때 해당 카테고리를 사용하는 티켓이 있으면 삭제가 자동 차단됩니다. 목록에서 사용 중인 티켓 수가 뱃지(🎫 N건 사용 중)로 표시되며 삭제 버튼이 비활성화됩니다. 티켓이 없는 경우에만 삭제 가능하며, 운영 중에는 "비활성화"를 사용하는 것이 권장됩니다.', isNew: true },
   { emoji: '🏁', title: 'GitLab 마일스톤 연동',               note: 'IT 개발자 이상 · 티켓 등록/수정',                        desc: '티켓 등록 시 GitLab 마일스톤을 선택하여 연결합니다. 마일스톤이 활성화된 프로젝트에서만 선택 드롭다운이 표시됩니다. 티켓 상세 사이드바에서 마일스톤 변경(연결·해제) 및 현재 마일스톤 이름을 확인할 수 있습니다. GET /projects/{project_id}/milestones API로 활성 마일스톤 목록을 조회하며, milestone_id=0 전송 시 마일스톤이 해제됩니다.', isNew: true },
-  { emoji: '✅', title: '티켓 승인 워크플로우',                note: 'IT 에이전트 이상 · 티켓 상세',                           desc: '접수된(open) 티켓에 IT 에이전트가 "✅ 승인" 버튼을 클릭하면 "승인완료(approved)" 상태로 전환됩니다. 승인완료 상태에서 에이전트는 처리중으로 진행하거나 반려(재접수)할 수 있습니다. 승인 권한은 에이전트(agent) 이상 역할만 가능하며, 상태 전환 시 GitLab 이슈 라벨이 자동 갱신되고 관련 담당자에게 알림이 발송됩니다.', isNew: true },
+  { emoji: '✅', title: '티켓 승인 워크플로우',                note: 'IT 에이전트 이상 · 티켓 상세',                           desc: '접수된(open) 티켓에 IT 에이전트가 "✅ 승인" 버튼을 클릭하면 "승인완료(approved)" 상태로 전환됩니다. agent 이상 역할은 자신이 요청한 승인도 직접 처리(자기 승인)할 수 있습니다. 승인/거절 실패 시 서버에서 반환하는 오류 메시지가 화면에 표시됩니다. 요청자 본인이 거절할 경우 버튼이 "취소"로 표시됩니다.', isNew: true },
   { emoji: '📝', title: '커스텀 필드 관리',                    note: 'Admin 설정 · /admin/custom-fields',                     desc: '관리자가 티켓에 표시할 추가 입력 필드를 자유롭게 정의합니다. 지원 유형: 텍스트(text)·숫자(number)·선택 목록(select, 옵션 직접 추가)·체크박스(checkbox). 필드 키(영소문자·숫자·_만 허용, 생성 후 변경 불가)·표시 이름·필수 여부·정렬 순서를 설정합니다. 활성/비활성 토글 및 삭제(연결된 값 cascade 삭제) 기능을 지원합니다. 에이전트 이상은 티켓 상세 우측 사이드바 "추가 정보" 섹션에서 필드 값을 입력·저장할 수 있습니다.', isNew: true },
   { emoji: '🔗', title: '티켓 병합 (Merge)',                   note: 'IT 에이전트 이상 · 티켓 상세 사이드바',                  desc: '중복 티켓을 다른 티켓으로 병합합니다. 티켓 상세 우측 하단 "티켓 병합" 섹션에서 대상 티켓 번호를 입력하고 병합 버튼을 클릭합니다. 병합 시: ① 소스 티켓 댓글이 대상 티켓에 복사됩니다 ② 소스 티켓에 병합 안내 코멘트가 자동 추가된 후 closed 처리됩니다 ③ 대상 티켓에 병합 완료 코멘트가 추가됩니다. POST /tickets/{iid}/merge?target_iid={n} API를 사용합니다.', isNew: true },
   { emoji: '🏷️', title: '@멘션 (댓글)',                         note: 'IT 개발자 이상 · 댓글 에디터',                            desc: '댓글 입력 시 @ 기호를 입력하면 현재 프로젝트 멤버 목록이 팝업으로 표시됩니다. 화살표 키로 탐색하고 Enter 또는 클릭으로 선택하면 @username 형태로 삽입됩니다. @멘션된 사용자에게는 인앱 알림이 자동 발송됩니다. TipTap Mention Extension 및 tippy.js 기반 팝업으로 동작합니다.', isNew: true },
   { emoji: '🔒', title: 'PII 자동 마스킹',                      note: '시스템 자동 (fail-soft)',                                desc: '티켓 제목·본문·댓글에 개인식별정보(PII) 포함 여부를 자동으로 탐지합니다. 탐지 대상: 주민등록번호(000000-1000000), 국내 휴대폰(010-XXXX-XXXX), 유선전화(02-XXXX-XXXX), 국제전화(+82-...), 여권번호(A12345678), 신용카드번호(1234-5678-9012-3456). 탐지 시 경고 로그를 기록하며, 일반 사용자(user 역할)의 응답에서는 PII 항목이 *** 형태로 마스킹됩니다. 에이전트·관리자는 원본 내용을 볼 수 있습니다. 차단하지 않는 fail-soft 방식으로 동작합니다.', isNew: true },
   { emoji: '📈', title: 'DORA 4대 지표',                        note: 'IT 에이전트 이상 · /reports (DORA 지표 탭)',              desc: '리포트 페이지 "DORA 지표" 탭에서 DORA Research 2023 기준 4대 DevOps 핵심 지표를 확인합니다. ① 배포 빈도(Deployment Frequency): 주간 완료(closed) 티켓 수 ② 리드타임(Lead Time): SLA 기록 기준 접수→완료 평균 시간(시간) ③ 변경 실패율(Change Failure Rate): 완료 후 재오픈된 티켓 비율(%) ④ 평균 복구 시간(MTTR): 재오픈→재완료까지 평균 시간(시간). 각 지표별로 Elite/High/Medium/Low 등급이 자동 산정됩니다. 조회 기간(7~365일)을 선택할 수 있습니다.', isNew: true },
   { emoji: '🔄', title: 'GitLab → ITSM 양방향 동기화',           note: '자동 (GitLab Issue Update Hook)',                        desc: 'GitLab에서 직접 이슈를 수정(제목·설명·담당자·라벨 변경)하면 ITSM 감사 로그와 인앱 알림이 자동으로 기록됩니다. 웹훅 루프 방지: GITLAB_BOT_USERNAME 환경변수에 ITSM 서비스 계정 username을 설정하면, 해당 계정이 수행한 변경은 루프 방지를 위해 알림을 생략합니다. 댓글(Note) 웹훅 수신 시 신청자뿐만 아니라 담당자(assignees) 전원에게 인앱 알림이 발송됩니다.', isNew: true },
-  { emoji: '🏷️', title: '티켓 유형 분류 (Ticket Type)',           note: 'IT 개발자 이상 · 티켓 상세 사이드바',                    desc: '티켓을 4가지 유형으로 분류하여 ITIL 기반 운영을 지원합니다. ① 인시던트(incident): 서비스 장애·오류 신고. ② 서비스 요청(service_request): 계정 생성·소프트웨어 설치 등 정형화된 요청. ③ 변경 요청(change): 시스템 구성 변경·배포 요청. ④ 문제(problem): 반복 인시던트의 근본 원인 분석 및 해결. 티켓 상세 우측 사이드바에서 에이전트 이상이 유형을 변경할 수 있으며, "문제" 유형 선택 시 연결된 인시던트 티켓을 링크로 관리하는 문제 관리 패널이 활성화됩니다.', isNew: true },
+  { emoji: '🏷️', title: '티켓 유형 분류 (Ticket Type)',           note: 'IT 개발자 이상 · 티켓 상세 사이드바',                    desc: '티켓을 4가지 유형으로 분류하여 ITIL 기반 운영을 지원합니다. ① 인시던트(incident): 서비스 장애·오류 신고. ② 서비스 요청(service_request): 계정 생성·소프트웨어 설치 등 정형화된 요청. ③ 변경 요청(change): 시스템 구성 변경·배포 요청. ④ 문제(problem): 반복 인시던트의 근본 원인 분석 및 해결. 티켓 상세 우측 사이드바에서 컬러 배지로 유형을 표시하며, "변경" 버튼 클릭 시 인라인 선택 피커가 열립니다. 마지막 변경자와 변경 시각도 함께 표시됩니다. "문제" 유형 선택 시 연결된 인시던트 관리 패널이 활성화됩니다.', isNew: true },
   { emoji: '📦', title: '서비스 카탈로그 (Service Catalog)',       note: 'Admin 설정 · /admin/service-catalog · 포털 통합',        desc: '관리자가 IT 서비스 항목을 카탈로그로 정의하면 고객 포털(/portal)에 카드 형태로 표시됩니다. 카탈로그 항목에는 이름·아이콘·설명·카테고리·추가 입력 필드(text/textarea/select/date)를 자유롭게 설정합니다. 사용자가 포털에서 카탈로그 항목을 선택하면 제목이 자동 입력되고, 해당 항목에 정의된 추가 필드가 표시되어 서비스별 필수 정보를 수집할 수 있습니다. 관리자 화면(/admin/service-catalog)에서 항목 생성·수정·활성화·삭제 및 필드 스키마 편집이 가능합니다.', isNew: true },
   { emoji: '🔗', title: '문제 관리 (Problem Management)',          note: 'IT 개발자 이상 · 티켓 유형 "문제" 선택 시',              desc: '티켓 유형을 "문제(problem)"로 설정하면 사이드바에 문제 관리 패널이 나타납니다. 인시던트 티켓 번호를 입력하여 "problem_of" 링크로 연결하면 해당 문제와 관련된 모든 인시던트를 한 곳에서 추적할 수 있습니다. 연결된 인시던트는 목록으로 표시되며 개별 제거도 가능합니다. 기존 티켓 링크(TicketLink) 인프라를 재사용하여 link_type=problem_of 방식으로 저장됩니다.', isNew: true },
   { emoji: '🎛️', title: '대시보드 위젯 커스터마이징',              note: '전체 · 홈 화면',                                         desc: '홈 화면 상단의 위젯 바에서 ⚙️ 버튼을 클릭하면 위젯 표시 여부를 개인별로 설정할 수 있습니다. 위젯 종류: ① 상태 현황 탭(stats_bar — 전체 티켓 현황 탭), ② 내 담당 티켓(my_tickets — 배정된 티켓 수 및 목록), ③ SLA 현황(sla_status — 위반·임박 건수), ④ 최근 활동(recent_activity — 최신 티켓 목록). 설정은 서버(/dashboard/config)에 저장되어 다른 기기에서도 동일하게 적용됩니다.', isNew: true },
   { emoji: '⚙️', title: '자동화 규칙 엔진 (Automation Rules)',     note: 'Admin 설정 · /admin/automation-rules',                   desc: '티켓 이벤트 발생 시 조건에 따라 자동으로 액션을 실행하는 규칙을 정의합니다. 트리거 이벤트(ticket.created / ticket.updated / ticket.closed 등)·조건(필드·연산자·값 조합)·액션(상태 변경·우선순위 설정·알림 발송 등)을 자유롭게 조합합니다. 규칙은 우선순위(order) 순서대로 평가되며 is_active 토글로 개별 활성/비활성화가 가능합니다. 조건과 액션은 JSONB 배열로 저장되어 유연한 확장이 가능합니다.', isNew: true },
+  { emoji: '🌑', title: '다크모드 FOUC 수정',                   note: '전체 · 페이지 로드',                                     desc: '페이지 최초 로드 시 라이트 모드가 잠깐 깜빡이다가 다크 모드로 전환되는 FOUC(Flash of Unstyled Content) 현상을 수정했습니다. HTML <head>에 동기 인라인 스크립트를 삽입하여 React hydration 이전에 localStorage와 시스템 설정을 읽어 즉시 dark 클래스를 적용합니다.', isNew: true },
+  { emoji: '📐', title: '처리완료 모달 높이 제한',              note: '전체 · 처리완료·종료 상태 전환 시',                        desc: '처리완료(resolved)/종료(closed) 전환 시 표시되는 해결 노트 모달이 화면 높이를 초과하던 문제를 수정했습니다. max-h-[90vh] + overflow-y-auto 적용으로 내용이 많아도 스크롤 처리되며, 헤더·푸터는 항상 화면에 고정됩니다. 다크모드 스타일도 함께 적용되었습니다.', isNew: true },
+  { emoji: '🔗', title: '마크다운 첨부파일 인라인 렌더링 개선', note: '전체 · KB · 티켓 댓글',                                   desc: 'KB 아티클과 티켓 댓글에서 첨부파일 링크가 마크다운 원문(`[📎 파일명.pdf](URL)`)으로 노출되던 문제를 수정했습니다. MarkdownRenderer가 /uploads/proxy 및 /-/project/ 경로를 감지하여 FilePreview 컴포넌트로 자동 렌더링합니다. 이미지는 썸네일+라이트박스, PDF는 인라인 미리보기, 기타 파일은 다운로드 버튼으로 표시됩니다.', isNew: true },
 ]
 
 /* ─── 보안 기능 데이터 ────────────────────────────────────────────────── */
@@ -135,6 +138,8 @@ const SECURITY_FEATURES: { emoji: string; title: string; desc: string; isNew?: b
   { emoji: '🦊', title: 'GitLab OAuth SSO',                       desc: '모든 인증은 GitLab OAuth 2.0 Authorization Code Flow를 통합니다. 별도 비밀번호 관리 없이 GitLab 계정으로 로그인합니다.' },
   { emoji: '📏', title: 'API 입력 길이 검증 (Pydantic)',          desc: '모든 API 입력값에 최대 길이 제한이 적용됩니다. 필터 이름 200자, 빠른 답변 내용 5,000자, 개발 전달 메모 2,000자 등 필드별 Pydantic Field(max_length=N) 검증으로 과도하게 큰 입력이 API 레벨에서 422로 즉시 거부됩니다.', isNew: true },
   { emoji: '🔇', title: 'ClamAV 내부 오류 정보 차단',             desc: '파일에서 악성코드가 탐지된 경우 ClamAV 엔진의 내부 응답(바이러스 시그니처 명 등 상세 정보)이 API 에러 메시지에 포함되지 않습니다. 공격자가 스캐너 버전·패턴 정보를 수집하는 것을 방지합니다.', isNew: true },
+  { emoji: '🌐', title: 'IP 허용목록 (IP Allowlist)',              desc: '관리자가 허용된 IP/CIDR 대역만 API 접근을 허용하도록 설정합니다. 설정이 없으면 전체 허용. /ip-allowlist/my-ip 엔드포인트는 인증된 사용자만 현재 접속 IP를 확인할 수 있습니다.', isNew: true },
+  { emoji: '🔐', title: '승인 워크플로우 보안 강화',               desc: 'project_id 화이트리스트 검증으로 유효한 GitLab 프로젝트만 승인 요청 생성이 가능합니다. IP 허용목록 미들웨어에 JWT 블랙리스트 검증을 추가하여 로그아웃된 토큰은 IP 검사에서도 차단됩니다.', isNew: true },
 ]
 
 /* ─── 워크플로우 & SLA 데이터 ────────────────────────────────────────── */
@@ -224,6 +229,7 @@ const PERMISSION_ROWS: { feature: string; user: string; dev: string; pl: string;
   { feature: '해결 노트 → KB 아티클 변환',               user: '—',  dev: '—',  pl: '✅', agent: '✅', admin: '✅', isNew: true },
   { feature: 'GitLab 마일스톤 설정 (티켓)',               user: '—',  dev: '✅', pl: '✅', agent: '✅', admin: '✅', isNew: true },
   { feature: '티켓 승인 (open → approved)',               user: '—',  dev: '—',  pl: '—',  agent: '✅', admin: '✅', isNew: true },
+  { feature: '승인 자기 처리 (자신의 요청 승인/거절)',      user: '—',  dev: '—',  pl: '—',  agent: '✅', admin: '✅', isNew: true },
   { feature: '커스텀 필드 값 입력 (티켓 추가 정보)',      user: '—',  dev: '—',  pl: '—',  agent: '✅', admin: '✅', isNew: true },
   { feature: '커스텀 필드 정의 관리',                      user: '—',  dev: '—',  pl: '—',  agent: '—',  admin: '✅', isNew: true },
   { feature: '티켓 병합 (중복 티켓 → 대상으로 병합)',      user: '—',  dev: '—',  pl: '—',  agent: '✅', admin: '✅', isNew: true },
@@ -393,7 +399,7 @@ const COMPARISON_SECTIONS: { category: string; rows: { feature: string; itsm: st
       { feature: 'ClamAV 바이러스 스캔 (상시)',            itsm: '✅', zammad: '❌', glpi: '⚠️', jira: '❌', sn: '✅', isNew: true },
       { feature: 'PostgreSQL 자동 백업',                   itsm: '✅', zammad: '⚠️', glpi: '⚠️', jira: '✅', sn: '✅' },
       { feature: 'GitLab CI/CD 파이프라인',                itsm: '✅', zammad: '⚠️', glpi: '❌', jira: '✅', sn: '✅' },
-      { feature: 'Alembic 마이그레이션 (47단계)',          itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '✅', isNew: true },
+      { feature: 'Alembic 마이그레이션 (50단계)',          itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '✅', isNew: true },
     ],
   },
 ]
@@ -562,7 +568,7 @@ const API_GROUPS: {
     endpoints: [
       { method: 'GET',  path: '/ticket-types/{iid}',      desc: '티켓 유형 메타 조회 (ticket_type·problem_ticket_iids)', isNew: true },
       { method: 'PUT',  path: '/ticket-types/{iid}',      desc: '티켓 유형 설정 (developer 이상, ticket_type 변경)', isNew: true },
-      { method: 'POST', path: '/ticket-types/bulk',       desc: '여러 티켓 유형 일괄 조회 (?iids=1,2,3)', isNew: true },
+      { method: 'GET',  path: '/ticket-types',            desc: '여러 티켓 유형 일괄 조회 (?ticket_iids=1,2,3, 최대 200건)', isNew: true },
     ],
   },
   {
@@ -601,6 +607,26 @@ const API_GROUPS: {
     endpoints: [
       { method: 'POST', path: '/portal/submit',        desc: '비로그인 티켓 제출 (이름·이메일·제목·내용·카테고리·긴급도) — Rate Limit 5/분' },
       { method: 'GET',  path: '/portal/track/{token}', desc: '게스트 토큰으로 티켓 상태 조회 (인증 불필요)' },
+    ],
+  },
+  {
+    id: 'approvals', emoji: '✅', name: '승인 (Approvals)', baseUrl: '/approvals',
+    color: 'text-green-700', border: 'border-green-200 dark:border-green-800', bg: 'bg-green-50 dark:bg-green-900/20',
+    endpoints: [
+      { method: 'GET',  path: '/approvals',                 desc: '승인 요청 목록 조회 (?ticket_iid=N&status=pending 필터, agent 이상)', isNew: true },
+      { method: 'POST', path: '/approvals',                 desc: '승인 요청 생성 (티켓 IID·프로젝트 ID·승인자 username)', isNew: true },
+      { method: 'POST', path: '/approvals/{id}/approve',    desc: '승인 처리 (agent 이상, 자기 승인 허용, 사유 선택입력)', isNew: true },
+      { method: 'POST', path: '/approvals/{id}/reject',     desc: '거절/취소 처리 (agent 이상 또는 요청자 본인 취소 가능, 사유 선택입력)', isNew: true },
+    ],
+  },
+  {
+    id: 'ip-allowlist', emoji: '🛡️', name: 'IP 허용목록 (IP Allowlist)', baseUrl: '/ip-allowlist',
+    color: 'text-red-700', border: 'border-red-200 dark:border-red-800', bg: 'bg-red-50 dark:bg-red-900/20',
+    endpoints: [
+      { method: 'GET',    path: '/ip-allowlist',          desc: 'IP 허용목록 조회 (admin)', isNew: true },
+      { method: 'POST',   path: '/ip-allowlist',          desc: 'IP/CIDR 추가 (admin)', isNew: true },
+      { method: 'DELETE', path: '/ip-allowlist/{id}',     desc: 'IP 항목 삭제 (admin)', isNew: true },
+      { method: 'GET',    path: '/ip-allowlist/my-ip',    desc: '현재 접속 IP 조회 (인증 필요)', isNew: true },
     ],
   },
 ]
@@ -3356,12 +3382,39 @@ function TabAbout() {
             { version: 'v1.2',   desc: '칸반 보드, 성과 리포트, 고객 포털, 아웃바운드 웹훅' },
             { version: 'v1.3',   desc: 'testing 상태 추가, PL 역할(5단계 RBAC), 알림 채널 ON/OFF 관리' },
             { version: 'v1.4',   desc: '칸반 종료됨 컬럼 접기/펼치기, 감사 로그 액션 레이블 정확도 개선, 역할별 시작 가이드 도움말 추가' },
+            { version: 'v1.5',   desc: '보안 강화(IP 허용목록·JWT 블랙리스트), 승인 워크플로우, 티켓 유형 관리, 다크모드 FOUC 수정' },
           ].map(v => (
             <div key={v.version} className="flex items-start gap-3 text-sm">
               <span className="shrink-0 font-mono font-bold text-blue-600 w-12">{v.version}</span>
               <span className="text-gray-600 dark:text-gray-400">{v.desc}</span>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* 소스코드 */}
+      <div className="bg-gray-900 dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <svg viewBox="0 0 24 24" className="w-10 h-10 text-white fill-current shrink-0" aria-hidden="true">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            <div>
+              <p className="text-white font-bold text-base">GitHub 소스코드</p>
+              <p className="text-gray-400 text-sm mt-0.5">ZENITH ITSM 전체 소스코드가 공개되어 있습니다.</p>
+            </div>
+          </div>
+          <a
+            href="https://github.com/ywjung/zenith"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-gray-100 text-gray-900 text-sm font-semibold rounded-lg transition-colors shrink-0"
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            ywjung/zenith
+          </a>
         </div>
       </div>
 
