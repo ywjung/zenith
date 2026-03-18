@@ -2,13 +2,34 @@
   "uid": "itsm-business",
   "title": "ITSM 메뉴별 운영 현황",
   "description": "티켓·지식베이스·칸반·리포트·관리 메뉴 중심 KPI 대시보드",
-  "tags": ["itsm", "business", "kpi"],
+  "tags": [
+    "itsm",
+    "business",
+    "kpi"
+  ],
   "timezone": "browser",
   "refresh": "5m",
-  "time": { "from": "now-24h", "to": "now" },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
   "timepicker": {
-    "refresh_intervals": ["1m","5m","15m","30m","1h"],
-    "time_options": ["1h","6h","12h","24h","2d","7d","30d"]
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h"
+    ],
+    "time_options": [
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
+    ]
   },
   "schemaVersion": 39,
   "version": 1,
@@ -18,717 +39,3121 @@
         "name": "datasource",
         "type": "datasource",
         "query": "prometheus",
-        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "current": {
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
         "hide": 0,
         "label": "데이터소스"
       }
     ]
   },
   "panels": [
-
-    { "id": 1, "type": "row", "title": "🎫 티켓 현황", "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "collapsed": false },
-
+    {
+      "id": 1,
+      "type": "row",
+      "title": "🎫 티켓 현황",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
+    },
     {
       "id": 10,
       "type": "stat",
       "title": "API 활성 상태",
       "description": "ITSM API 서비스 정상 여부",
-      "gridPos": { "x": 0, "y": 1, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "justifyMode": "center" },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "type": "value", "options": { "1": { "text": "정상", "color": "green" }, "0": { "text": "장애", "color": "red" } } }
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "정상",
+                  "color": "green"
+                },
+                "0": {
+                  "text": "장애",
+                  "color": "red"
+                }
+              }
+            }
           ],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "up{job=\"itsm-api\"}", "legendFormat": "API", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "up{job=\"itsm-api\"}",
+          "legendFormat": "API",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 11,
       "type": "stat",
       "title": "티켓 API RPS",
       "description": "/tickets/* 엔드포인트 초당 요청 수",
-      "gridPos": { "x": 3, "y": 1, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "auto" },
+      "gridPos": {
+        "x": 3,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "red", "value": 20 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "sum(rate(http_requests_total{handler=~\"/api/tickets.*\"}[5m]))", "legendFormat": "Ticket RPS", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/tickets.*\"}[5m]))",
+          "legendFormat": "Ticket RPS",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 12,
       "type": "stat",
       "title": "티켓 API 에러율",
       "description": "/tickets/* 5xx 에러 비율",
-      "gridPos": { "x": 6, "y": 1, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area", "textMode": "auto" },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "sum(rate(http_requests_total{handler=~\"/api/tickets.*\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{handler=~\"/api/tickets.*\"}[5m]))", "legendFormat": "에러율", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/tickets.*\",status=\"5xx\"}[5m])) / sum(rate(http_requests_total{handler=~\"/tickets.*\"}[5m]))",
+          "legendFormat": "에러율",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 13,
       "type": "stat",
       "title": "SLA 위반 티켓",
       "description": "현재 SLA 위반 상태인 티켓 수",
-      "gridPos": { "x": 9, "y": 1, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "auto" },
+      "gridPos": {
+        "x": 9,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_sla_records_total{breached=\"true\"}", "legendFormat": "SLA 위반", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_sla_records_total{breached=\"true\"}",
+          "legendFormat": "SLA 위반",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 14,
       "type": "stat",
       "title": "SLA 정상 티켓",
       "description": "SLA 준수 티켓 수",
-      "gridPos": { "x": 12, "y": 1, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "color": { "fixedColor": "green", "mode": "fixed" }
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_sla_records_total{breached=\"false\"}", "legendFormat": "SLA 정상", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_sla_records_total{breached=\"false\"}",
+          "legendFormat": "SLA 정상",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 15,
       "type": "stat",
       "title": "만족도 평가 수",
       "description": "제출된 만족도 평가 총 건수",
-      "gridPos": { "x": 15, "y": 1, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "itsm_ratings_total", "legendFormat": "평가 수", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 15,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_ratings_total",
+          "legendFormat": "평가 수",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 16,
       "type": "stat",
       "title": "평균 만족도 점수",
       "description": "1~5점 평균",
-      "gridPos": { "x": 18, "y": 1, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name" },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "decimals": 1,
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 3 }, { "color": "green", "value": 4 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "green",
+                "value": 4
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_ratings_avg_score", "legendFormat": "평균 점수", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_ratings_avg_score",
+          "legendFormat": "평균 점수",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 17,
       "type": "stat",
       "title": "해결 노트 수",
       "description": "등록된 해결 노트 총 수",
-      "gridPos": { "x": 21, "y": 1, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "itsm_resolution_notes_total", "legendFormat": "해결 노트", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 21,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_resolution_notes_total",
+          "legendFormat": "해결 노트",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 18,
       "type": "timeseries",
       "title": "티켓 API 요청 추이 (엔드포인트별)",
       "description": "티켓 관련 API 엔드포인트별 초당 요청 수 시계열",
-      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull","max"] } },
-      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
       "targets": [
-        { "expr": "rate(http_requests_total{handler=~\"/api/tickets.*\"}[5m])", "legendFormat": "{{handler}} [{{method}}]", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+        {
+          "expr": "rate(http_requests_total{handler=~\"/tickets.*\"}[5m])",
+          "legendFormat": "{{handler}} [{{method}}]",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
       ]
     },
-
     {
       "id": 19,
       "type": "timeseries",
       "title": "티켓 API 응답 레이턴시 (P95)",
       "description": "티켓 엔드포인트 P95 응답 시간",
-      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull","max"] } },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "custom": { "lineWidth": 2, "fillOpacity": 10 },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 3 }] }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "noValue": "0"
         }
       },
       "targets": [
-        { "expr": "histogram_quantile(0.95, sum by (handler, le) (rate(http_request_duration_seconds_bucket{handler=~\"/api/tickets.*\"}[5m])))", "legendFormat": "P95 {{handler}}", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+        {
+          "expr": "histogram_quantile(0.95, sum by (handler, le) (rate(http_request_duration_seconds_bucket{handler=~\"/tickets.*\"}[5m])))",
+          "legendFormat": "P95 {{handler}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
       ]
     },
-
     {
       "id": 20,
       "type": "timeseries",
       "title": "SLA 위반 추이",
       "description": "SLA 위반 티켓 수 변화 추이",
-      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 6 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "single" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": { "lineWidth": 2, "fillOpacity": 20 },
-          "color": { "fixedColor": "red", "mode": "fixed" }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "spanNulls": false
+          },
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_sla_records_total{breached=\"true\"}", "legendFormat": "SLA 위반 수", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_sla_records_total{breached=\"true\"}",
+          "legendFormat": "SLA 위반 수",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 21,
       "type": "timeseries",
       "title": "티켓 링크(연관) 수 추이",
       "description": "등록된 티켓 간 연관 링크 수",
-      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 6 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "single" }, "legend": { "displayMode": "list", "placement": "bottom" } },
-      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
-      "targets": [{ "expr": "itsm_ticket_links_total", "legendFormat": "티켓 링크", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_ticket_links_total",
+          "legendFormat": "티켓 링크",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
-    { "id": 30, "type": "row", "title": "📚 지식베이스 현황", "gridPos": { "x": 0, "y": 19, "w": 24, "h": 1 }, "collapsed": false },
-
+    {
+      "id": 30,
+      "type": "row",
+      "title": "📚 지식베이스 현황",
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
+    },
     {
       "id": 31,
       "type": "stat",
       "title": "게시된 문서",
       "description": "공개(published) 상태 KB 문서 수",
-      "gridPos": { "x": 0, "y": 20, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "green", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_kb_articles_total{status=\"published\"}", "legendFormat": "게시 문서", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_kb_articles_total{status=\"published\"}",
+          "legendFormat": "게시 문서",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 32,
       "type": "stat",
       "title": "초안 문서",
       "description": "초안(draft) 상태 KB 문서 수",
-      "gridPos": { "x": 4, "y": 20, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "orange", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_kb_articles_total{status=\"draft\"}", "legendFormat": "초안 문서", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 4,
+        "y": 20,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_kb_articles_total{status=\"draft\"}",
+          "legendFormat": "초안 문서",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 33,
       "type": "stat",
       "title": "전체 문서 수",
       "description": "KB 전체 문서 수 (게시+초안)",
-      "gridPos": { "x": 8, "y": 20, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "sum(itsm_kb_articles_total)", "legendFormat": "전체 문서", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 8,
+        "y": 20,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(itsm_kb_articles_total)",
+          "legendFormat": "전체 문서",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 34,
       "type": "stat",
       "title": "누적 조회수",
       "description": "KB 전체 문서 누적 조회수 합계",
-      "gridPos": { "x": 12, "y": 20, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "blue", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_kb_articles_views_total", "legendFormat": "총 조회수", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_kb_articles_views_total",
+          "legendFormat": "총 조회수",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 35,
       "type": "stat",
       "title": "KB API RPS",
       "description": "/kb/* 엔드포인트 초당 요청 수",
-      "gridPos": { "x": 16, "y": 20, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "reqps", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 3 }, { "color": "red", "value": 10 }] } } },
-      "targets": [{ "expr": "sum(rate(http_requests_total{handler=~\"/api/kb.*\"}[5m]))", "legendFormat": "KB RPS", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 16,
+        "y": 20,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/kb.*\"}[5m]))",
+          "legendFormat": "KB RPS",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 36,
       "type": "stat",
       "title": "게시율",
       "description": "전체 문서 중 게시 비율",
-      "gridPos": { "x": 20, "y": 20, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "auto" },
+      "gridPos": {
+        "x": 20,
+        "y": 20,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "green", "value": 0.8 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.8
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_kb_articles_total{status=\"published\"} / (sum(itsm_kb_articles_total) > 0)", "legendFormat": "게시율", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_kb_articles_total{status=\"published\"} / (sum(itsm_kb_articles_total) > 0)",
+          "legendFormat": "게시율",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 37,
       "type": "timeseries",
       "title": "KB 문서 수 추이 (게시 / 초안)",
       "description": "KB 문서 게시 상태별 추이",
-      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] } },
-      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 15 } } },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
       "targets": [
-        { "expr": "itsm_kb_articles_total{status=\"published\"}", "legendFormat": "게시", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
-        { "expr": "itsm_kb_articles_total{status=\"draft\"}", "legendFormat": "초안", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+        {
+          "expr": "itsm_kb_articles_total{status=\"published\"}",
+          "legendFormat": "게시",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "itsm_kb_articles_total{status=\"draft\"}",
+          "legendFormat": "초안",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
       ]
     },
-
     {
       "id": 38,
       "type": "timeseries",
       "title": "KB API 요청 추이",
       "description": "지식베이스 API 엔드포인트별 RPS",
-      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull","max"] } },
-      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
-      "targets": [{ "expr": "rate(http_requests_total{handler=~\"/api/kb.*\"}[5m])", "legendFormat": "{{handler}} [{{method}}]", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{handler=~\"/kb.*\"}[5m])",
+          "legendFormat": "{{handler}} [{{method}}]",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
-    { "id": 40, "type": "row", "title": "🗂 칸반 현황", "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 }, "collapsed": false },
-
+    {
+      "id": 40,
+      "type": "row",
+      "title": "🗂 칸반 현황",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
+    },
     {
       "id": 41,
       "type": "stat",
       "title": "칸반 API RPS",
       "description": "/kanban 관련 엔드포인트 요청 수",
-      "gridPos": { "x": 0, "y": 32, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "reqps", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 3 }, { "color": "red", "value": 15 }] } } },
-      "targets": [{ "expr": "sum(rate(http_requests_total{handler=~\"/api/tickets.*|/api/kanban.*\"}[5m]))", "legendFormat": "칸반 RPS", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 15
+              }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/tickets.*\"}[5m]))",
+          "legendFormat": "칸반 RPS",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 42,
       "type": "stat",
       "title": "SLA 위반율",
       "description": "전체 SLA 대비 위반 비율",
-      "gridPos": { "x": 4, "y": 32, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "auto" },
+      "gridPos": {
+        "x": 4,
+        "y": 32,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.1 }, { "color": "red", "value": 0.2 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.2
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_sla_records_total{breached=\"true\"} / (sum(itsm_sla_records_total) > 0)", "legendFormat": "SLA 위반율", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_sla_records_total{breached=\"true\"} / (sum(itsm_sla_records_total) > 0)",
+          "legendFormat": "SLA 위반율",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 43,
       "type": "stat",
       "title": "시간 기록 건수",
       "description": "에이전트 업무 시간 기록 총 건수",
-      "gridPos": { "x": 8, "y": 32, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "itsm_time_entries_total", "legendFormat": "시간 기록", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 8,
+        "y": 32,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_time_entries_total",
+          "legendFormat": "시간 기록",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 44,
       "type": "stat",
       "title": "총 기록 시간",
       "description": "에이전트 누적 업무 시간 (h)",
-      "gridPos": { "x": 12, "y": 32, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "h", "color": { "fixedColor": "purple", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_time_entries_hours_total", "legendFormat": "총 시간", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_time_entries_hours_total",
+          "legendFormat": "총 시간",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 45,
       "type": "stat",
       "title": "구독자(Watcher) 수",
       "description": "티켓 알림 구독자 총 수",
-      "gridPos": { "x": 16, "y": 32, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "itsm_watchers_total", "legendFormat": "구독자", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 16,
+        "y": 32,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_watchers_total",
+          "legendFormat": "구독자",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 46,
       "type": "stat",
       "title": "에스컬레이션 이력",
       "description": "에스컬레이션 발생 누적 수",
-      "gridPos": { "x": 20, "y": 32, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "auto" },
+      "gridPos": {
+        "x": 20,
+        "y": 32,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 3 }, { "color": "red", "value": 10 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_escalation_records_total", "legendFormat": "에스컬레이션", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_escalation_records_total",
+          "legendFormat": "에스컬레이션",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 47,
       "type": "timeseries",
       "title": "시간 기록 추이 (누적 시간)",
       "description": "에이전트 기록 업무 시간 누적 추이",
-      "gridPos": { "x": 0, "y": 36, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "single" }, "legend": { "displayMode": "list", "placement": "bottom" } },
-      "fieldConfig": { "defaults": { "unit": "h", "custom": { "lineWidth": 2, "fillOpacity": 20 }, "color": { "fixedColor": "purple", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_time_entries_hours_total", "legendFormat": "누적 시간(h)", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "spanNulls": false
+          },
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_time_entries_hours_total",
+          "legendFormat": "누적 시간(h)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 48,
       "type": "timeseries",
       "title": "SLA 위반·정상 추이",
       "description": "SLA 위반/정상 티켓 수 시계열",
-      "gridPos": { "x": 12, "y": 36, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] } },
-      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": {
+        "x": 12,
+        "y": 36,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
       "targets": [
-        { "expr": "itsm_sla_records_total{breached=\"false\"}", "legendFormat": "정상", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
-        { "expr": "itsm_sla_records_total{breached=\"true\"}", "legendFormat": "위반", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+        {
+          "expr": "itsm_sla_records_total{breached=\"false\"}",
+          "legendFormat": "정상",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "itsm_sla_records_total{breached=\"true\"}",
+          "legendFormat": "위반",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
       ]
     },
-
-    { "id": 50, "type": "row", "title": "📊 리포트 현황", "gridPos": { "x": 0, "y": 43, "w": 24, "h": 1 }, "collapsed": false },
-
+    {
+      "id": 50,
+      "type": "row",
+      "title": "📊 리포트 현황",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
+    },
     {
       "id": 51,
       "type": "stat",
       "title": "감사 로그 총 이벤트",
       "description": "전체 감사 로그 이벤트 수",
-      "gridPos": { "x": 0, "y": 44, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "sum(itsm_audit_events_total)", "legendFormat": "총 이벤트", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(itsm_audit_events_total)",
+          "legendFormat": "총 이벤트",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 52,
       "type": "stat",
       "title": "리포트 API RPS",
       "description": "/reports/* 엔드포인트 초당 요청 수",
-      "gridPos": { "x": 4, "y": 44, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "reqps", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 2 }, { "color": "red", "value": 8 }] } } },
-      "targets": [{ "expr": "sum(rate(http_requests_total{handler=~\"/api/reports.*\"}[5m]))", "legendFormat": "Report RPS", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 4,
+        "y": 44,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 8
+              }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/reports.*\"}[5m]))",
+          "legendFormat": "Report RPS",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 53,
       "type": "stat",
       "title": "티켓 생성 이벤트",
       "description": "감사 로그 기준 티켓 생성 수",
-      "gridPos": { "x": 8, "y": 44, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "blue", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_audit_events_total{action=\"ticket.create\"}", "legendFormat": "생성", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 8,
+        "y": 44,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_audit_events_total{action=\"ticket.create\"}",
+          "legendFormat": "생성",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 54,
       "type": "stat",
       "title": "티켓 갱신 이벤트",
       "description": "감사 로그 기준 티켓 업데이트 수",
-      "gridPos": { "x": 12, "y": 44, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "orange", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_audit_events_total{action=\"ticket.update\"}", "legendFormat": "갱신", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 12,
+        "y": 44,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_audit_events_total{action=\"ticket.update\"}",
+          "legendFormat": "갱신",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 55,
       "type": "stat",
       "title": "알림 발송 (미확인)",
       "description": "읽지 않은 알림 수",
-      "gridPos": { "x": 16, "y": 44, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "auto" },
+      "gridPos": {
+        "x": 16,
+        "y": 44,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "red", "value": 50 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_notifications_total{read=\"false\"}", "legendFormat": "미확인 알림", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_notifications_total{read=\"false\"}",
+          "legendFormat": "미확인 알림",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 56,
       "type": "stat",
       "title": "알림 확인율",
       "description": "전체 알림 중 읽은 비율",
-      "gridPos": { "x": 20, "y": 44, "w": 4, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "auto" },
+      "gridPos": {
+        "x": 20,
+        "y": 44,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "green", "value": 0.8 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.8
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_notifications_total{read=\"true\"} / (sum(itsm_notifications_total) > 0)", "legendFormat": "확인율", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_notifications_total{read=\"true\"} / (sum(itsm_notifications_total) > 0)",
+          "legendFormat": "확인율",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 57,
       "type": "barchart",
       "title": "감사 로그 액션별 분포",
       "description": "액션 유형별 이벤트 수 막대 그래프",
-      "gridPos": { "x": 0, "y": 48, "w": 12, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
         "orientation": "horizontal",
         "xTickLabelRotation": 0,
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "single" },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        },
         "barWidth": 0.7
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "color": { "mode": "palette-classic" },
-          "custom": { "fillOpacity": 80, "lineWidth": 0 }
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "itsm_audit_events_total", "legendFormat": "{{action}}", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "targets": [
+        {
+          "expr": "itsm_audit_events_total",
+          "legendFormat": "{{action}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 58,
       "type": "timeseries",
       "title": "알림 현황 추이",
       "description": "미확인/확인 알림 수 추이",
-      "gridPos": { "x": 12, "y": 48, "w": 12, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] } },
-      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 15 } } },
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
       "targets": [
-        { "expr": "itsm_notifications_total{read=\"true\"}", "legendFormat": "확인됨", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
-        { "expr": "itsm_notifications_total{read=\"false\"}", "legendFormat": "미확인", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+        {
+          "expr": "itsm_notifications_total{read=\"true\"}",
+          "legendFormat": "확인됨",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "itsm_notifications_total{read=\"false\"}",
+          "legendFormat": "미확인",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
       ]
     },
-
-    { "id": 60, "type": "row", "title": "⚙️ 관리 현황", "gridPos": { "x": 0, "y": 56, "w": 24, "h": 1 }, "collapsed": false },
-
+    {
+      "id": 60,
+      "type": "row",
+      "title": "⚙️ 관리 현황",
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
+    },
     {
       "id": 61,
       "type": "stat",
       "title": "전체 사용자 수",
       "description": "활성 사용자 총 수",
-      "gridPos": { "x": 0, "y": 57, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "sum(itsm_users_total)", "legendFormat": "전체", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(itsm_users_total)",
+          "legendFormat": "전체",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 62,
       "type": "stat",
       "title": "관리자(Admin)",
       "description": "admin 역할 사용자 수",
-      "gridPos": { "x": 3, "y": 57, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "red", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_users_total{role=\"admin\"}", "legendFormat": "admin", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 3,
+        "y": 57,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_users_total{role=\"admin\"}",
+          "legendFormat": "admin",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 63,
       "type": "stat",
       "title": "에이전트(Agent)",
       "description": "agent 역할 사용자 수",
-      "gridPos": { "x": 6, "y": 57, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "orange", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_users_total{role=\"agent\"}", "legendFormat": "agent", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 6,
+        "y": 57,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_users_total{role=\"agent\"}",
+          "legendFormat": "agent",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 64,
       "type": "stat",
       "title": "개발자(Developer)",
       "description": "developer 역할 사용자 수",
-      "gridPos": { "x": 9, "y": 57, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "blue", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_users_total{role=\"developer\"}", "legendFormat": "developer", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 9,
+        "y": 57,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_users_total{role=\"developer\"}",
+          "legendFormat": "developer",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 65,
       "type": "stat",
       "title": "일반 사용자(User)",
       "description": "user 역할 사용자 수",
-      "gridPos": { "x": 12, "y": 57, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "green", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_users_total{role=\"user\"}", "legendFormat": "user", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 12,
+        "y": 57,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_users_total{role=\"user\"}",
+          "legendFormat": "user",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
+    {
+      "id": 73,
+      "type": "stat",
+      "title": "협력사 PL",
+      "description": "pl(협력사 PL) 역할 사용자 수",
+      "gridPos": {
+        "x": 15,
+        "y": 57,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "teal",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_users_total{role=\"pl\"}",
+          "legendFormat": "pl",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
     {
       "id": 66,
       "type": "stat",
       "title": "자동 배정 규칙 (활성)",
       "description": "활성화된 자동 배정 규칙 수",
-      "gridPos": { "x": 15, "y": 57, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "fixedColor": "green", "mode": "fixed" } } },
-      "targets": [{ "expr": "itsm_assignment_rules_total{enabled=\"true\"}", "legendFormat": "활성 규칙", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 18,
+        "y": 57,
+        "w": 2,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_assignment_rules_total{enabled=\"true\"}",
+          "legendFormat": "활성 규칙",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 67,
       "type": "stat",
       "title": "빠른 답변 템플릿",
       "description": "등록된 빠른 답변 수",
-      "gridPos": { "x": 18, "y": 57, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "itsm_quick_replies_total", "legendFormat": "빠른 답변", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 20,
+        "y": 57,
+        "w": 2,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_quick_replies_total",
+          "legendFormat": "빠른 답변",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 68,
       "type": "stat",
       "title": "티켓 템플릿",
       "description": "등록된 티켓 템플릿 수",
-      "gridPos": { "x": 21, "y": 57, "w": 3, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "auto" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "itsm_ticket_templates_total", "legendFormat": "템플릿", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 22,
+        "y": 57,
+        "w": 2,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_ticket_templates_total",
+          "legendFormat": "템플릿",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 69,
       "type": "piechart",
       "title": "사용자 역할 분포",
       "description": "역할별 사용자 비율",
-      "gridPos": { "x": 0, "y": 61, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "pieType": "donut",
-        "displayLabels": ["name", "percent"],
-        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
-        "tooltip": { "mode": "single" }
+      "gridPos": {
+        "x": 0,
+        "y": 61,
+        "w": 8,
+        "h": 8
       },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } },
-      "targets": [{ "expr": "itsm_users_total", "legendFormat": "{{role}}", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "pieType": "donut",
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_users_total",
+          "legendFormat": "{{role}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 70,
       "type": "timeseries",
       "title": "관리 API 요청 추이",
       "description": "/admin/* /auth/* 엔드포인트 요청 추이",
-      "gridPos": { "x": 8, "y": 61, "w": 16, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull","max"] } },
-      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": {
+        "x": 8,
+        "y": 61,
+        "w": 16,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
       "targets": [
-        { "expr": "rate(http_requests_total{handler=~\"/api/admin.*\"}[5m])", "legendFormat": "Admin: {{handler}}", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
-        { "expr": "rate(http_requests_total{handler=~\"/auth.*\"}[5m])", "legendFormat": "Auth: {{handler}}", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+        {
+          "expr": "rate(http_requests_total{handler=~\"/admin.*\"}[5m])",
+          "legendFormat": "Admin: {{handler}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "rate(http_requests_total{handler=~\"/auth.*\"}[5m])",
+          "legendFormat": "Auth: {{handler}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
       ]
     },
-
     {
       "id": 71,
       "type": "timeseries",
       "title": "사용자 수 추이 (역할별)",
       "description": "역할별 활성 사용자 수 변화",
-      "gridPos": { "x": 0, "y": 69, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] } },
-      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
-      "targets": [{ "expr": "itsm_users_total", "legendFormat": "{{role}}", "datasource": { "type": "prometheus", "uid": "${datasource}" } }]
+      "gridPos": {
+        "x": 0,
+        "y": 69,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_users_total",
+          "legendFormat": "{{role}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
     },
-
     {
       "id": 72,
       "type": "timeseries",
       "title": "설정 리소스 추이",
       "description": "빠른 답변 / 티켓 템플릿 / 배정 규칙 추이",
-      "gridPos": { "x": 12, "y": 69, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] } },
-      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": {
+        "x": 12,
+        "y": 69,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
       "targets": [
-        { "expr": "itsm_quick_replies_total", "legendFormat": "빠른 답변", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
-        { "expr": "itsm_ticket_templates_total", "legendFormat": "티켓 템플릿", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
-        { "expr": "itsm_assignment_rules_total{enabled=\"true\"}", "legendFormat": "활성 배정 규칙", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+        {
+          "expr": "itsm_quick_replies_total",
+          "legendFormat": "빠른 답변",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "itsm_ticket_templates_total",
+          "legendFormat": "티켓 템플릿",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "itsm_assignment_rules_total{enabled=\"true\"}",
+          "legendFormat": "활성 배정 규칙",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 80,
+      "type": "row",
+      "title": "🔐 승인·자동화·보안 현황",
+      "gridPos": {
+        "x": 0,
+        "y": 76,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
+    },
+    {
+      "id": 81,
+      "type": "stat",
+      "title": "승인 대기",
+      "description": "처리 대기 중인 승인 요청 수",
+      "gridPos": {
+        "x": 0,
+        "y": 77,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_approval_requests_total{status=\"pending\"}",
+          "legendFormat": "대기",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 82,
+      "type": "stat",
+      "title": "승인 완료",
+      "description": "승인된 요청 수",
+      "gridPos": {
+        "x": 4,
+        "y": 77,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_approval_requests_total{status=\"approved\"}",
+          "legendFormat": "승인",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 83,
+      "type": "stat",
+      "title": "승인 거절",
+      "description": "거절된 승인 요청 수",
+      "gridPos": {
+        "x": 8,
+        "y": 77,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_approval_requests_total{status=\"rejected\"}",
+          "legendFormat": "거절",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 84,
+      "type": "stat",
+      "title": "자동화 규칙 (활성)",
+      "description": "활성화된 자동화 규칙 수",
+      "gridPos": {
+        "x": 12,
+        "y": 77,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_automation_rules_total{enabled=\"true\"}",
+          "legendFormat": "활성 자동화",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 85,
+      "type": "stat",
+      "title": "자동화 규칙 (비활성)",
+      "description": "비활성화된 자동화 규칙 수",
+      "gridPos": {
+        "x": 16,
+        "y": 77,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_automation_rules_total{enabled=\"false\"}",
+          "legendFormat": "비활성 자동화",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 86,
+      "type": "stat",
+      "title": "IP 허용 목록 (활성)",
+      "description": "활성화된 IP 허용 목록 항목 수",
+      "gridPos": {
+        "x": 20,
+        "y": 77,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_ip_allowlist_entries_total{enabled=\"true\"}",
+          "legendFormat": "IP 허용",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 87,
+      "type": "timeseries",
+      "title": "승인 요청 현황 추이",
+      "description": "상태별 승인 요청 수 변화",
+      "gridPos": {
+        "x": 0,
+        "y": 81,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_approval_requests_total{status=\"pending\"}",
+          "legendFormat": "대기",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "itsm_approval_requests_total{status=\"approved\"}",
+          "legendFormat": "승인",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "itsm_approval_requests_total{status=\"rejected\"}",
+          "legendFormat": "거절",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 88,
+      "type": "timeseries",
+      "title": "자동화 규칙 추이",
+      "description": "활성/비활성 자동화 규칙 수 변화",
+      "gridPos": {
+        "x": 12,
+        "y": 81,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_automation_rules_total{enabled=\"true\"}",
+          "legendFormat": "활성",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "itsm_automation_rules_total{enabled=\"false\"}",
+          "legendFormat": "비활성",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
       ]
     }
-
   ]
 }

@@ -22,6 +22,8 @@ export interface Ticket {
   sla_deadline?: string
   sla_breached?: boolean
   created_by_username?: string
+  milestone_id?: number
+  milestone_title?: string
 }
 
 export interface TicketCreate {
@@ -36,6 +38,7 @@ export interface TicketCreate {
   department?: string
   location?: string
   sla_due_date?: string
+  milestone_id?: number
 }
 
 export interface Comment {
@@ -79,6 +82,15 @@ export interface ProjectMember {
   avatar_url?: string
 }
 
+export interface Milestone {
+  id: number
+  iid: number
+  title: string
+  description: string
+  state: 'active' | 'closed'
+  due_date?: string
+}
+
 export interface TicketStats {
   all: number
   open: number
@@ -90,6 +102,8 @@ export interface TicketStats {
   ready_for_release: number
   released: number
   closed: number
+  sla_over?: number
+  sla_imminent?: number
 }
 
 export interface TicketListResponse {
@@ -165,6 +179,7 @@ export interface AssignmentRule {
 }
 
 export interface SLARecord {
+  id: number
   gitlab_issue_iid: number
   project_id: string
   priority: string
@@ -172,6 +187,8 @@ export interface SLARecord {
   first_response_at?: string
   resolved_at?: string
   breached: boolean
+  paused_at?: string
+  total_paused_seconds: number
 }
 
 export interface NotificationItem {
@@ -311,6 +328,48 @@ export interface LinkedMR {
   author_name?: string
   created_at: string
   merged_at?: string
+}
+
+// Custom Fields
+export interface CustomFieldDef {
+  id: number
+  name: string
+  label: string
+  field_type: 'text' | 'number' | 'select' | 'checkbox'
+  options: string[]
+  required: boolean
+  enabled: boolean
+  sort_order: number
+  created_by: string
+  created_at: string
+}
+
+export interface TicketCustomFieldValue {
+  id: number
+  name: string
+  label: string
+  field_type: 'text' | 'number' | 'select' | 'checkbox'
+  options: string[]
+  required: boolean
+  value?: string | null
+}
+
+export interface DoraMetricItem {
+  value: number | null
+  unit: string
+  grade: 'Elite' | 'High' | 'Medium' | 'Low' | 'N/A'
+  description: string
+  resolved_count?: number
+  reopened_count?: number
+}
+
+export interface DoraMetrics {
+  period_days: number
+  since: string
+  deployment_frequency: DoraMetricItem
+  lead_time: DoraMetricItem
+  change_failure_rate: DoraMetricItem
+  mttr: DoraMetricItem
 }
 
 // Dynamic service type (category)

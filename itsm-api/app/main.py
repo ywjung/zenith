@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import threading
 import time
@@ -19,6 +20,12 @@ from .routers.forwards import router as forwards_router, admin_router as forward
 from .routers.filters import router as filters_router
 from .routers.quick_replies import router as quick_replies_router
 from .routers.watchers import router as watchers_router, my_router as watchers_my_router
+from .routers.automation import router as automation_router
+from .routers.approvals import router as approvals_router
+from .routers.ticket_types import router as ticket_types_router
+from .routers.service_catalog import router as service_catalog_router
+from .routers.dashboard import router as dashboard_router
+from .routers.ip_allowlist import router as ip_allowlist_router
 from . import gitlab_client
 from . import sla as sla_module
 from .routers.reports import take_snapshot
@@ -36,7 +43,14 @@ _user_sync_stop = threading.Event()
 
 # 첫 접속 시 스냅샷 생성용 — 오늘 날짜와 비교해 하루 1회만 트리거
 _last_snapshot_check: date | None = None
-_snapshot_check_lock = threading.Lock()
+_snapshot_check_lock: asyncio.Lock | None = None
+
+
+def _get_snapshot_check_lock() -> asyncio.Lock:
+    global _snapshot_check_lock
+    if _snapshot_check_lock is None:
+        _snapshot_check_lock = asyncio.Lock()
+    return _snapshot_check_lock
 
 
 def _sla_checker_loop():
@@ -213,6 +227,20 @@ async def lifespan(app: FastAPI):
             "Set a strong random value in .env before starting."
         )
 
+    # M-1b: VULN-02 — TOKEN_ENCRYPTION_KEY 미설정 시 운영 환경 기동 차단
+    if settings.ENVIRONMENT != "development" and not settings.TOKEN_ENCRYPTION_KEY:
+        raise RuntimeError(
+            "TOKEN_ENCRYPTION_KEY is not set. "
+            "Generate with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" "
+            "and set in .env. Set ENVIRONMENT=development to bypass in dev."
+        )
+
+    # M-2: 필수 외부 연동 설정 경고 (기동 차단은 하지 않음 — 개발 환경 고려)
+    if not getattr(settings, "GITLAB_PROJECT_TOKEN", None):
+        logger.warning("GITLAB_PROJECT_TOKEN is not set — GitLab integration will not work")
+    if settings.NOTIFICATION_ENABLED and not getattr(settings, "SMTP_HOST", None):
+        logger.warning("NOTIFICATION_ENABLED=true but SMTP_HOST is not set — email notifications will be skipped")
+
     if settings.ENVIRONMENT == "development":
         logger.info("Development mode: auto-creating tables")
         Base.metadata.create_all(bind=engine)
@@ -260,7 +288,9 @@ async def lifespan(app: FastAPI):
     logger.info("Background threads stopped")
 
 
-_is_production = get_settings().ENVIRONMENT == "production"
+def _is_production() -> bool:
+    return get_settings().ENVIRONMENT.lower() == "production"
+
 
 app = FastAPI(
     title="ITSM Portal API",
@@ -268,31 +298,23 @@ app = FastAPI(
     description="GitLab CE 기반 ITSM 포털 API",
     lifespan=lifespan,
     # H-1: production 환경에서 API 문서 비공개
-    docs_url=None if _is_production else "/docs",
-    redoc_url=None if _is_production else "/redoc",
-    openapi_url=None if _is_production else "/openapi.json",
+    docs_url=None if _is_production() else "/docs",
+    redoc_url=None if _is_production() else "/redoc",
+    openapi_url=None if _is_production() else "/openapi.json",
 )
 
 settings = get_settings()
 
-# Rate limiting
+# Rate limiting — limiter already configured with Redis in rate_limit.py
 try:
     from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
     from .rate_limit import limiter as _limiter
 
     if _limiter is not None:
-        # Re-create with Redis backend now that settings are available
-        from slowapi import Limiter
-        from slowapi.util import get_remote_address
-        _limiter = Limiter(key_func=get_remote_address, storage_uri=settings.REDIS_URL)
-        # Patch the shared module so routers see the same instance
-        import app.rate_limit as _rl_mod
-        _rl_mod.limiter = _limiter
-
         app.state.limiter = _limiter
         app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-        logger.info("Rate limiting enabled with Redis backend (%s)", settings.REDIS_URL)
+        logger.info("Rate limiting enabled")
 except Exception as e:
     logger.warning("Rate limiting not available: %s", e)
 
@@ -305,12 +327,172 @@ app.add_middleware(
 )
 
 
+# ---------------------------------------------------------------------------
+# IP 접근 제한 미들웨어 — DB 기반 실시간 반영 (TTL 캐시 5초)
+# localhost(127.0.0.1, ::1) 및 Docker 호스트 머신 IP는 항상 허용
+# DB에 활성 항목이 없으면 모든 IP 허용 (비활성화 상태)
+#
+# [Docker NAT 주의]
+# localhost:8111 → Docker NAT → Nginx → FastAPI 경로로 오면
+# X-Forwarded-For 에 127.0.0.1 이 아닌 Docker 브리지 게이트웨이 IP
+# (예: 192.168.16.1) 가 들어온다. Nginx 컨테이너 IP(request.client.host)와
+# 같은 /24 서브넷의 첫 번째 주소(.1) = 호스트 머신 → 항상 허용.
+# ---------------------------------------------------------------------------
+import ipaddress as _ipmod
+
+_LOOPBACK_NETS = [
+    _ipmod.ip_network("127.0.0.0/8"),
+    _ipmod.ip_network("::1/128"),
+]
+_ip_cache: dict = {"nets": [], "loaded_at": 0.0}
+_IP_CACHE_TTL = 5.0  # seconds
+_ip_cache_lock: asyncio.Lock | None = None
+
+
+def _get_ip_cache_lock() -> asyncio.Lock:
+    global _ip_cache_lock
+    if _ip_cache_lock is None:
+        _ip_cache_lock = asyncio.Lock()
+    return _ip_cache_lock
+
+
+def _reload_ip_cache() -> list:
+    """DB에서 활성 CIDR 목록을 읽어 네트워크 객체 리스트로 반환."""
+    try:
+        from .models import IpAllowlistEntry
+        with SessionLocal() as db:
+            entries = db.query(IpAllowlistEntry).filter_by(is_active=True).all()
+            nets = []
+            for e in entries:
+                try:
+                    nets.append(_ipmod.ip_network(e.cidr, strict=False))
+                except ValueError:
+                    logger.warning("IP allowlist: invalid CIDR in DB: %s", e.cidr)
+            return nets
+    except Exception as exc:
+        logger.error("IP allowlist: cache reload failed: %s", exc)
+        return _ip_cache["nets"]  # keep previous on error
+
+
+def _is_local_ip(client_ip: _ipmod.IPv4Address | _ipmod.IPv6Address, request: Request) -> bool:
+    """로컬호스트 또는 Docker 호스트 머신 IP인지 판별.
+
+    Docker Compose 환경에서 localhost 브라우저 접속 시
+    X-Forwarded-For 에는 Docker 브리지 게이트웨이(Nginx 컨테이너 /24 의 .1)가
+    나타나므로, request.client.host(=Nginx 컨테이너 IP) 기준으로 계산한다.
+    """
+    # 1) 일반 loopback
+    if any(client_ip in net for net in _LOOPBACK_NETS):
+        return True
+    # 2) Docker 호스트 게이트웨이: Nginx 컨테이너와 같은 /24 의 첫 주소(.1)
+    if request.client:
+        try:
+            proxy_net = _ipmod.ip_network(f"{request.client.host}/24", strict=False)
+            docker_host_ip = next(proxy_net.hosts())  # .1
+            if client_ip == docker_host_ip:
+                return True
+        except (ValueError, StopIteration):
+            pass
+    return False
+
+
+@app.middleware("http")
+async def ip_allowlist_middleware(request: Request, call_next):
+    """DB 기반 IP 접근 제한. localhost/Docker 호스트 항상 허용, DB 항목 없으면 전체 허용.
+
+    /admin 경로는 항상 검사. 그 외 경로는 admin/superadmin/agent/pl 역할 토큰 소지 시 검사.
+    """
+    # Decode JWT payload lazily to determine role for non-/admin paths.
+    payload: dict | None = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):]
+        try:
+            from jose import jwt as _jwt, JWTError as _JWTError
+            from .auth import ALGORITHM as _ALGORITHM, _is_token_blacklisted
+            _settings = get_settings()
+            payload = _jwt.decode(token, _settings.SECRET_KEY, algorithms=[_ALGORITHM])
+            # Check Redis blacklist — treat blacklisted tokens as unauthenticated
+            _jti = payload.get("jti")
+            if _jti and _is_token_blacklisted(_jti):
+                payload = None
+        except Exception:
+            payload = None
+
+    is_admin_path = request.url.path.startswith("/admin")
+    should_check = is_admin_path
+
+    if not should_check and payload is not None:
+        role = payload.get("role", "")
+        if role in ("admin", "superadmin", "agent", "pl"):
+            should_check = True
+
+    if not should_check:
+        return await call_next(request)
+
+    # VULN-05: trusted proxy 환경(사설 IP)에서만 X-Forwarded-For 신뢰
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    client_ip_str = request.client.host if request.client else "0.0.0.0"
+    if forwarded and request.client:
+        try:
+            proxy_addr = _ipmod.ip_address(request.client.host)
+            if proxy_addr.is_private:
+                client_ip_str = forwarded.split(",")[0].strip()
+        except ValueError:
+            pass
+
+    try:
+        client_ip = _ipmod.ip_address(client_ip_str)
+    except ValueError:
+        client_ip = _ipmod.ip_address("0.0.0.0")
+
+    # localhost / Docker 호스트 머신 항상 허용
+    if _is_local_ip(client_ip, request):
+        return await call_next(request)
+
+    # TTL 캐시 갱신 — 락으로 직렬화해 동시 요청 시 중복 DB 조회 방지
+    now = time.monotonic()
+    if now - _ip_cache["loaded_at"] > _IP_CACHE_TTL:
+        async with _get_ip_cache_lock():
+            if time.monotonic() - _ip_cache["loaded_at"] > _IP_CACHE_TTL:
+                _ip_cache["nets"] = _reload_ip_cache()
+                _ip_cache["loaded_at"] = time.monotonic()
+
+    active_nets: list = _ip_cache["nets"]
+
+    # DB에 활성 항목이 없으면 → 기능 비활성 상태, 모두 허용
+    if not active_nets:
+        return await call_next(request)
+
+    # IP 검사
+    if not any(client_ip in net for net in active_nets):
+        from fastapi.responses import JSONResponse
+        logger.warning("IP allowlist: blocked %s → %s", client_ip_str, request.url.path)
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "접근이 허용되지 않은 IP입니다."},
+        )
+
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """S-H: API 응답에 보안 헤더 추가."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    return response
+
+
 @app.middleware("http")
 async def ensure_daily_snapshot_on_access(request: Request, call_next):
     """자정에 서버가 꺼져 스냅샷이 누락됐을 때 첫 API 요청 시 백그라운드로 생성."""
     global _last_snapshot_check
     today = date.today()
-    with _snapshot_check_lock:
+    async with _get_snapshot_check_lock():
         if _last_snapshot_check != today:
             _last_snapshot_check = today
             threading.Thread(
@@ -365,6 +547,12 @@ app.include_router(portal_router)
 app.include_router(quick_replies_router)
 app.include_router(watchers_router)
 app.include_router(watchers_my_router)
+app.include_router(automation_router)
+app.include_router(approvals_router)
+app.include_router(ticket_types_router)
+app.include_router(service_catalog_router)
+app.include_router(dashboard_router)
+app.include_router(ip_allowlist_router)
 
 # I-2: Prometheus metrics
 try:

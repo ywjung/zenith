@@ -1,5 +1,7 @@
 import logging
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..auth import get_current_user
@@ -69,3 +71,28 @@ def list_project_members(
     except Exception as e:
         logger.error("list_project_members project=%s error: %s", project_id, e)
         raise HTTPException(status_code=502, detail="프로젝트 멤버 목록을 불러오지 못했습니다.")
+
+
+@router.get("/{project_id}/milestones", response_model=list[dict])
+def list_project_milestones(
+    project_id: str,
+    state: Literal["active", "closed", "all"] = "active",
+    _user: dict = Depends(get_current_user),
+):
+    """GitLab 프로젝트 마일스톤 목록 반환. state: active | closed | all"""
+    try:
+        milestones = gitlab_client.get_milestones(project_id=project_id, state=state)
+        return [
+            {
+                "id": m["id"],
+                "iid": m["iid"],
+                "title": m["title"],
+                "description": m.get("description") or "",
+                "state": m.get("state", "active"),
+                "due_date": m.get("due_date"),
+            }
+            for m in milestones
+        ]
+    except Exception as e:
+        logger.error("list_project_milestones project=%s error: %s", project_id, e)
+        raise HTTPException(status_code=502, detail="마일스톤 목록을 불러오지 못했습니다.")

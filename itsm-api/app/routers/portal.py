@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -15,7 +15,7 @@ from .. import gitlab_client
 from ..notifications import send_email
 from .. import sla as sla_module
 from ..assignment import evaluate_rules
-from ..rate_limit import limiter
+from ..rate_limit import limiter, LIMIT_PORTAL
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +31,10 @@ VALID_PRIORITIES = {"low", "medium", "high", "critical"}
 
 
 class PortalSubmitRequest(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr  # M-3: 이메일 형식 검증
-    title: str
-    content: str
+    title: str = Field(..., min_length=1, max_length=255)
+    content: str = Field(..., min_length=1, max_length=10000)
     category: Optional[str] = None
     priority: Optional[str] = "medium"
 
@@ -77,7 +77,7 @@ def _parse_status(labels: list[str]) -> str:
 # ---------------------------------------------------------------------------
 
 @router.post("/submit", response_model=PortalSubmitResponse)
-@(limiter.limit("5/minute") if limiter else lambda f: f)  # C-2: IP당 분당 5회 제한
+@(limiter.limit(LIMIT_PORTAL) if limiter else lambda f: f)  # C-2: IP당 분당 5회 제한
 def portal_submit(request: Request, req: PortalSubmitRequest, db: Session = Depends(get_db)):
     settings = get_settings()
     # H-3: 허용된 값 외 입력 차단
@@ -119,7 +119,7 @@ def portal_submit(request: Request, req: PortalSubmitRequest, db: Session = Depe
     raw_token = secrets.token_hex(32)
     expires = datetime.now(timezone.utc) + timedelta(days=7)
     guest_token = GuestToken(
-        token=raw_token,
+        token=raw_token,  # TODO: store as SHA-256 hash for security
         email=str(req.email),
         ticket_iid=ticket_iid,
         project_id=project_id,
@@ -160,7 +160,8 @@ def _send_confirmation(email: str, name: str, ticket_iid: int, track_url: str) -
 # ---------------------------------------------------------------------------
 
 @router.get("/track/{token}", response_model=PortalTicketStatus)
-def portal_track(token: str, db: Session = Depends(get_db)):
+@(limiter.limit("10/minute") if limiter else lambda f: f)  # C-8: IP당 분당 10회 제한
+def portal_track(request: Request, token: str, db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     guest = db.query(GuestToken).filter(
         GuestToken.token == token,

@@ -11,11 +11,11 @@ import MarkdownRenderer from '@/components/MarkdownRenderer'
 import { formatName } from '@/lib/utils'
 
 const CAT_META: Record<string, { label: string; icon: string; color: string }> = {
-  hardware: { label: '하드웨어',  icon: '🖥️', color: 'bg-blue-50 border-blue-200 text-blue-700' },
-  software: { label: '소프트웨어', icon: '💻', color: 'bg-purple-50 border-purple-200 text-purple-700' },
-  network:  { label: '네트워크',  icon: '🌐', color: 'bg-green-50 border-green-200 text-green-700' },
-  account:  { label: '계정/권한', icon: '👤', color: 'bg-yellow-50 border-yellow-200 text-yellow-700' },
-  other:    { label: '기타',      icon: '📋', color: 'bg-gray-50 border-gray-200 text-gray-600' },
+  hardware: { label: '하드웨어',  icon: '🖥️', color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300' },
+  software: { label: '소프트웨어', icon: '💻', color: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300' },
+  network:  { label: '네트워크',  icon: '🌐', color: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300' },
+  account:  { label: '계정/권한', icon: '👤', color: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300' },
+  other:    { label: '기타',      icon: '📋', color: 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300' },
 }
 
 type Heading = { level: number; text: string; id: string }
@@ -25,7 +25,6 @@ function toHeadingId(text: string) {
 }
 
 function extractHeadings(content: string): Heading[] {
-  // HTML (TipTap)
   if (/^\s*<[a-zA-Z]/.test(content)) {
     const matches = Array.from(content.matchAll(/<(h[1-3])[^>]*>(.*?)<\/h[1-3]>/gi))
     return matches.map((m) => {
@@ -33,7 +32,6 @@ function extractHeadings(content: string): Heading[] {
       return { level: parseInt(m[1][1]), text, id: toHeadingId(text) }
     })
   }
-  // Markdown
   return content
     .split('\n')
     .map((line) => {
@@ -96,8 +94,8 @@ function ArticleContent() {
     }
   }
 
-  if (loading) return <div className="text-center py-16 text-gray-400">불러오는 중...</div>
-  if (error) return <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">⚠️ {error}</div>
+  if (loading) return <div className="text-center py-16 text-gray-400 dark:text-gray-500">불러오는 중...</div>
+  if (error) return <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg p-4">⚠️ {error}</div>
   if (!article) return null
 
   const cat = article.category ? CAT_META[article.category] : null
@@ -107,25 +105,25 @@ function ArticleContent() {
   return (
     <div className="w-full">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-gray-400 mb-5 flex-wrap">
-        <Link href="/kb" className="hover:text-blue-600 transition-colors">지식베이스</Link>
+      <nav className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 mb-5 flex-wrap">
+        <Link href="/kb" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">지식베이스</Link>
         {cat && (
           <>
             <span>›</span>
-            <Link href={`/kb?category=${article.category}`} className="hover:text-blue-600 transition-colors">
+            <Link href={`/kb?category=${article.category}`} className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
               {cat.icon} {cat.label}
             </Link>
           </>
         )}
         <span>›</span>
-        <span className="text-gray-700 truncate">{article.title}</span>
+        <span className="text-gray-700 dark:text-gray-300 truncate">{article.title}</span>
       </nav>
 
       <div className="flex gap-6 items-start">
         {/* Main article */}
-        <article className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <article className="flex-1 min-w-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
           {/* Article header */}
-          <div className="p-6 border-b border-gray-100">
+          <div className="p-6 border-b border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-2 mb-3">
               {cat && (
                 <span className={`text-xs border px-2.5 py-0.5 rounded-full font-medium ${cat.color}`}>
@@ -133,16 +131,16 @@ function ArticleContent() {
                 </span>
               )}
               {!article.published && (
-                <span className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2.5 py-0.5 rounded-full">
+                <span className="text-xs bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-700 px-2.5 py-0.5 rounded-full">
                   초안 (비공개)
                 </span>
               )}
             </div>
 
-            <h1 className="text-2xl font-bold text-gray-900 mb-3 leading-tight">{article.title}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3 leading-tight">{article.title}</h1>
 
             <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-4 text-sm text-gray-500">
+              <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                 {article.author_name && (
                   <div className="flex items-center gap-1.5">
                     <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
@@ -160,7 +158,7 @@ function ArticleContent() {
                 <div className="flex gap-2 flex-shrink-0">
                   <Link
                     href={`/kb/${article.id}/edit`}
-                    className="text-xs border border-gray-300 px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+                    className="text-xs border border-gray-300 dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
                     ✏️ 수정
                   </Link>
@@ -168,7 +166,7 @@ function ArticleContent() {
                     onClick={handleTogglePublish}
                     className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
                       article.published
-                        ? 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                        ? 'border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
@@ -177,7 +175,7 @@ function ArticleContent() {
                   {isAdmin && (
                     <button
                       onClick={handleDelete}
-                      className="text-xs text-red-500 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                      className="text-xs text-red-500 border border-red-200 dark:border-red-700 px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     >
                       삭제
                     </button>
@@ -188,12 +186,12 @@ function ArticleContent() {
 
             {/* Tags */}
             {article.tags && article.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-gray-100">
+              <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                 {article.tags.map((tag) => (
                   <Link
                     key={tag}
                     href={`/kb?tag=${tag}`}
-                    className="text-xs bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600 rounded-full px-2.5 py-1 transition-colors"
+                    className="text-xs bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-700 dark:hover:text-blue-400 text-gray-600 dark:text-gray-400 rounded-full px-2.5 py-1 transition-colors"
                   >
                     #{tag}
                   </Link>
@@ -212,15 +210,15 @@ function ArticleContent() {
         <aside className="w-52 flex-shrink-0 space-y-4">
           {/* Table of Contents */}
           {headings.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">목차</div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">목차</div>
               <nav className="space-y-0.5">
                 {headings.map((h, i) => (
                   <a
                     key={i}
                     href={`#${h.id}`}
-                    className={`block text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded px-2 py-1 transition-colors leading-snug ${
-                      h.level === 1 ? 'font-medium' : h.level === 2 ? 'pl-4 text-gray-500' : 'pl-7 text-gray-400'
+                    className={`block text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded px-2 py-1 transition-colors leading-snug ${
+                      h.level === 1 ? 'font-medium' : h.level === 2 ? 'pl-4 text-gray-500 dark:text-gray-500' : 'pl-7 text-gray-400 dark:text-gray-600'
                     }`}
                   >
                     {h.text}
@@ -232,14 +230,14 @@ function ArticleContent() {
 
           {/* Related articles */}
           {related.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">관련 아티클</div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">관련 아티클</div>
               <div className="space-y-1">
                 {related.map((r) => (
                   <Link
                     key={r.id}
                     href={`/kb/${r.slug}`}
-                    className="block text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg px-2 py-1.5 transition-colors leading-snug"
+                    className="block text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg px-2 py-1.5 transition-colors leading-snug"
                   >
                     {r.title}
                   </Link>
@@ -249,21 +247,21 @@ function ArticleContent() {
           )}
 
           {/* Article info */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">정보</div>
-            <div className="flex justify-between text-xs text-gray-500">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
+            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">정보</div>
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
               <span>작성일</span>
               <span>{new Date(article.created_at).toLocaleDateString('ko-KR')}</span>
             </div>
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
               <span>최종 수정</span>
               <span>{new Date(article.updated_at).toLocaleDateString('ko-KR')}</span>
             </div>
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
               <span>조회</span>
               <span>{article.view_count}회</span>
             </div>
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
               <span>읽기 시간</span>
               <span>약 {mins}분</span>
             </div>

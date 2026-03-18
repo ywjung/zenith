@@ -10,7 +10,7 @@ interface User {
   email: string
   avatar_url?: string
   organization?: string
-  role: string  // 'admin' | 'agent' | 'developer' | 'user'
+  role: string  // 'admin' | 'agent' | 'pl' | 'developer' | 'user'
 }
 
 interface AuthContextType {
@@ -37,19 +37,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res.ok) return res.json()
+        // 401 = unauthenticated (expected); other errors = network/server issue
+        if (res.status !== 401) {
+          console.warn('[Auth] /auth/me returned', res.status)
+        }
+        return null
+      })
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setLoading(false))
   }, [])
 
   const logout = async () => {
-    await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' })
+    try {
+      await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' })
+    } catch {
+      // 네트워크 오류가 있어도 클라이언트 측 로그아웃 진행
+    }
+    sessionStorage.removeItem('itsm_search_history')
+    localStorage.removeItem('itsm_search_history') // clear legacy data written by older versions
     setUser(null)
     window.location.href = '/login'
   }
 
-  const isDeveloper = user?.role === 'developer' || user?.role === 'agent' || user?.role === 'admin'
+  const isDeveloper = user?.role === 'developer' || user?.role === 'pl' || user?.role === 'agent' || user?.role === 'admin'
   const isAgent = user?.role === 'agent' || user?.role === 'admin'
   const isAdmin = user?.role === 'admin'
 

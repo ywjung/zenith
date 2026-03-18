@@ -16,23 +16,26 @@ const STATUS_LABELS: Record<string, string> = {
   open: '접수', in_progress: '처리중', waiting: '대기', resolved: '해결', closed: '완료',
 }
 const PRIORITY_COLORS: Record<string, string> = {
-  critical: 'text-red-600', high: 'text-orange-500', medium: 'text-yellow-600', low: 'text-gray-500',
+  critical: 'text-red-500 dark:text-red-400',
+  high: 'text-orange-500 dark:text-orange-400',
+  medium: 'text-yellow-600 dark:text-yellow-400',
+  low: 'text-gray-500 dark:text-gray-400',
 }
 
 const HISTORY_KEY = 'itsm_search_history'
 const MAX_HISTORY = 6
 
 function loadHistory(): string[] {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') } catch { return [] }
+  try { return JSON.parse(sessionStorage.getItem(HISTORY_KEY) ?? '[]') } catch { return [] }
 }
 function saveHistory(q: string) {
   try {
     const prev = loadHistory().filter(h => h !== q)
-    localStorage.setItem(HISTORY_KEY, JSON.stringify([q, ...prev].slice(0, MAX_HISTORY)))
+    sessionStorage.setItem(HISTORY_KEY, JSON.stringify([q, ...prev].slice(0, MAX_HISTORY)))
   } catch { /* ignore */ }
 }
 function clearHistory() {
-  try { localStorage.removeItem(HISTORY_KEY) } catch { /* ignore */ }
+  try { sessionStorage.removeItem(HISTORY_KEY) } catch { /* ignore */ }
 }
 
 export default function GlobalSearch() {
@@ -40,28 +43,38 @@ export default function GlobalSearch() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [history, setHistory] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [searchError, setSearchError] = useState(false)
   const [open, setOpen] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const abortRef = useRef<AbortController>()
 
-  // 히스토리 로드 (클라이언트 전용)
   useEffect(() => { setHistory(loadHistory()) }, [])
+  useEffect(() => () => { abortRef.current?.abort() }, [])
 
   const search = useCallback(async (q: string) => {
-    if (q.length < 2) { setResults([]); return }
+    if (q.length < 2) { setResults([]); setSearchError(false); return }
+    abortRef.current?.abort()
+    abortRef.current = new AbortController()
     setLoading(true)
+    setSearchError(false)
     try {
       const res = await fetch(
         `${API_BASE}/tickets/search?q=${encodeURIComponent(q)}&per_page=8`,
-        { credentials: 'include', cache: 'no-store' },
+        { credentials: 'include', cache: 'no-store', signal: abortRef.current.signal },
       )
       if (res.ok) { setResults(await res.json()); setSelectedIndex(-1) }
-    } catch { setResults([]) }
+      else { setResults([]); setSearchError(true) }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') { setResults([]); setSearchError(true) }
+    }
     finally { setLoading(false) }
   }, [])
+
+  useEffect(() => () => clearTimeout(debounceRef.current), [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value
@@ -110,7 +123,6 @@ export default function GlobalSearch() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // 키보드 네비게이션 (히스토리 + 결과 통합)
   const allItems = query.length < 2
     ? history.map((h, i) => ({ type: 'history' as const, value: h, index: i }))
     : results.map((r, i) => ({ type: 'result' as const, value: r, index: i }))
@@ -134,7 +146,7 @@ export default function GlobalSearch() {
 
   return (
     <div ref={containerRef} className="relative hidden md:block">
-      {/* 입력창 */}
+      {/* 입력창 — 헤더가 파란색이라 입력창도 파란색 계열 유지 */}
       <div className="relative">
         <input
           ref={inputRef}
@@ -144,9 +156,9 @@ export default function GlobalSearch() {
           onKeyDown={handleKeyDown}
           onFocus={() => setOpen(true)}
           placeholder="티켓 검색… (⌘K)"
-          className="bg-blue-600 text-white placeholder-blue-300 text-sm px-3 py-1.5 pl-8 rounded-md w-52 focus:outline-none focus:ring-2 focus:ring-white/40 focus:w-72 transition-all"
+          className="bg-blue-600 dark:bg-blue-900/60 text-white placeholder-blue-300 dark:placeholder-blue-400 text-sm px-3 py-1.5 pl-8 rounded-md w-52 focus:outline-none focus:ring-2 focus:ring-white/40 focus:w-72 transition-all border-0"
         />
-        <svg className="absolute left-2 top-2 w-4 h-4 text-blue-300 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="absolute left-2 top-2 w-4 h-4 text-blue-300 dark:text-blue-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         {loading && (
@@ -159,16 +171,16 @@ export default function GlobalSearch() {
 
       {/* 드롭다운 */}
       {(showHistory || showResults) && (
-        <div className="absolute top-full mt-1 left-0 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+        <div className="absolute top-full mt-1 left-0 w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
 
           {/* 최근 검색 히스토리 */}
           {showHistory && (
             <>
-              <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
-                <span className="text-xs font-medium text-gray-500">최근 검색</span>
+              <div className="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">최근 검색</span>
                 <button
                   onClick={() => { clearHistory(); setHistory([]) }}
-                  className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                  className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                 >
                   전체 삭제
                 </button>
@@ -177,20 +189,24 @@ export default function GlobalSearch() {
                 <button
                   key={h}
                   onClick={() => applyHistory(h)}
-                  className={`w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 border-b border-gray-100 last:border-0 transition-colors ${i === selectedIndex ? 'bg-blue-50' : ''}`}
+                  className={`w-full text-left px-4 py-2.5 flex items-center gap-3 border-b border-gray-100 dark:border-gray-700/50 last:border-0 transition-colors ${
+                    i === selectedIndex
+                      ? 'bg-blue-50 dark:bg-blue-900/30'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  }`}
                 >
-                  <svg className="w-3.5 h-3.5 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-sm text-gray-700 flex-1 text-left">{h}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 text-left">{h}</span>
                   <button
                     onClick={e => {
                       e.stopPropagation()
                       const next = history.filter(x => x !== h)
-                      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+                      try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch { /* ignore */ }
                       setHistory(next)
                     }}
-                    className="text-gray-300 hover:text-gray-500 text-sm px-1"
+                    className="text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 text-sm px-1"
                   >
                     ×
                   </button>
@@ -206,30 +222,41 @@ export default function GlobalSearch() {
                 <button
                   key={r.iid}
                   onClick={() => navigateToTicket(r.iid, r.title)}
-                  className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 border-b border-gray-100 last:border-0 transition-colors ${i === selectedIndex ? 'bg-blue-50' : ''}`}
+                  className={`w-full text-left px-4 py-3 flex items-start gap-3 border-b border-gray-100 dark:border-gray-700/50 last:border-0 transition-colors ${
+                    i === selectedIndex
+                      ? 'bg-blue-50 dark:bg-blue-900/30'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  }`}
                 >
-                  <span className="text-gray-400 text-sm font-mono shrink-0">#{r.iid}</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-sm font-mono shrink-0">#{r.iid}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-gray-900 truncate">{r.title}</div>
+                    <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{r.title}</div>
                     <div className="flex gap-2 mt-0.5">
-                      <span className="text-xs text-gray-500">{STATUS_LABELS[r.status] ?? r.status}</span>
-                      <span className={`text-xs ${PRIORITY_COLORS[r.priority] ?? 'text-gray-500'}`}>{r.priority}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{STATUS_LABELS[r.status] ?? r.status}</span>
+                      <span className={`text-xs ${PRIORITY_COLORS[r.priority] ?? 'text-gray-500 dark:text-gray-400'}`}>{r.priority}</span>
                     </div>
                   </div>
                 </button>
               ))}
-              <div className="px-4 py-2 bg-gray-50 text-xs text-gray-400 flex justify-between">
+              <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 text-xs text-gray-400 dark:text-gray-500 flex justify-between">
                 <span>↑↓ 이동 · Enter 선택 · Esc 닫기</span>
                 <span>{results.length}개 결과</span>
               </div>
             </>
           )}
 
+          {/* 검색 오류 */}
+          {showResults && searchError && !loading && (
+            <div className="px-4 py-4 text-sm text-red-500 dark:text-red-400 text-center">
+              검색 중 오류가 발생했습니다. 다시 시도해 주세요.
+            </div>
+          )}
+
           {/* 결과 없음 */}
-          {showResults && results.length === 0 && !loading && (
-            <div className="px-4 py-4 text-sm text-gray-500 text-center">
+          {showResults && results.length === 0 && !loading && !searchError && (
+            <div className="px-4 py-4 text-sm text-gray-500 dark:text-gray-400 text-center">
               <span className="text-2xl block mb-1">🔍</span>
-              "{query}"에 대한 결과가 없습니다.
+              &quot;{query}&quot;에 대한 결과가 없습니다.
             </div>
           )}
         </div>

@@ -35,7 +35,8 @@ def _verify_signature(body: bytes, token: str) -> bool:
     if not secret:
         logger.error("GITLAB_WEBHOOK_SECRET not configured — rejecting all webhook requests (H-4 fail-closed)")
         return False  # H-4: fail-closed
-    return hmac.compare_digest(token, secret)
+    secret_str = secret if isinstance(secret, str) else secret.decode()
+    return hmac.compare_digest(token, secret_str)
 
 
 def _is_duplicate(event_uuid: str) -> bool:
@@ -73,7 +74,8 @@ async def gitlab_webhook(
         return JSONResponse({"status": "duplicate"})
 
     try:
-        payload: dict[str, Any] = await request.json()
+        import json as _json
+        payload: dict[str, Any] = _json.loads(body)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
@@ -118,6 +120,10 @@ def _handle_issue_hook(payload: dict) -> None:
                 if is_external:
                     _handle_external_issue(iid, project_id, attrs, payload)
 
+            # ── GitLab에서 직접 수정 → ITSM 내부 상태 동기화 (양방향 연동) ──
+            if action == "update":
+                _handle_issue_update(iid, project_id, payload)
+
             # Notify status change based on labels
             labels = [lb.get("title", "") for lb in payload.get("labels", [])]
             new_status = "open"
@@ -132,6 +138,71 @@ def _handle_issue_hook(payload: dict) -> None:
 
     except Exception as e:
         logger.error("Error handling issue hook: %s", e)
+
+
+def _handle_issue_update(iid: int, project_id: str, payload: dict) -> None:
+    """GitLab에서 직접 이슈를 수정했을 때 ITSM 감사 로그와 인앱 알림을 기록한다.
+
+    웹훅 루프 방지: GITLAB_BOT_USERNAME 설정 시 봇이 만든 변경은 무시한다.
+    실제 이슈 데이터는 GitLab이 source-of-truth이므로 별도 DB 저장 없이 알림만 발행.
+    """
+    try:
+        settings = get_settings()
+        actor_username = payload.get("user", {}).get("username", "")
+
+        # 루프 방지: ITSM 서비스 계정이 직접 만든 변경이면 스킵
+        bot_username = settings.GITLAB_BOT_USERNAME
+        if bot_username and actor_username == bot_username:
+            logger.debug("Issue update by bot account (%s) — skipping sync loop", actor_username)
+            return
+
+        changes = payload.get("changes", {})
+        if not changes:
+            return
+
+        # 변경된 필드 목록 추출
+        changed_fields: list[str] = []
+        if "title" in changes:
+            old = changes["title"].get("previous", "")
+            new = changes["title"].get("current", "")
+            if old != new:
+                changed_fields.append(f"제목: `{old}` → `{new}`")
+        if "description" in changes:
+            changed_fields.append("설명 변경됨")
+        if "assignees" in changes:
+            new_assignees = [a.get("username", "") for a in changes["assignees"].get("current", [])]
+            changed_fields.append(f"담당자: {', '.join(new_assignees) or '없음'}")
+        if "labels" in changes:
+            new_labels = [lb.get("title", "") for lb in (changes["labels"].get("current") or [])]
+            status = next((l[8:] for l in new_labels if l.startswith("status::")), None)
+            if status:
+                changed_fields.append(f"상태: {status}")
+
+        if not changed_fields:
+            return
+
+        actor_name = payload.get("user", {}).get("name", actor_username)
+        summary = " / ".join(changed_fields)
+        logger.info("Issue #%s updated directly in GitLab by %s: %s", iid, actor_name, summary)
+
+        # 티켓 신청자에게 인앱 알림 발송
+        attrs = payload.get("object_attributes", {})
+        description = attrs.get("description") or ""
+        submitter_username = _parse_submitter_username(description)
+        submitter_user_id = _get_gitlab_user_id_by_username(submitter_username) if submitter_username else None
+
+        if submitter_user_id:
+            with SessionLocal() as db:
+                create_db_notification(
+                    db,
+                    recipient_id=submitter_user_id,
+                    title=f"티켓 #{iid}이 GitLab에서 수정됐습니다",
+                    body=f"{actor_name}: {summary}",
+                    link=f"/tickets/{iid}",
+                )
+
+    except Exception as e:
+        logger.error("Error handling issue update #%s: %s", iid, e)
 
 
 def _handle_external_issue(iid: int, project_id: str, attrs: dict, payload: dict) -> None:
@@ -293,11 +364,11 @@ def _handle_note_hook(payload: dict) -> None:
 
         # 시스템 자동 노트 필터링 (ITSM 서비스 계정 코멘트는 알림 불필요)
         settings = get_settings()
-        service_token = settings.GITLAB_PROJECT_TOKEN
-        # 봇/시스템 코멘트 패턴 (자동 생성 메시지)
-        bot_patterns = ("🔀 MR !", "🔗 커밋(", "❌ 파이프라인 #")
-        if any(note_body.startswith(p) for p in bot_patterns):
-            logger.debug("Note hook: skipping bot comment on issue #%s", iid)
+        # H-14: author 기반 봇 필터링 (GitLab 14+의 bot 플래그 또는 설정된 봇 계정명)
+        note_author = payload.get("user", {})
+        BOT_USERNAMES = {"gitlab-bot", "itsm-bot", "automation-bot"}  # 필요 시 추가
+        if note_author.get("bot") or note_author.get("username", "") in BOT_USERNAMES:
+            logger.debug("Note hook: skipping bot author comment on issue #%s", iid)
             return
 
         # SLA first response 기록
@@ -315,18 +386,30 @@ def _handle_note_hook(payload: dict) -> None:
         submitter_username = _parse_submitter_username(description)
         submitter_user_id = _get_gitlab_user_id_by_username(submitter_username) if submitter_username else None
 
-        # 코멘트 작성자와 신청자가 다를 경우에만 알림
+        preview = note_body[:100] + ("..." if len(note_body) > 100 else "")
+        label = "내부 메모" if is_internal else "새 댓글"
+
+        # 알림 수신 대상: 신청자 + 담당 에이전트 (중복·본인 제외)
+        notify_targets: set[str] = set()
         if submitter_user_id and submitter_user_id != author_id:
-            preview = note_body[:100] + ("..." if len(note_body) > 100 else "")
-            label = "내부 메모" if is_internal else "새 댓글"
+            notify_targets.add(submitter_user_id)
+
+        # 담당 에이전트 알림 추가
+        for assignee in issue_data.get("assignees", []):
+            assignee_id = str(assignee.get("id", ""))
+            if assignee_id and assignee_id != author_id and assignee_id not in notify_targets:
+                notify_targets.add(assignee_id)
+
+        if notify_targets:
             with SessionLocal() as db:
-                create_db_notification(
-                    db,
-                    recipient_id=submitter_user_id,
-                    title=f"티켓 #{iid}에 {label}이 달렸습니다",
-                    body=f"{author_name}: {preview}",
-                    link=f"/tickets/{iid}",
-                )
+                for recipient_id in notify_targets:
+                    create_db_notification(
+                        db,
+                        recipient_id=recipient_id,
+                        title=f"티켓 #{iid}에 {label}이 달렸습니다",
+                        body=f"{author_name}: {preview}",
+                        link=f"/tickets/{iid}",
+                    )
 
         # 이메일 + 구독자 알림 (내부 메모 제외)
         if not is_internal:
@@ -362,18 +445,16 @@ _MR_HASH_RE = re.compile(r"#(\d+)")
 def _handle_mr_hook(payload: dict) -> None:
     """Handle GitLab Merge Request Hook events.
 
-    When an MR is merged, resolve any referenced ITSM tickets.
+    - merge: 연결된 ITSM 티켓 자동 해결
+    - open: 담당자에게 인앱 알림
+    - approved: 담당자에게 승인 알림
+    - close (with merge_status=cannot_be_merged): 충돌 알림
     """
-    import re as _re
     from .. import gitlab_client
 
     try:
         attrs = payload.get("object_attributes", {})
-        action = attrs.get("action")  # open, close, merge, update, etc.
-
-        if action != "merge":
-            return
-
+        action = attrs.get("action")  # open, close, merge, update, reopen, approved
         mr_iid = attrs.get("iid")
         project_id = str(payload.get("project", {}).get("id", ""))
         settings = get_settings()
@@ -382,6 +463,9 @@ def _handle_mr_hook(payload: dict) -> None:
         title = attrs.get("title", "")
         description = attrs.get("description") or ""
         combined = f"{title}\n{description}"
+        author = payload.get("user", {})
+        author_name = author.get("name", "")
+        mr_url = attrs.get("url", "")
 
         # Extract ticket iids from "Closes #N" / "Fixes #N" patterns, fallback to plain #N
         referenced: set[int] = set()
@@ -390,6 +474,69 @@ def _handle_mr_hook(payload: dict) -> None:
         if not referenced:
             for m in _MR_HASH_RE.finditer(combined):
                 referenced.add(int(m.group(1)))
+
+        # ── MR 생성: 연결 티켓 담당자에게 알림 ─────────────────────────────
+        if action == "open":
+            for ticket_iid in referenced:
+                try:
+                    issue = gitlab_client.get_issue(ticket_iid, project_id=main_project_id)
+                    assignees = issue.get("assignees", [])
+                    with SessionLocal() as db:
+                        for assignee in assignees:
+                            create_db_notification(
+                                db,
+                                recipient_id=str(assignee.get("id", "")),
+                                title=f"티켓 #{ticket_iid}에 MR이 열렸습니다",
+                                body=f"!{mr_iid} {title} — {author_name}",
+                                link=f"/tickets/{ticket_iid}",
+                            )
+                except Exception as e:
+                    logger.warning("MR open notify failed for ticket #%s: %s", ticket_iid, e)
+            return
+
+        # ── MR 승인: 관련 티켓 담당자에게 알림 ─────────────────────────────
+        if action == "approved":
+            for ticket_iid in referenced:
+                try:
+                    issue = gitlab_client.get_issue(ticket_iid, project_id=main_project_id)
+                    assignees = issue.get("assignees", [])
+                    with SessionLocal() as db:
+                        for assignee in assignees:
+                            create_db_notification(
+                                db,
+                                recipient_id=str(assignee.get("id", "")),
+                                title=f"티켓 #{ticket_iid} MR 승인됨",
+                                body=f"!{mr_iid} {title} — {author_name}이 승인했습니다.",
+                                link=f"/tickets/{ticket_iid}",
+                            )
+                except Exception as e:
+                    logger.warning("MR approve notify failed for ticket #%s: %s", ticket_iid, e)
+            return
+
+        # ── MR 충돌: 담당자에게 충돌 경고 ──────────────────────────────────
+        if action == "update":
+            merge_status = attrs.get("merge_status", "")
+            if merge_status == "cannot_be_merged":
+                for ticket_iid in referenced:
+                    try:
+                        issue = gitlab_client.get_issue(ticket_iid, project_id=main_project_id)
+                        assignees = issue.get("assignees", [])
+                        with SessionLocal() as db:
+                            for assignee in assignees:
+                                create_db_notification(
+                                    db,
+                                    recipient_id=str(assignee.get("id", "")),
+                                    title=f"티켓 #{ticket_iid} MR 충돌 발생",
+                                    body=f"!{mr_iid} {title} — 병합 충돌이 발생했습니다. 확인이 필요합니다.",
+                                    link=f"/tickets/{ticket_iid}",
+                                )
+                    except Exception as e:
+                        logger.warning("MR conflict notify failed for ticket #%s: %s", ticket_iid, e)
+            return
+
+        # ── MR 머지: 연결된 ITSM 티켓 자동 해결 ────────────────────────────
+        if action != "merge":
+            return
 
         if not referenced:
             logger.debug("MR !%s merged — no ticket references found", mr_iid)
@@ -423,6 +570,18 @@ def _handle_mr_hook(payload: dict) -> None:
 
                 with SessionLocal() as db:
                     sla_module.mark_resolved(db, ticket_iid, main_project_id)
+                    # CSAT 알림: 해결 시 만족도 조사 요청
+                    description_text = issue.get("description") or ""
+                    submitter_username = _parse_submitter_username(description_text)
+                    submitter_user_id = _get_gitlab_user_id_by_username(submitter_username) if submitter_username else None
+                    if submitter_user_id:
+                        create_db_notification(
+                            db,
+                            recipient_id=submitter_user_id,
+                            title=f"티켓 #{ticket_iid} 처리가 완료됐습니다",
+                            body="서비스 만족도를 평가해 주세요. 소중한 의견이 서비스 개선에 도움이 됩니다.",
+                            link=f"/tickets/{ticket_iid}",
+                        )
 
                 logger.info("MR !%s merge auto-resolved ticket #%s", mr_iid, ticket_iid)
             except Exception as e:
@@ -453,12 +612,20 @@ def _handle_push_hook(payload: dict) -> None:
         branch = payload.get("ref", "").replace("refs/heads/", "")
         project_name = payload.get("project", {}).get("name", "")
 
+        # H-35: IID 추출 수 제한으로 커밋 메시지 폭탄 방지
+        MAX_IIDS_PER_COMMIT = 10
+        MAX_IIDS_PER_PUSH = 50
+
         referenced: dict[int, list[str]] = {}  # iid → [commit_short_sha, ...]
         for commit in commits:
+            if len(referenced) >= MAX_IIDS_PER_PUSH:
+                break
             message = commit.get("message", "")
             short_sha = commit.get("id", "")[:8]
-            for m in _COMMIT_CLOSES_RE.finditer(message):
-                iid = int(m.group(1))
+            commit_iids = [int(m.group(1)) for m in _COMMIT_CLOSES_RE.finditer(message)][:MAX_IIDS_PER_COMMIT]
+            for iid in commit_iids:
+                if len(referenced) >= MAX_IIDS_PER_PUSH:
+                    break
                 referenced.setdefault(iid, []).append(short_sha)
 
         if not referenced:
@@ -503,12 +670,21 @@ def _handle_pipeline_hook(payload: dict) -> None:
         project_name = payload.get("project", {}).get("name", "")
 
         # Collect ticket references from commits in this pipeline
+        # H-35: IID 추출 수 제한으로 커밋 메시지 폭탄 방지
+        MAX_IIDS_PER_COMMIT = 10
+        MAX_IIDS_PER_PUSH = 50
+
         commits = payload.get("commits", [])
         referenced: set[int] = set()
         for commit in commits:
+            if len(referenced) >= MAX_IIDS_PER_PUSH:
+                break
             message = commit.get("message", "")
-            for m in _COMMIT_CLOSES_RE.finditer(message):
-                referenced.add(int(m.group(1)))
+            commit_iids = [int(m.group(1)) for m in _COMMIT_CLOSES_RE.finditer(message)][:MAX_IIDS_PER_COMMIT]
+            for iid in commit_iids:
+                if len(referenced) >= MAX_IIDS_PER_PUSH:
+                    break
+                referenced.add(iid)
 
         # Also check MR if available
         mr = payload.get("merge_request")

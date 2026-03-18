@@ -106,8 +106,8 @@ function EmailTemplatesContent() {
   return (
     <div className="w-full px-4 py-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">이메일 템플릿 관리</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">이메일 템플릿 관리</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           이벤트별 이메일 알림 내용을 커스터마이즈합니다. Jinja2 문법({`{{ 변수 }}`})을 지원합니다.
         </p>
       </div>
@@ -126,17 +126,17 @@ function EmailTemplatesContent() {
                   onClick={() => selectTemplate(tmpl)}
                   className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${
                     selected?.event_type === tmpl.event_type
-                      ? 'bg-blue-50 border-blue-300 text-blue-800'
-                      : 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600 text-blue-800 dark:text-blue-300'
+                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{meta.icon} {meta.label}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${tmpl.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${tmpl.enabled ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
                       {tmpl.enabled ? '활성' : '비활성'}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5 truncate">{meta.desc}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{meta.desc}</p>
                 </button>
               )
             })}
@@ -145,7 +145,7 @@ function EmailTemplatesContent() {
           {/* 우측: 편집 영역 */}
           {selected ? (
             <div className="flex-1 min-w-0">
-              <div className="bg-white rounded-lg border shadow-sm p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-lg font-semibold">
@@ -165,13 +165,13 @@ function EmailTemplatesContent() {
                     )}
                     {editing && (
                       <>
-                        <button onClick={handlePreview} disabled={previewLoading} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50">
+                        <button onClick={handlePreview} disabled={previewLoading} className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50">
                           {previewLoading ? '미리보기 중...' : '미리보기'}
                         </button>
                         <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
                           {saving ? '저장 중...' : '저장'}
                         </button>
-                        <button onClick={() => { selectTemplate(selected); setEditing(false) }} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
+                        <button onClick={() => { selectTemplate(selected); setEditing(false) }} className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md hover:bg-gray-50">
                           취소
                         </button>
                       </>
@@ -179,14 +179,14 @@ function EmailTemplatesContent() {
                   </div>
                 </div>
 
-                {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-md">{error}</div>}
-                {success && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-md">{success}</div>}
+                {error && <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 text-sm rounded-md">{error}</div>}
+                {success && <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 text-sm rounded-md">{success}</div>}
 
-                <div className="mb-4 p-3 bg-gray-50 rounded-md">
-                  <p className="text-xs font-medium text-gray-600 mb-1">사용 가능한 변수:</p>
+                <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md">
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">사용 가능한 변수:</p>
                   <div className="flex flex-wrap gap-1">
                     {(TEMPLATE_VARS[selected.event_type] ?? []).map(v => (
-                      <code key={v} className="text-xs bg-white border border-gray-200 px-1.5 py-0.5 rounded font-mono text-blue-600">
+                      <code key={v} className="text-xs bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 px-1.5 py-0.5 rounded font-mono text-blue-600 dark:text-blue-400">
                         {`{{ ${v} }}`}
                       </code>
                     ))}
@@ -194,42 +194,42 @@ function EmailTemplatesContent() {
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">제목</label>
                   {editing ? (
                     <input type="text" value={subject} onChange={e => setSubject(e.target.value)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                      className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   ) : (
-                    <div className="bg-gray-50 rounded-md px-3 py-2 text-sm font-mono text-gray-800">{selected.subject}</div>
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-md px-3 py-2 text-sm font-mono text-gray-800 dark:text-gray-200">{selected.subject}</div>
                   )}
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">HTML 본문</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">HTML 본문</label>
                   {editing ? (
                     <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={16}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y" />
+                      className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y" />
                   ) : (
-                    <pre className="bg-gray-50 rounded-md px-3 py-2 text-sm font-mono text-gray-800 overflow-x-auto whitespace-pre-wrap">{selected.html_body}</pre>
+                    <pre className="bg-gray-50 dark:bg-gray-700/50 rounded-md px-3 py-2 text-sm font-mono text-gray-800 dark:text-gray-200 overflow-x-auto whitespace-pre-wrap">{selected.html_body}</pre>
                   )}
                 </div>
 
                 {editing && (
                   <div className="flex items-center gap-3">
                     <input type="checkbox" id="enabled" checked={enabled} onChange={e => setEnabled(e.target.checked)} className="w-4 h-4 text-blue-600" />
-                    <label htmlFor="enabled" className="text-sm text-gray-700">템플릿 활성화 (비활성화 시 기본 하드코딩 템플릿 사용)</label>
+                    <label htmlFor="enabled" className="text-sm text-gray-700 dark:text-gray-300">템플릿 활성화 (비활성화 시 기본 하드코딩 템플릿 사용)</label>
                   </div>
                 )}
               </div>
 
               {preview && (
-                <div className="mt-4 bg-white rounded-lg border shadow-sm p-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">미리보기 (샘플 데이터)</h3>
-                  <div className="mb-3 p-2 bg-gray-50 rounded text-sm">
-                    <span className="font-medium text-gray-600">제목: </span>
-                    <span className="text-gray-900">{preview.subject}</span>
+                <div className="mt-4 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-6">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">미리보기 (샘플 데이터)</h3>
+                  <div className="mb-3 p-2 bg-gray-50 dark:bg-gray-700/50 rounded text-sm">
+                    <span className="font-medium text-gray-600 dark:text-gray-400">제목: </span>
+                    <span className="text-gray-900 dark:text-gray-100">{preview.subject}</span>
                   </div>
-                  <div className="border rounded-lg overflow-hidden">
-                    <div className="bg-gray-100 px-3 py-1.5 text-xs text-gray-500 border-b">HTML 렌더링</div>
+                  <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
+                    <div className="bg-gray-100 dark:bg-gray-700 px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-b dark:border-gray-600">HTML 렌더링</div>
                     {/* sandbox iframe — XSS 방지: script 실행 차단 */}
                     <iframe
                       srcDoc={preview.html_body}

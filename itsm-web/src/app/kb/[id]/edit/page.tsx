@@ -45,13 +45,13 @@ function EditKBContent() {
     return (
       <div className="text-center py-16">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500">에이전트 이상 권한이 필요합니다.</p>
+        <p className="text-gray-500 dark:text-gray-400">에이전트 이상 권한이 필요합니다.</p>
       </div>
     )
   }
 
-  if (loading) return <div className="text-center py-16 text-gray-400">불러오는 중...</div>
-  if (error) return <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">⚠️ {error}</div>
+  if (loading) return <div className="text-center py-16 text-gray-400 dark:text-gray-500">불러오는 중...</div>
+  if (error) return <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg p-4">⚠️ {error}</div>
   if (!article) return null
 
   function addTag() {
@@ -66,7 +66,7 @@ function EditKBContent() {
     setSubmitting(true)
     setSubmitError(null)
     try {
-      await updateKBArticle(article.id, {
+      const updated = await updateKBArticle(article.id, {
         title: form.title,
         slug: form.slug,
         content: form.content,
@@ -74,7 +74,7 @@ function EditKBContent() {
         published: form.published,
         tags,
       })
-      router.push(`/kb/${form.slug}`)
+      router.push(`/kb/${updated.slug}`)
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : '저장에 실패했습니다.')
       setSubmitting(false)
@@ -84,14 +84,14 @@ function EditKBContent() {
   return (
     <div className="w-full">
       <div className="mb-4">
-        <Link href={`/kb/${article.slug}`} className="text-sm text-blue-600 hover:underline">← 아티클로 돌아가기</Link>
+        <Link href={`/kb/${article.slug}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">← 아티클로 돌아가기</Link>
       </div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">아티클 수정</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">아티클 수정</h1>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Title */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
             제목 <span className="text-red-500 normal-case">*</span>
           </label>
           <input
@@ -99,30 +99,30 @@ function EditKBContent() {
             onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             required
             maxLength={300}
-            className="w-full text-xl font-semibold text-gray-900 focus:outline-none border-0 p-0"
+            className="w-full text-xl font-semibold text-gray-900 dark:text-gray-100 bg-transparent focus:outline-none border-0 p-0"
           />
-          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-400">
+          <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
             <span>/kb/</span>
             <input
               value={form.slug}
               onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
               maxLength={300}
-              className="flex-1 font-mono focus:outline-none text-gray-600"
+              className="flex-1 font-mono bg-transparent focus:outline-none text-gray-600 dark:text-gray-400"
             />
           </div>
         </div>
 
         {/* Category */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">카테고리</label>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">카테고리</label>
           <div className="grid grid-cols-6 gap-2">
             <button
               type="button"
               onClick={() => setForm((f) => ({ ...f, category: '' }))}
               className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${
                 form.category === ''
-                  ? 'border-blue-400 bg-blue-50 text-blue-700 shadow-sm'
-                  : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                  ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm'
+                  : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
               <span className="text-xl">—</span>
@@ -135,8 +135,8 @@ function EditKBContent() {
                 onClick={() => setForm((f) => ({ ...f, category: c.value }))}
                 className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${
                   form.category === c.value
-                    ? 'border-blue-400 bg-blue-50 text-blue-700 shadow-sm'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                    ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm'
+                    : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }`}
               >
                 <span className="text-xl">{c.emoji}</span>
@@ -147,8 +147,8 @@ function EditKBContent() {
         </div>
 
         {/* Editor */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">본문</label>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">본문</label>
           <RichTextEditor
             value={form.content}
             onChange={(html) => setForm((f) => ({ ...f, content: html }))}
@@ -159,8 +159,8 @@ function EditKBContent() {
         </div>
 
         {/* 파일 첨부 */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
             파일 첨부
           </label>
           <KBFileUpload
@@ -177,8 +177,8 @@ function EditKBContent() {
         </div>
 
         {/* Tags */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">태그</label>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">태그</label>
           <div className="flex gap-2 mb-2">
             <input
               type="text"
@@ -186,14 +186,20 @@ function EditKBContent() {
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() } }}
               placeholder="태그 입력 후 Enter 또는 쉼표"
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <button type="button" onClick={addTag} className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">추가</button>
+            <button
+              type="button"
+              onClick={addTag}
+              className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              추가
+            </button>
           </div>
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {tags.map((t) => (
-                <span key={t} className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-1">
+                <span key={t} className="inline-flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 rounded-full px-2.5 py-1">
                   #{t}
                   <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== t))} className="hover:text-red-500 ml-0.5">×</button>
                 </span>
@@ -203,26 +209,29 @@ function EditKBContent() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-4 bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
+        <div className="flex items-center justify-between gap-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm px-5 py-4">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setForm((f) => ({ ...f, published: !f.published }))}
-              className={`relative w-11 h-6 rounded-full transition-colors ${form.published ? 'bg-green-500' : 'bg-gray-300'}`}
+              className={`relative w-11 h-6 rounded-full transition-colors ${form.published ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
             >
               <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${form.published ? 'left-6' : 'left-1'}`} />
             </button>
             <div>
-              <div className="text-sm font-medium text-gray-700">{form.published ? '공개' : '초안 (비공개)'}</div>
-              <div className="text-xs text-gray-400">
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{form.published ? '공개' : '초안 (비공개)'}</div>
+              <div className="text-xs text-gray-400 dark:text-gray-500">
                 {form.published ? '모든 사용자에게 공개됩니다' : '나중에 공개할 수 있습니다'}
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {submitError && <span className="text-sm text-red-600">⚠️ {submitError}</span>}
-            <Link href={`/kb/${article.slug}`} className="border border-gray-300 px-5 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+            {submitError && <span className="text-sm text-red-600 dark:text-red-400">⚠️ {submitError}</span>}
+            <Link
+              href={`/kb/${article.slug}`}
+              className="border border-gray-300 dark:border-gray-600 px-5 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
               취소
             </Link>
             <button

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from '@/lib/api'
 import type { NotificationItem } from '@/types'
@@ -13,27 +13,37 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const loadNotifications = async () => {
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reconnectAttemptsRef = useRef(0)
+  const eventSourceRef = useRef<EventSource | null>(null)
+
+  const loadNotifications = async (signal?: AbortSignal) => {
     setLoading(true)
     try {
       const data = await fetchNotifications(20)
+      if (signal?.aborted) return
       setNotifications(data.notifications)
       setUnreadCount(data.unread_count)
     } catch {
       // silently ignore
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) setLoading(false)
     }
   }
 
-  useEffect(() => {
-    loadNotifications()
-
-    // SSE for real-time notifications
-    let eventSource: EventSource | null = null
+  const connectSSE = useCallback((signal: AbortSignal) => {
+    if (signal.aborted) return
     try {
-      eventSource = new EventSource(`${API_BASE}/notifications/stream`, { withCredentials: true })
-      eventSource.onmessage = (e) => {
+      const es = new EventSource(`${API_BASE}/notifications/stream`, { withCredentials: true })
+      eventSourceRef.current = es
+
+      es.onopen = () => {
+        reconnectAttemptsRef.current = 0
+      }
+
+      es.onmessage = (e) => {
+        if (signal.aborted) return
+        reconnectAttemptsRef.current = 0
         try {
           const payload = JSON.parse(e.data) as NotificationItem
           setNotifications((prev) => [{ ...payload, is_read: false }, ...prev.slice(0, 19)])
@@ -42,19 +52,36 @@ export default function NotificationBell() {
           // ignore parse errors
         }
       }
-      eventSource.onerror = () => {
-        eventSource?.close()
+
+      es.onerror = () => {
+        es.close()
+        eventSourceRef.current = null
+        if (signal.aborted) return
+        reconnectAttemptsRef.current++
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30000)
+        reconnectRef.current = setTimeout(() => connectSSE(signal), delay)
       }
     } catch {
       // SSE not supported or error
     }
-
-    return () => {
-      eventSource?.close()
-    }
   }, [])
 
-  // Close dropdown on outside click
+  useEffect(() => {
+    const controller = new AbortController()
+    loadNotifications(controller.signal)
+    connectSSE(controller.signal)
+
+    return () => {
+      controller.abort()
+      if (reconnectRef.current !== null) {
+        clearTimeout(reconnectRef.current)
+        reconnectRef.current = null
+      }
+      eventSourceRef.current?.close()
+      eventSourceRef.current = null
+    }
+  }, [connectSSE])
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -66,15 +93,23 @@ export default function NotificationBell() {
   }, [])
 
   const handleMarkRead = async (id: number) => {
-    await markNotificationRead(id)
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)))
-    setUnreadCount((c) => Math.max(0, c - 1))
+    try {
+      await markNotificationRead(id)
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)))
+      setUnreadCount((c) => Math.max(0, c - 1))
+    } catch {
+      // silently ignore — UI state remains unchanged
+    }
   }
 
   const handleMarkAllRead = async () => {
-    await markAllNotificationsRead()
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
-    setUnreadCount(0)
+    try {
+      await markAllNotificationsRead()
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
+      setUnreadCount(0)
+    } catch {
+      // silently ignore
+    }
   }
 
   function formatTime(iso: string) {
@@ -103,30 +138,34 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-xl border z-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-            <span className="font-semibold text-gray-800 text-sm">알림</span>
+        <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+            <span className="font-semibold text-gray-800 dark:text-gray-100 text-sm">알림</span>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
-                className="text-xs text-blue-600 hover:underline"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
               >
                 모두 읽음
               </button>
             )}
           </div>
 
+          {/* 목록 */}
           <div className="max-h-80 overflow-y-auto">
             {loading ? (
-              <div className="text-center py-8 text-gray-400 text-sm">불러오는 중...</div>
+              <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">불러오는 중...</div>
             ) : notifications.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">알림이 없습니다.</div>
+              <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">알림이 없습니다.</div>
             ) : (
               notifications.map((n) => (
                 <div
                   key={n.id}
-                  className={`px-4 py-3 border-b last:border-b-0 hover:bg-gray-50 transition-colors ${
-                    !n.is_read ? 'bg-blue-50' : ''
+                  className={`px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 last:border-b-0 transition-colors ${
+                    !n.is_read
+                      ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -134,7 +173,7 @@ export default function NotificationBell() {
                       {n.link ? (
                         <Link
                           href={n.link}
-                          className="font-medium text-gray-900 text-sm truncate block hover:text-blue-600"
+                          className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate block hover:text-blue-600 dark:hover:text-blue-400"
                           onClick={() => {
                             if (!n.is_read) handleMarkRead(n.id)
                             setOpen(false)
@@ -143,12 +182,12 @@ export default function NotificationBell() {
                           {n.title}
                         </Link>
                       ) : (
-                        <p className="font-medium text-gray-900 text-sm truncate">{n.title}</p>
+                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">{n.title}</p>
                       )}
                       {n.body && (
-                        <p className="text-xs text-gray-500 mt-0.5 truncate">{n.body}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{n.body}</p>
                       )}
-                      <p className="text-xs text-gray-400 mt-1">{formatTime(n.created_at)}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{formatTime(n.created_at)}</p>
                     </div>
                     {!n.is_read && (
                       <button
@@ -163,11 +202,11 @@ export default function NotificationBell() {
             )}
           </div>
 
-          {/* 구독·알림 설정 링크 */}
-          <div className="border-t px-4 py-2.5 bg-gray-50 flex items-center justify-between gap-2">
+          {/* 푸터 링크 */}
+          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-2.5 bg-gray-50 dark:bg-gray-900 flex items-center justify-between gap-2">
             <Link
               href="/notifications"
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
               onClick={() => setOpen(false)}
             >
               <span>🔔</span>
@@ -175,7 +214,7 @@ export default function NotificationBell() {
             </Link>
             <Link
               href="/notifications?tab=prefs"
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
               onClick={() => setOpen(false)}
             >
               <span>⚙️</span>

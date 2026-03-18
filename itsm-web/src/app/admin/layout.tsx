@@ -17,6 +17,7 @@ const MENU_GROUPS: MenuGroup[] = [
     adminOnly: true,
     items: [
       { href: '/admin/users', label: '사용자 관리', icon: '👤', desc: '역할 부여 · 계정 관리' },
+      { href: '/admin/role-labels', label: '역할 명칭 설정', icon: '🏷️', desc: '역할 표시 이름 커스터마이즈' },
     ],
   },
   {
@@ -25,6 +26,7 @@ const MENU_GROUPS: MenuGroup[] = [
     adminOnly: true,
     items: [
       { href: '/admin/sla-policies', label: 'SLA 정책', icon: '⏱️', desc: '우선순위별 목표 시간' },
+      { href: '/admin/business-hours', label: '업무 시간 설정', icon: '🕘', desc: '공휴일 · 요일별 업무 시간' },
       { href: '/admin/escalation-policies', label: '에스컬레이션', icon: '🚨', desc: 'SLA 위반 자동 액션' },
     ],
   },
@@ -34,7 +36,10 @@ const MENU_GROUPS: MenuGroup[] = [
     adminOnly: true,
     items: [
       { href: '/admin/assignment-rules', label: '자동 배정 규칙', icon: '⚡', desc: '티켓 자동 담당자 배정' },
+      { href: '/admin/automation-rules', label: '자동화 규칙', icon: '🤖', desc: '이벤트 기반 자동 액션' },
       { href: '/admin/service-types', label: '서비스 유형', icon: '🗂️', desc: '카테고리 · 색상 관리' },
+      { href: '/admin/custom-fields', label: '커스텀 필드', icon: '📝', desc: '티켓 추가 입력 필드 정의' },
+      { href: '/admin/service-catalog', label: '서비스 카탈로그', icon: '📦', desc: '포털 신청 카탈로그 항목 관리' },
     ],
   },
   {
@@ -43,6 +48,7 @@ const MENU_GROUPS: MenuGroup[] = [
     adminOnly: true,
     items: [
       { href: '/admin/announcements', label: '공지사항 / 배너', icon: '📢', desc: '시스템 공지 · 배너 관리' },
+      { href: '/admin/notification-channels', label: '알림 채널 설정', icon: '🔔', desc: '이메일 · 텔레그램 발송 ON/OFF' },
       { href: '/admin/email-templates', label: '이메일 템플릿', icon: '📧', desc: 'Jinja2 이메일 편집' },
       { href: '/admin/outbound-webhooks', label: '아웃바운드 웹훅', icon: '🔗', desc: 'Slack · Teams 연동' },
       { href: '/admin/api-keys', label: 'API 키', icon: '🔑', desc: '외부 시스템 인증 키' },
@@ -59,10 +65,19 @@ const MENU_GROUPS: MenuGroup[] = [
     ],
   },
   {
+    group: '리포트',
+    icon: '📈',
+    adminOnly: true,
+    items: [
+      { href: '/admin/workload', label: '업무 현황 및 성과', icon: '📈', desc: '담당·완료율·SLA·성과등급' },
+    ],
+  },
+  {
     group: '보안 & 감사',
     icon: '🔍',
-    adminOnly: false,
+    adminOnly: true,
     items: [
+      { href: '/admin/ip-allowlist', label: 'IP 접근 제한', icon: '🛡️', desc: '관리자 API CIDR 허용 목록' },
       { href: '/admin/audit', label: '감사 로그', icon: '🔍', desc: '변경 이력 · IP 추적' },
     ],
   },
@@ -83,7 +98,7 @@ function AdminSidebar({ pathname, isAdmin }: { pathname: string; isAdmin: boolea
             {/* 그룹 헤더 */}
             <div className="flex items-center gap-1.5 px-3 pt-4 pb-1 first:pt-0">
               <span className="text-xs">{group.icon}</span>
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                 {group.group}
               </span>
             </div>
@@ -97,15 +112,15 @@ function AdminSidebar({ pathname, isAdmin }: { pathname: string; isAdmin: boolea
                   className={`flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg transition-all text-sm ${
                     isActive
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                 >
                   <span className="text-base w-5 text-center shrink-0">{item.icon}</span>
                   <div className="min-w-0">
-                    <div className={`font-medium leading-tight ${isActive ? 'text-white' : 'text-gray-800'}`}>
+                    <div className={`font-medium leading-tight ${isActive ? 'text-white' : 'text-gray-800 dark:text-gray-200'}`}>
                       {item.label}
                     </div>
-                    <div className={`text-xs leading-tight mt-0.5 truncate ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
+                    <div className={`text-xs leading-tight mt-0.5 truncate ${isActive ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'}`}>
                       {item.desc}
                     </div>
                   </div>
@@ -133,13 +148,13 @@ function AdminMobileMenu({ pathname, isAdmin }: { pathname: string; isAdmin: boo
     <div className="relative md:hidden mb-4">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm"
+        className="w-full flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 shadow-sm"
       >
         <div className="flex items-center gap-2.5">
           <span className="text-lg">{current?.icon ?? '⚙️'}</span>
           <div className="text-left">
-            <div className="text-sm font-semibold text-gray-900">{current?.label ?? '메뉴 선택'}</div>
-            {current && <div className="text-xs text-gray-400">{current.desc}</div>}
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{current?.label ?? '메뉴 선택'}</div>
+            {current && <div className="text-xs text-gray-400 dark:text-gray-500">{current.desc}</div>}
           </div>
         </div>
         <svg
@@ -151,11 +166,11 @@ function AdminMobileMenu({ pathname, isAdmin }: { pathname: string; isAdmin: boo
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden">
           {MENU_GROUPS.filter(g => !g.adminOnly || isAdmin).map(group => (
             <div key={group.group}>
-              <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                   {group.icon} {group.group}
                 </span>
               </div>
@@ -166,18 +181,18 @@ function AdminMobileMenu({ pathname, isAdmin }: { pathname: string; isAdmin: boo
                     key={item.href}
                     href={item.href}
                     onClick={() => setOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0 transition-colors ${
+                    className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 dark:border-gray-700/50 last:border-0 transition-colors ${
                       isActive
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                     }`}
                   >
                     <span className="text-base w-5 text-center">{item.icon}</span>
                     <div>
-                      <div className={`text-sm font-medium ${isActive ? 'text-blue-700' : 'text-gray-800'}`}>
+                      <div className={`text-sm font-medium ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'}`}>
                         {item.label}
                       </div>
-                      <div className="text-xs text-gray-400">{item.desc}</div>
+                      <div className="text-xs text-gray-400 dark:text-gray-500">{item.desc}</div>
                     </div>
                     {isActive && (
                       <svg className="ml-auto w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
@@ -205,9 +220,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const currentGroup = MENU_GROUPS.find(g => g.items.some(i => i.href === pathname))
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* 상단 헤더 */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
         <div className="w-full px-4 md:px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white shadow-sm shrink-0">
@@ -219,21 +234,21 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-gray-900">시스템 관리</h1>
+                <h1 className="text-base font-bold text-gray-900 dark:text-gray-100">시스템 관리</h1>
                 {currentGroup && (
                   <>
-                    <span className="text-gray-300">/</span>
-                    <span className="text-sm text-gray-500">{currentGroup.group}</span>
+                    <span className="text-gray-300 dark:text-gray-600">/</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{currentGroup.group}</span>
                     {currentItem && (
                       <>
-                        <span className="text-gray-300">/</span>
-                        <span className="text-sm font-medium text-blue-600">{currentItem.label}</span>
+                        <span className="text-gray-300 dark:text-gray-600">/</span>
+                        <span className="text-sm font-medium text-blue-600 dark:text-blue-400">{currentItem.label}</span>
                       </>
                     )}
                   </>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mt-0.5 truncate">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
                 {currentItem?.desc ?? '사용자·SLA·자동화·보안 설정을 관리합니다'}
               </p>
             </div>
@@ -249,7 +264,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         {/* 데스크톱: 사이드바 + 콘텐츠 */}
         <div className="hidden md:flex gap-6 items-start">
           {/* 사이드바 */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 sticky top-6">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-3 sticky top-6">
             <AdminSidebar pathname={pathname} isAdmin={isAdmin} />
           </div>
 

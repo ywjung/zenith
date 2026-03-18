@@ -10,9 +10,9 @@ interface Announcement {
 }
 
 const TYPE_STYLES: Record<string, string> = {
-  info: 'bg-blue-50 border-blue-400 text-blue-800',
-  warning: 'bg-yellow-50 border-yellow-400 text-yellow-800',
-  critical: 'bg-red-50 border-red-500 text-red-900',
+  info: 'bg-blue-50 dark:bg-blue-900/20 border-blue-400 dark:border-blue-600 text-blue-800 dark:text-blue-300',
+  warning: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-400 dark:border-yellow-600 text-yellow-800 dark:text-yellow-300',
+  critical: 'bg-red-50 dark:bg-red-900/20 border-red-500 dark:border-red-600 text-red-900 dark:text-red-300',
 }
 const TYPE_ICONS: Record<string, string> = { info: 'ℹ️', warning: '⚠️', critical: '🚨' }
 

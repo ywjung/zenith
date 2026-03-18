@@ -3,7 +3,8 @@ import type {
   TicketStats, TicketListResponse, KBArticle, KBArticleCreate, UserRole, AuditLogEntry,
   AssignmentRule, SLARecord, NotificationItem, TicketTemplate, TimeEntry, TicketLink,
   RatingStats, RealtimeStats, BreakdownStats, DevProject, ProjectForward, ForwardsResponse,
-  SLAPolicy, AgentPerformance, SavedFilter, LinkedMR, ServiceType,
+  SLAPolicy, AgentPerformance, SavedFilter, LinkedMR, ServiceType, Milestone,
+  CustomFieldDef, TicketCustomFieldValue, DoraMetrics,
 } from '@/types'
 import { API_BASE } from '@/lib/constants'
 
@@ -88,6 +89,11 @@ export function fetchProjectMembers(projectId: string): Promise<ProjectMember[]>
   return request<ProjectMember[]>(`/projects/${projectId}/members`)
 }
 
+export function fetchMilestones(projectId: string, state = 'active'): Promise<Milestone[]> {
+  const qs = new URLSearchParams({ state })
+  return request<Milestone[]>(`/projects/${encodeURIComponent(projectId)}/milestones?${qs}`)
+}
+
 // ---------------------------------------------------------------------------
 // Tickets
 // ---------------------------------------------------------------------------
@@ -135,12 +141,11 @@ export function fetchComments(iid: number, projectId?: string): Promise<Comment[
 }
 
 export async function fetchRating(iid: number): Promise<Rating | null> {
-  const res = await fetch(`${API_BASE}/tickets/${iid}/ratings`, {
-    cache: 'no-store',
-  })
-  if (res.status === 404 || !res.ok) return null
-  const data = await res.json()
-  return data ?? null
+  try {
+    return await request<Rating>(`/tickets/${iid}/ratings`)
+  } catch {
+    return null
+  }
 }
 
 export async function deleteTicket(iid: number, projectId?: string): Promise<void> {
@@ -150,7 +155,9 @@ export async function deleteTicket(iid: number, projectId?: string): Promise<voi
     credentials: 'include',
   })
   if (res.status === 401) {
-    window.location.href = '/login'
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login'
+    }
     throw new Error('로그인이 필요합니다.')
   }
   if (!res.ok) {
@@ -165,6 +172,7 @@ export async function updateTicket(
     status?: string; priority?: string; assignee_id?: number;
     title?: string; description?: string; category?: string;
     resolution_note?: string; resolution_type?: string; change_reason?: string;
+    milestone_id?: number;
   },
   projectId?: string,
   etag?: string,  // 낙관적 락용 If-Match 헤더
@@ -232,7 +240,9 @@ export async function uploadFile(
     cache: 'no-store',
   })
   if (res.status === 401) {
-    window.location.href = '/login'
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login'
+    }
     throw new Error('로그인이 필요합니다.')
   }
   if (!res.ok) {
@@ -258,6 +268,11 @@ export function updateRating(iid: number, data: { score: number; comment?: strin
 
 export function getMyRating(iid: number): Promise<Rating | null> {
   return request<Rating | null>(`/tickets/${iid}/ratings/me`)
+}
+
+export function mergeTicket(iid: number, targetIid: number, projectId?: string): Promise<{ merged: true; target_iid: number }> {
+  const qs = new URLSearchParams({ target_iid: String(targetIid), ...(projectId ? { project_id: projectId } : {}) }).toString()
+  return request<{ merged: true; target_iid: number }>(`/tickets/${iid}/merge?${qs}`, { method: 'POST' })
 }
 
 export function fetchTicketSLA(iid: number, projectId?: string): Promise<SLARecord> {
@@ -359,6 +374,11 @@ export function publishKBArticle(id: number, published: boolean): Promise<{ id: 
 
 export function fetchAdminUsers(): Promise<UserRole[]> {
   return request('/admin/users')
+}
+
+/** 고위험 관리 작업 전 Sudo 재인증 — HttpOnly 쿠키 itsm_sudo 를 서버가 설정한다. */
+export function triggerSudo(): Promise<{ ok: boolean; expires_in: number }> {
+  return request('/auth/sudo', { method: 'POST' })
 }
 
 export function updateUserRole(gitlabUserId: number, role: string): Promise<{ gitlab_user_id: number; role: string }> {
@@ -524,6 +544,10 @@ export function fetchAgentPerformance(params?: { from?: string; to?: string; pro
   return request<AgentPerformance[]>(`/reports/agent-performance${buildQuery(params)}`)
 }
 
+export function fetchDoraMetrics(params?: { days?: number; project_id?: string }): Promise<DoraMetrics> {
+  return request<DoraMetrics>(`/reports/dora${buildQuery(params)}`)
+}
+
 // ---------------------------------------------------------------------------
 // F-1: SLA Policies
 // ---------------------------------------------------------------------------
@@ -564,6 +588,37 @@ export function deleteSavedFilter(id: number): Promise<void> {
 
 export function fetchServiceTypes(): Promise<ServiceType[]> {
   return request('/admin/service-types')
+}
+
+// Custom Fields
+export function fetchCustomFieldDefs(includeDisabled = false): Promise<CustomFieldDef[]> {
+  return request(`/admin/custom-fields${includeDisabled ? '?include_disabled=true' : ''}`)
+}
+
+export function createCustomFieldDef(data: {
+  name: string; label: string; field_type: string; options?: string[]; required?: boolean; sort_order?: number
+}): Promise<CustomFieldDef> {
+  return request('/admin/custom-fields', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export function updateCustomFieldDef(id: number, data: Partial<{
+  label: string; field_type: string; options: string[]; required: boolean; enabled: boolean; sort_order: number
+}>): Promise<CustomFieldDef> {
+  return request(`/admin/custom-fields/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+export function deleteCustomFieldDef(id: number): Promise<void> {
+  return request(`/admin/custom-fields/${id}`, { method: 'DELETE' })
+}
+
+export function fetchTicketCustomFields(iid: number, projectId?: string): Promise<TicketCustomFieldValue[]> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request(`/tickets/${iid}/custom-fields${qs}`)
+}
+
+export function setTicketCustomFields(iid: number, values: Record<string, string | null>, projectId?: string): Promise<TicketCustomFieldValue[]> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request(`/tickets/${iid}/custom-fields${qs}`, { method: 'PUT', body: JSON.stringify(values) })
 }
 
 export interface FilterOption { key: string; label: string; emoji?: string; color?: string }

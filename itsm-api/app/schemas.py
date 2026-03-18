@@ -49,7 +49,7 @@ class BulkActionEnum(str, Enum):
 class TicketCreate(BaseModel):
     title: str = Field(..., min_length=5, max_length=200, description="제목")
     description: str = Field(..., min_length=10, max_length=10000, description="상세 내용")
-    category: str = Field(..., description="hardware|software|network|account|other")
+    category: CategoryEnum = Field(..., description="서비스 유형 value")
     priority: PriorityEnum = Field(default=PriorityEnum.MEDIUM, description="우선순위")
     employee_name: str = Field(..., min_length=2, max_length=100, description="신청자 이름")
     employee_email: EmailStr = Field(..., description="신청자 이메일")
@@ -59,14 +59,7 @@ class TicketCreate(BaseModel):
     location: Optional[str] = Field(default=None, max_length=100, description="위치")
     sla_due_date: Optional[date] = Field(default=None, description="요청 처리 기한 (YYYY-MM-DD)")
     confidential: bool = False
-
-    @field_validator("category")
-    @classmethod
-    def validate_category(cls, v: str) -> str:
-        allowed = {e.value for e in CategoryEnum}
-        if v not in allowed:
-            raise ValueError(f"허용된 카테고리: {', '.join(allowed)}")
-        return v
+    milestone_id: Optional[int] = Field(default=None, description="GitLab 마일스톤 ID")
 
 
 class TicketResponse(BaseModel):
@@ -88,6 +81,8 @@ class TicketResponse(BaseModel):
     assignee_id: Optional[int] = None
     assignee_name: Optional[str] = None
     assignee_username: Optional[str] = None
+    milestone_id: Optional[int] = None
+    milestone_title: Optional[str] = None
 
 
 class CommentResponse(BaseModel):
@@ -97,6 +92,9 @@ class CommentResponse(BaseModel):
     author_avatar: Optional[str] = None
     created_at: str
     internal: bool = False
+
+
+VALID_RESOLUTION_TYPES = {"resolved", "duplicate", "wontfix", "cannot_reproduce", "not_a_bug"}
 
 
 class TicketUpdate(BaseModel):
@@ -110,20 +108,19 @@ class TicketUpdate(BaseModel):
     resolution_note: Optional[str] = Field(default=None, max_length=5000, description="해결 방법 요약")
     resolution_type: Optional[str] = Field(
         default=None,
-        description="해결 유형: permanent_fix|workaround|no_action|duplicate|by_mr"
+        description="해결 유형: resolved|duplicate|wontfix|cannot_reproduce|not_a_bug"
     )
     # 상태 변경 이유 (모든 상태 전환에 적용)
     change_reason: Optional[str] = Field(default=None, max_length=500, description="상태 변경 이유")
+    milestone_id: Optional[int] = Field(default=None, description="GitLab 마일스톤 ID (0 = 해제)")
 
-    @field_validator("category")
+    @field_validator("resolution_type")
     @classmethod
-    def validate_category(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        allowed = {e.value for e in CategoryEnum}
-        if v not in allowed:
-            raise ValueError(f"허용된 카테고리: {', '.join(allowed)}")
+    def validate_resolution_type(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in VALID_RESOLUTION_TYPES:
+            raise ValueError(f"허용된 해결 유형: {', '.join(sorted(VALID_RESOLUTION_TYPES))}")
         return v
+
 
 
 class CommentCreate(BaseModel):
@@ -199,6 +196,8 @@ class SLARecordResponse(BaseModel):
     resolved_at: Optional[datetime] = None
     breached: bool = False
     breach_notified: bool = False
+    paused_at: Optional[datetime] = None
+    total_paused_seconds: int = 0
 
     class Config:
         from_attributes = True

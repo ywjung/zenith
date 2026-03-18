@@ -1,5 +1,10 @@
+import logging
 from functools import lru_cache
+
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -22,6 +27,8 @@ class Settings(BaseSettings):
     # GitLab이 ITSM으로 이벤트를 보낼 웹훅 URL (개발 프로젝트 전달 실시간 동기화용)
     # Docker 내부: http://itsm-api:8000/webhooks/gitlab
     ITSM_WEBHOOK_URL: str = ""
+    # ITSM 서비스 계정 GitLab username — 웹훅 루프 방지용 (설정 안 하면 봇 필터 비적용)
+    GITLAB_BOT_USERNAME: str = ""
 
     # App
     SECRET_KEY: str = "change_me_to_random_32char_string"
@@ -98,11 +105,41 @@ class Settings(BaseSettings):
     # GitLab group member sync interval (seconds, S-6) — 퇴사자 동기화
     USER_SYNC_INTERVAL: int = 3600  # 1시간
 
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def secret_key_must_be_strong(cls, v: str) -> str:
+        weak_defaults = {"change_me", "secret", "your-secret-key", "development-key"}
+        if v.lower() in weak_defaults or len(v) < 32:
+            raise ValueError(
+                "SECRET_KEY가 너무 약합니다. 최소 32자 이상의 강력한 랜덤 키를 설정해 주세요."
+            )
+        return v
+
+    @field_validator("GITLAB_PROJECT_TOKEN")
+    @classmethod
+    def warn_if_no_gitlab_token(cls, v: str) -> str:
+        if not v:
+            logger.warning(
+                "GITLAB_PROJECT_TOKEN이 설정되지 않았습니다. GitLab 연동 기능이 제한됩니다."
+            )
+        return v
+
+    @model_validator(mode="after")
+    def log_environment(self) -> "Settings":
+        logger.info("🚀 Starting ITSM in '%s' mode", self.ENVIRONMENT)
+        return self
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
 
 
-@lru_cache
+@lru_cache()
 def get_settings() -> Settings:
+    """Load settings once and cache for process lifetime.
+
+    Note: Settings changes require process restart.
+    For config reload in production, call get_settings.cache_clear()
+    followed by get_settings() to reinitialize.
+    """
     return Settings()

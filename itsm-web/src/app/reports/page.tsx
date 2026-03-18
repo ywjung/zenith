@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { fetchTrends, exportReport, fetchRatingStats, fetchCurrentStats, fetchBreakdown, fetchAgentPerformance } from '@/lib/api'
+import { fetchTrends, exportReport, fetchRatingStats, fetchCurrentStats, fetchBreakdown, fetchAgentPerformance, fetchDoraMetrics } from '@/lib/api'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
+import { useRoleLabels } from '@/context/RoleLabelsContext'
+import { useServiceTypes } from '@/context/ServiceTypesContext'
 import { formatName } from '@/lib/utils'
-import type { RatingStats, RealtimeStats, BreakdownStats, AgentPerformance } from '@/types'
+import type { RatingStats, RealtimeStats, BreakdownStats, AgentPerformance, DoraMetrics, DoraMetricItem } from '@/types'
 
 type TrendRow = {
   snapshot_date: string
@@ -27,6 +29,11 @@ function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+function thisMonthStart(): string {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+}
+
 function SummarySection({ from, to }: { from: string; to: string }) {
   const [ticket, setTicket] = useState<RealtimeStats | null>(null)
   const [rating, setRating] = useState<RatingStats | null>(null)
@@ -36,12 +43,15 @@ function SummarySection({ from, to }: { from: string; to: string }) {
   useEffect(() => {
     setLoading(true)
     setError(false)
-    Promise.all([
+    Promise.allSettled([
       fetchCurrentStats({ from, to }),
       fetchRatingStats({ from, to }),
     ])
-      .then(([t, r]) => { setTicket(t); setRating(r) })
-      .catch(() => setError(true))
+      .then(([tResult, rResult]) => {
+        if (tResult.status === 'fulfilled') setTicket(tResult.value)
+        if (rResult.status === 'fulfilled') setRating(rResult.value)
+        if (tResult.status === 'rejected' && rResult.status === 'rejected') setError(true)
+      })
       .finally(() => setLoading(false))
   }, [from, to])
 
@@ -50,21 +60,21 @@ function SummarySection({ from, to }: { from: string; to: string }) {
     : 0
 
   const cards = [
-    { label: '신규 티켓', value: ticket?.new,          color: 'text-blue-600',   border: 'border-blue-100' },
-    { label: '처리 완료', value: ticket?.closed,        color: 'text-green-600',  border: 'border-green-100' },
-    { label: 'SLA 위반',  value: ticket?.sla_breached,  color: 'text-red-600',    border: 'border-red-100' },
+    { label: '신규 티켓', value: ticket?.new,          color: 'text-blue-600',   border: 'border-blue-100 dark:border-blue-900/50' },
+    { label: '처리 완료', value: ticket?.closed,        color: 'text-green-600',  border: 'border-green-100 dark:border-green-900/50' },
+    { label: 'SLA 위반',  value: ticket?.sla_breached,  color: 'text-red-600',    border: 'border-red-100 dark:border-red-900/50' },
     {
       label: '평균 만족도',
       value: rating?.average !== null && rating?.average !== undefined
         ? rating.average.toFixed(1)
         : '-',
-      color: 'text-yellow-500', border: 'border-yellow-100',
+      color: 'text-yellow-500', border: 'border-yellow-100 dark:border-yellow-900/50',
       sub: rating?.average != null
         ? '★'.repeat(Math.round(rating.average)) + '☆'.repeat(5 - Math.round(rating.average))
         : null,
     },
-    { label: '평가 건수',   value: rating?.total,       color: 'text-indigo-600', border: 'border-indigo-100' },
-    { label: '만족 비율',   value: `${satisfactionPct}%`, color: 'text-teal-600', border: 'border-teal-100',
+    { label: '평가 건수',   value: rating?.total,       color: 'text-indigo-600', border: 'border-indigo-100 dark:border-indigo-900/50' },
+    { label: '만족 비율',   value: `${satisfactionPct}%`, color: 'text-teal-600', border: 'border-teal-100 dark:border-teal-900/50',
       sub: '4점 이상' },
   ]
 
@@ -72,9 +82,9 @@ function SummarySection({ from, to }: { from: string; to: string }) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-white border rounded-lg p-5 shadow-sm text-center animate-pulse">
-            <div className="h-9 bg-gray-200 rounded mb-2 mx-auto w-14" />
-            <div className="h-3 bg-gray-100 rounded mx-auto w-16" />
+          <div key={i} className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-5 shadow-sm text-center animate-pulse">
+            <div className="h-9 bg-gray-200 dark:bg-gray-700 rounded mb-2 mx-auto w-14" />
+            <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded mx-auto w-16" />
           </div>
         ))}
       </div>
@@ -83,7 +93,7 @@ function SummarySection({ from, to }: { from: string; to: string }) {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-6 text-sm">
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg p-4 mb-6 text-sm">
         ⚠️ 통계를 불러오지 못했습니다.
       </div>
     )
@@ -92,10 +102,10 @@ function SummarySection({ from, to }: { from: string; to: string }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
       {cards.map(({ label, value, color, border, sub }) => (
-        <div key={label} className={`bg-white border ${border} rounded-lg p-4 shadow-sm text-center`}>
+        <div key={label} className={`bg-white dark:bg-gray-900 border dark:border-gray-700 ${border} rounded-lg p-4 shadow-sm text-center`}>
           <div className={`text-3xl font-bold ${color}`}>{value ?? '-'}</div>
           {sub && <div className="text-xs text-yellow-400 mt-0.5">{sub}</div>}
-          <div className="text-xs text-gray-500 mt-1">{label}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{label}</div>
         </div>
       ))}
     </div>
@@ -120,25 +130,25 @@ function RatingDetail({ from, to }: { from: string; to: string }) {
 
   return (
     <>
-      <hr className="my-8 border-gray-200" />
-      <h2 className="text-lg font-bold text-gray-800 mb-4">만족도 상세</h2>
+      <hr className="my-8 border-gray-200 dark:border-gray-700" />
+      <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">만족도 상세</h2>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 점수 분포 */}
-        <div className="bg-white border rounded-lg p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">점수 분포</h3>
+        <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">점수 분포</h3>
           <div className="space-y-3">
             {[5, 4, 3, 2, 1].map((score) => {
               const count = stats.distribution[score] ?? 0
               const pct = stats.total > 0 ? Math.round(count / stats.total * 100) : 0
               return (
                 <div key={score} className="flex items-center gap-3">
-                  <div className="w-24 text-xs text-gray-500 shrink-0">
+                  <div className="w-24 text-xs text-gray-500 dark:text-gray-400 shrink-0">
                     {'★'.repeat(score)} {scoreLabels[score]}
                   </div>
-                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="flex-1 h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full ${scoreColors[score]}`} style={{ width: `${pct}%` }} />
                   </div>
-                  <div className="w-14 text-right text-xs text-gray-500 shrink-0">{count}건 ({pct}%)</div>
+                  <div className="w-14 text-right text-xs text-gray-500 dark:text-gray-400 shrink-0">{count}건 ({pct}%)</div>
                 </div>
               )
             })}
@@ -146,11 +156,11 @@ function RatingDetail({ from, to }: { from: string; to: string }) {
         </div>
 
         {/* 최근 평가 */}
-        <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b bg-gray-50">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">최근 평가</h3>
+        <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">최근 평가</h3>
           </div>
-          <div className="divide-y max-h-64 overflow-y-auto">
+          <div className="divide-y dark:divide-gray-700 max-h-64 overflow-y-auto">
             {stats.recent.map((r) => (
               <div key={r.id} className="px-5 py-3 flex items-start gap-3">
                 <span className="text-yellow-400 text-sm shrink-0">{'★'.repeat(r.score)}{'☆'.repeat(5 - r.score)}</span>
@@ -159,12 +169,12 @@ function RatingDetail({ from, to }: { from: string; to: string }) {
                     <Link href={`/tickets/${r.gitlab_issue_iid}`} className="text-blue-600 hover:underline font-medium">
                       #{r.gitlab_issue_iid}
                     </Link>
-                    <span className="text-gray-600">{r.employee_name}</span>
-                    <span className="text-gray-400">{new Date(r.created_at).toLocaleDateString('ko-KR')}</span>
+                    <span className="text-gray-600 dark:text-gray-300">{r.employee_name}</span>
+                    <span className="text-gray-400 dark:text-gray-500">{new Date(r.created_at).toLocaleDateString('ko-KR')}</span>
                   </div>
-                  {r.comment && <p className="text-xs text-gray-500 mt-0.5 truncate">&ldquo;{r.comment}&rdquo;</p>}
+                  {r.comment && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">&ldquo;{r.comment}&rdquo;</p>}
                 </div>
-                <span className="text-sm font-bold text-gray-600 shrink-0">{r.score}점</span>
+                <span className="text-sm font-bold text-gray-600 dark:text-gray-300 shrink-0">{r.score}점</span>
               </div>
             ))}
           </div>
@@ -174,24 +184,29 @@ function RatingDetail({ from, to }: { from: string; to: string }) {
   )
 }
 
-const STATUS_KO: Record<string, string> = { open: '접수됨', in_progress: '처리중', resolved: '처리완료', closed: '종료' }
-const STATUS_COLOR: Record<string, string> = {
-  open: 'text-blue-600 border-blue-100',
-  in_progress: 'text-orange-600 border-orange-100',
-  resolved: 'text-green-600 border-green-100',
-  closed: 'text-gray-600 border-gray-100',
+const STATUS_KO: Record<string, string> = {
+  open: '접수됨', approved: '승인완료', in_progress: '처리중',
+  waiting: '대기중', resolved: '처리완료', testing: '테스트중',
+  ready_for_release: '운영배포전', released: '운영반영완료', closed: '종료',
+}
+const STATUS_COLOR: Record<string, { text: string; border: string }> = {
+  open:             { text: 'text-blue-600',   border: 'border-blue-100 dark:border-blue-900/50' },
+  approved:         { text: 'text-teal-600',   border: 'border-teal-100 dark:border-teal-900/50' },
+  in_progress:      { text: 'text-yellow-600', border: 'border-yellow-100 dark:border-yellow-900/50' },
+  waiting:          { text: 'text-purple-600', border: 'border-purple-100 dark:border-purple-900/50' },
+  resolved:         { text: 'text-green-600',  border: 'border-green-100 dark:border-green-900/50' },
+  testing:          { text: 'text-violet-600', border: 'border-violet-100 dark:border-violet-900/50' },
+  ready_for_release:{ text: 'text-orange-600', border: 'border-orange-100 dark:border-orange-900/50' },
+  released:         { text: 'text-indigo-600', border: 'border-indigo-100 dark:border-indigo-900/50' },
+  closed:           { text: 'text-gray-500',   border: 'border-gray-200 dark:border-gray-700' },
 }
 const PRIORITY_KO: Record<string, string> = { critical: '긴급', high: '높음', medium: '보통', low: '낮음' }
 const PRIORITY_COLOR: Record<string, string> = {
   critical: 'bg-red-500', high: 'bg-orange-400', medium: 'bg-yellow-400', low: 'bg-blue-400',
 }
 const PRIORITY_ORDER = ['critical', 'high', 'medium', 'low']
-const CATEGORY_KO: Record<string, string> = {
-  network: '네트워크', hardware: '하드웨어', software: '소프트웨어',
-  account: '계정/권한', other: '기타', '기타': '기타',
-}
-
 function BreakdownSection({ from, to }: { from: string; to: string }) {
+  const { getLabel: getCatLabel } = useServiceTypes()
   const [data, setData] = useState<BreakdownStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -205,14 +220,14 @@ function BreakdownSection({ from, to }: { from: string; to: string }) {
 
   if (loading) return (
     <div className="mt-8">
-      <div className="h-5 bg-gray-200 rounded w-32 mb-4 animate-pulse" />
-      <div className="h-24 bg-gray-100 rounded animate-pulse" />
+      <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-4 animate-pulse" />
+      <div className="h-24 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
     </div>
   )
   if (!data) return null
 
   const total = data.total
-  const statuses = ['open', 'in_progress', 'resolved', 'closed'] as const
+  const statuses = ['open', 'approved', 'in_progress', 'waiting', 'resolved', 'testing', 'ready_for_release', 'released', 'closed'] as const
 
   // 카테고리 정렬 (건수 내림차순)
   const catEntries = Object.entries(data.by_category).sort((a, b) => b[1] - a[1])
@@ -224,21 +239,21 @@ function BreakdownSection({ from, to }: { from: string; to: string }) {
 
   return (
     <>
-      <hr className="my-8 border-gray-200" />
-      <h2 className="text-lg font-bold text-gray-800 mb-4">기간 내 티켓 현황</h2>
+      <hr className="my-8 border-gray-200 dark:border-gray-700" />
+      <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">기간 내 티켓 현황</h2>
 
       {/* 상태별 카드 */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
-          <div className="text-3xl font-bold text-gray-800">{total}</div>
-          <div className="text-xs text-gray-500 mt-1">전체</div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-3 mb-6">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm text-center">
+          <div className="text-3xl font-bold text-gray-800 dark:text-gray-100">{total}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">전체</div>
         </div>
         {statuses.map((s) => (
-          <div key={s} className={`bg-white border ${STATUS_COLOR[s].split(' ')[1]} rounded-lg p-4 shadow-sm text-center`}>
-            <div className={`text-3xl font-bold ${STATUS_COLOR[s].split(' ')[0]}`}>
+          <div key={s} className={`bg-white dark:bg-gray-900 border ${STATUS_COLOR[s]?.border ?? 'border-gray-200 dark:border-gray-700'} rounded-lg p-4 shadow-sm text-center`}>
+            <div className={`text-3xl font-bold ${STATUS_COLOR[s]?.text ?? 'text-gray-600'}`}>
               {data.by_status[s] ?? 0}
             </div>
-            <div className="text-xs text-gray-500 mt-1">{STATUS_KO[s]}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{STATUS_KO[s]}</div>
           </div>
         ))}
       </div>
@@ -246,23 +261,23 @@ function BreakdownSection({ from, to }: { from: string; to: string }) {
       {/* 카테고리별 / 우선순위별 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 카테고리별 */}
-        <div className="bg-white border rounded-lg p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">카테고리별</h3>
+        <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">카테고리별</h3>
           {catEntries.length === 0 ? (
-            <p className="text-sm text-gray-400">데이터 없음</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">데이터 없음</p>
           ) : (
             <div className="space-y-3">
               {catEntries.map(([cat, count]) => {
                 const pct = Math.round(count / maxCat * 100)
                 return (
                   <div key={cat} className="flex items-center gap-3">
-                    <div className="w-24 text-xs text-gray-600 shrink-0 truncate">
-                      {CATEGORY_KO[cat] ?? cat}
+                    <div className="w-24 text-xs text-gray-600 dark:text-gray-400 shrink-0 truncate">
+                      {getCatLabel(cat)}
                     </div>
-                    <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="flex-1 h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                       <div className="h-full rounded-full bg-blue-400" style={{ width: `${pct}%` }} />
                     </div>
-                    <div className="w-16 text-right text-xs text-gray-600 shrink-0">
+                    <div className="w-16 text-right text-xs text-gray-600 dark:text-gray-400 shrink-0">
                       {count}건 ({total > 0 ? Math.round(count / total * 100) : 0}%)
                     </div>
                   </div>
@@ -273,23 +288,23 @@ function BreakdownSection({ from, to }: { from: string; to: string }) {
         </div>
 
         {/* 우선순위별 */}
-        <div className="bg-white border rounded-lg p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">우선순위별</h3>
+        <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">우선순위별</h3>
           {prioEntries.length === 0 ? (
-            <p className="text-sm text-gray-400">데이터 없음</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">데이터 없음</p>
           ) : (
             <div className="space-y-3">
               {prioEntries.map(([prio, count]) => {
                 const pct = Math.round(count / maxPrio * 100)
                 return (
                   <div key={prio} className="flex items-center gap-3">
-                    <div className="w-24 text-xs text-gray-600 shrink-0">
+                    <div className="w-24 text-xs text-gray-600 dark:text-gray-400 shrink-0">
                       {PRIORITY_KO[prio] ?? prio}
                     </div>
-                    <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="flex-1 h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${PRIORITY_COLOR[prio] ?? 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
                     </div>
-                    <div className="w-16 text-right text-xs text-gray-600 shrink-0">
+                    <div className="w-16 text-right text-xs text-gray-600 dark:text-gray-400 shrink-0">
                       {count}건 ({total > 0 ? Math.round(count / total * 100) : 0}%)
                     </div>
                   </div>
@@ -328,49 +343,49 @@ function TrendTable({ from, to }: { from: string; to: string }) {
         }
         setRows(Array.from(map.values()).sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date)))
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false))
   }, [from, to])
 
   return (
     <>
-      <hr className="my-8 border-gray-200" />
-      <h2 className="text-lg font-bold text-gray-800 mb-4">일별 스냅샷 추이</h2>
+      <hr className="my-8 border-gray-200 dark:border-gray-700" />
+      <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">일별 스냅샷 추이</h2>
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4 text-sm">⚠️ {error}</div>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg p-4 mb-4 text-sm">⚠️ {error}</div>
       )}
       {loading ? (
-        <div className="text-center py-12 text-gray-400">불러오는 중...</div>
+        <div className="text-center py-12 text-gray-400 dark:text-gray-500">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-gray-400 dark:text-gray-500">
           <p>해당 기간에 스냅샷 데이터가 없습니다.</p>
-          <p className="text-xs mt-1 text-gray-300">스냅샷은 매일 자정에 자동 생성됩니다.</p>
+          <p className="text-xs mt-1 text-gray-300 dark:text-gray-600">스냅샷은 매일 자정에 자동 생성됩니다.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">날짜</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-300">날짜</th>
                 <th className="px-4 py-3 text-right font-semibold text-blue-600">당일 신규</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">접수됨</th>
-                <th className="px-4 py-3 text-right font-semibold text-orange-600">처리 중<span className="font-normal text-xs text-gray-400 ml-1">(대기·완료 포함)</span></th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-600 dark:text-gray-300">접수됨</th>
+                <th className="px-4 py-3 text-right font-semibold text-orange-600">처리 중<span className="font-normal text-xs text-gray-400 dark:text-gray-500 ml-1">(대기·완료 포함)</span></th>
                 <th className="px-4 py-3 text-right font-semibold text-green-600">누적 종료</th>
                 <th className="px-4 py-3 text-right font-semibold text-red-600">누적 SLA 위반</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y dark:divide-gray-700">
               {rows.map((row) => (
-                <tr key={row.snapshot_date} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-mono text-gray-700">{row.snapshot_date}</td>
+                <tr key={row.snapshot_date} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="px-4 py-2 font-mono text-gray-700 dark:text-gray-300">{row.snapshot_date}</td>
                   <td className="px-4 py-2 text-right text-blue-600 font-medium">{row.total_new}</td>
-                  <td className="px-4 py-2 text-right text-gray-600">{row.total_open}</td>
+                  <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{row.total_open}</td>
                   <td className="px-4 py-2 text-right text-orange-600">{row.total_in_progress}</td>
                   <td className="px-4 py-2 text-right text-green-600">{row.total_closed}</td>
                   <td className="px-4 py-2 text-right">
                     {row.total_breached > 0
                       ? <span className="text-red-600 font-medium">{row.total_breached}</span>
-                      : <span className="text-gray-300">0</span>}
+                      : <span className="text-gray-300 dark:text-gray-600">0</span>}
                   </td>
                 </tr>
               ))}
@@ -394,27 +409,27 @@ function AgentPerformanceSection({ from, to }: { from: string; to: string }) {
       .finally(() => setLoading(false))
   }, [from, to])
 
-  if (loading) return <div className="text-center py-12 text-gray-400">불러오는 중...</div>
-  if (data.length === 0) return <div className="text-center py-12 text-gray-400">해당 기간에 데이터가 없습니다.</div>
+  if (loading) return <div className="text-center py-12 text-gray-400 dark:text-gray-500">불러오는 중...</div>
+  if (data.length === 0) return <div className="text-center py-12 text-gray-400 dark:text-gray-500">해당 기간에 데이터가 없습니다.</div>
 
   return (
-    <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b">
+        <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
           <tr>
-            <th className="px-4 py-3 text-left font-semibold text-gray-600">담당자</th>
+            <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-300">담당자</th>
             <th className="px-4 py-3 text-right font-semibold text-blue-600">배정</th>
             <th className="px-4 py-3 text-right font-semibold text-green-600">처리완료</th>
             <th className="px-4 py-3 text-right font-semibold text-yellow-500">평균 만족도</th>
             <th className="px-4 py-3 text-right font-semibold text-purple-600">SLA 준수율</th>
           </tr>
         </thead>
-        <tbody className="divide-y">
+        <tbody className="divide-y dark:divide-gray-700">
           {data.map((agent) => (
-            <tr key={agent.agent_username} className="hover:bg-gray-50">
+            <tr key={agent.agent_username} className="hover:bg-gray-50 dark:hover:bg-gray-800">
               <td className="px-4 py-3">
-                <div className="font-medium text-gray-800">{formatName(agent.agent_name)}</div>
-                <div className="text-xs text-gray-400">@{agent.agent_username}</div>
+                <div className="font-medium text-gray-800 dark:text-gray-100">{formatName(agent.agent_name)}</div>
+                <div className="text-xs text-gray-400 dark:text-gray-500">@{agent.agent_username}</div>
               </td>
               <td className="px-4 py-3 text-right text-blue-600 font-medium">{agent.assigned}</td>
               <td className="px-4 py-3 text-right text-green-600 font-medium">{agent.resolved}</td>
@@ -422,7 +437,7 @@ function AgentPerformanceSection({ from, to }: { from: string; to: string }) {
                 {agent.avg_rating != null ? (
                   <span className="text-yellow-500 font-medium">{agent.avg_rating.toFixed(1)}★</span>
                 ) : (
-                  <span className="text-gray-300">-</span>
+                  <span className="text-gray-300 dark:text-gray-600">-</span>
                 )}
               </td>
               <td className="px-4 py-3 text-right">
@@ -431,7 +446,7 @@ function AgentPerformanceSection({ from, to }: { from: string; to: string }) {
                     {agent.sla_met_rate.toFixed(0)}%
                   </span>
                 ) : (
-                  <span className="text-gray-300">-</span>
+                  <span className="text-gray-300 dark:text-gray-600">-</span>
                 )}
               </td>
             </tr>
@@ -442,11 +457,81 @@ function AgentPerformanceSection({ from, to }: { from: string; to: string }) {
   )
 }
 
+const GRADE_COLOR: Record<string, string> = {
+  Elite:  'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+  High:   'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  Medium: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  Low:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  'N/A':  'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+}
+
+function DoraCard({ title, metric, icon }: { title: string; metric: DoraMetricItem; icon: string }) {
+  const gradeClass = GRADE_COLOR[metric.grade] ?? GRADE_COLOR['N/A']
+  return (
+    <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-5 shadow-sm flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{icon} {title}</span>
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${gradeClass}`}>{metric.grade}</span>
+      </div>
+      <div className="text-3xl font-bold text-gray-900 dark:text-white">
+        {metric.value !== null ? metric.value.toLocaleString() : '—'}
+        <span className="text-base font-normal text-gray-500 dark:text-gray-400 ml-1">{metric.unit}</span>
+      </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500">{metric.description}</p>
+      {metric.resolved_count !== undefined && (
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          완료 {metric.resolved_count}건 / 재오픈 {metric.reopened_count}건
+        </p>
+      )}
+    </div>
+  )
+}
+
+function DoraSection({ days }: { days: number }) {
+  const [data, setData] = useState<DoraMetrics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(false)
+    fetchDoraMetrics({ days })
+      .then(setData)
+      .catch(() => setError(true))
+      .finally(() => setLoading(false))
+  }, [days])
+
+  if (loading) return <div className="py-10 text-center text-gray-400 text-sm">로딩 중...</div>
+  if (error || !data) return <div className="py-10 text-center text-red-400 text-sm">DORA 지표를 불러오지 못했습니다.</div>
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">DORA 4대 지표</h2>
+        <span className="text-xs text-gray-400 dark:text-gray-500">최근 {data.period_days}일 기준</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <DoraCard title="배포 빈도" metric={data.deployment_frequency} icon="🚀" />
+        <DoraCard title="리드타임" metric={data.lead_time} icon="⏱️" />
+        <DoraCard title="변경 실패율" metric={data.change_failure_rate} icon="🔁" />
+        <DoraCard title="평균 복구 시간 (MTTR)" metric={data.mttr} icon="🛠️" />
+      </div>
+      <div className="mt-3 text-xs text-gray-400 dark:text-gray-500 flex gap-4 flex-wrap">
+        {Object.entries(GRADE_COLOR).map(([grade, cls]) => (
+          <span key={grade} className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{grade}</span>
+        ))}
+        <span className="text-gray-400">— DORA Research 2023 기준</span>
+      </div>
+    </div>
+  )
+}
+
 function ReportsContent() {
-  const { isAgent } = useAuth()
+  const { isAgent, isAdmin } = useAuth()
+  const roleLabels = useRoleLabels()
   const [from, setFrom] = useState(daysAgo(30))
   const [to, setTo] = useState(today())
-  const [tab, setTab] = useState<'overview' | 'agents'>('overview')
+  const [tab, setTab] = useState<'overview' | 'agents' | 'dora'>('overview')
 
   if (!isAgent) {
     return (
@@ -457,41 +542,61 @@ function ReportsContent() {
   }
 
   const csvUrl = exportReport({ from, to })
+  const agentLabel = roleLabels.agent ?? 'IT 담당자'
 
   return (
     <div>
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">📊 리포트</h1>
-        <a href={csvUrl} className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700">
-          ⬇️ CSV 다운로드
-        </a>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📊 리포트</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">기간별 티켓 현황 · 만족도 · 담당자 성과</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link
+              href="/admin/workload"
+              className="text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 px-3 py-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              📈 업무 현황
+            </Link>
+          )}
+          <a href={csvUrl} className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700 transition-colors">
+            ⬇️ CSV 다운로드
+          </a>
+        </div>
       </div>
 
       {/* 날짜 필터 */}
-      <div className="bg-white border rounded-lg p-4 mb-6 shadow-sm flex flex-wrap gap-4 items-center">
+      <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-4 mb-6 shadow-sm flex flex-wrap gap-4 items-center">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600 whitespace-nowrap">시작일</label>
+          <label className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">시작일</label>
           <input
             type="date" value={from} max={to}
             onChange={(e) => setFrom(e.target.value)}
-            className="border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border dark:border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 dark:text-gray-200"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600 whitespace-nowrap">종료일</label>
+          <label className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">종료일</label>
           <input
             type="date" value={to} min={from} max={today()}
             onChange={(e) => setTo(e.target.value)}
-            className="border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border dark:border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 dark:text-gray-200"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => { setFrom(thisMonthStart()); setTo(today()) }}
+            className="text-sm border dark:border-gray-600 px-3 py-1.5 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            이번 달
+          </button>
           {[{ label: '7일', days: 7 }, { label: '30일', days: 30 }, { label: '90일', days: 90 }].map(({ label, days }) => (
             <button
               key={days}
               onClick={() => { setFrom(daysAgo(days)); setTo(today()) }}
-              className="text-sm border px-3 py-1.5 rounded-md text-gray-600 hover:bg-gray-50"
+              className="text-sm border dark:border-gray-600 px-3 py-1.5 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               최근 {label}
             </button>
@@ -500,15 +605,19 @@ function ReportsContent() {
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-6 border-b">
-        {([['overview', '전체 현황'], ['agents', '에이전트 성과']] as const).map(([key, label]) => (
+      <div className="flex gap-1 mb-6 border-b dark:border-gray-700">
+        {([
+          ['overview', '전체 현황'],
+          ['agents', `담당자 성과`],
+          ['dora', 'DORA 지표'],
+        ] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === key
                 ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
           >
             {label}
@@ -518,25 +627,22 @@ function ReportsContent() {
 
       {tab === 'overview' && (
         <>
-          {/* 기간 요약 통계 (6개 카드) */}
           <SummarySection from={from} to={to} />
-
-          {/* 기간 내 상태별·카테고리별·우선순위별 */}
           <BreakdownSection from={from} to={to} />
-
-          {/* 만족도 분포 + 최근 평가 */}
           <RatingDetail from={from} to={to} />
-
-          {/* 일별 스냅샷 추이 */}
           <TrendTable from={from} to={to} />
         </>
       )}
 
       {tab === 'agents' && (
         <>
-          <h2 className="text-lg font-bold text-gray-800 mb-4">에이전트 성과</h2>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">{agentLabel} 성과</h2>
           <AgentPerformanceSection from={from} to={to} />
         </>
+      )}
+
+      {tab === 'dora' && (
+        <DoraSection days={Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) || 30} />
       )}
     </div>
   )

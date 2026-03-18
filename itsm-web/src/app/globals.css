@@ -1,6 +1,63 @@
+@import 'tippy.js/dist/tippy.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* =========================================================
+   다크 모드 — CSS 변수 기반 기반 레이어
+   Tailwind dark: 클래스와 충돌하지 않도록 유틸리티
+   클래스를 전역으로 override하지 않습니다.
+   ========================================================= */
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+/* @멘션 표시 스타일 */
+.mention {
+  @apply bg-blue-50 text-blue-700 rounded px-1 font-medium;
+}
+.dark .mention {
+  @apply bg-blue-900/30 text-blue-300;
+}
+
+@layer base {
+  /* 페이지 최상위 배경 · 기본 텍스트 */
+  html,
+  body {
+    @apply bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100;
+  }
+
+  /* 기본 입력 요소 다크 스타일 */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  textarea,
+  select {
+    @apply dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    @apply dark:text-gray-500;
+  }
+
+  /* 스크롤바 다크 */
+  .dark ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .dark ::-webkit-scrollbar-track {
+    background: #111827; /* gray-900 */
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #374151; /* gray-700 */
+    border-radius: 3px;
+  }
+}
 
 /* =========================================================
    모바일 반응형 유틸리티
@@ -35,6 +92,15 @@
     flex-shrink: 0;
     margin-right: 0.5rem;
   }
+}
+
+/* 모바일 카드 다크 모드 */
+.dark .mobile-card-table tbody tr {
+  border-color: #374151;
+  background: #1f2937;
+}
+.dark .mobile-card-table tbody td::before {
+  color: #9ca3af;
 }
 
 /* 헤더 모바일 — 네비게이션 줄바꿈 방지 */
@@ -76,15 +142,22 @@
 
 /* 터치 영역 최소 크기 보장 (WCAG 2.5.5) */
 @media (max-width: 768px) {
-  button, a[role="button"], [role="tab"] {
+  button, a[role='button'], [role='tab'] {
     min-height: 44px;
     min-width: 44px;
   }
 }
 
-/* TipTap editor content styles */
+/* =========================================================
+   TipTap / ProseMirror 에디터
+   ========================================================= */
+
 .ProseMirror {
   outline: none;
+}
+
+.dark .ProseMirror {
+  color: #e5e7eb;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
@@ -93,6 +166,10 @@
   color: #9ca3af;
   pointer-events: none;
   height: 0;
+}
+
+.dark .ProseMirror p.is-editor-empty:first-child::before {
+  color: #4b5563;
 }
 
 .ProseMirror table {
@@ -108,9 +185,23 @@
   text-align: left;
 }
 
+.dark .ProseMirror th,
+.dark .ProseMirror td {
+  border-color: #374151;
+}
+
 .ProseMirror th {
   background-color: #f9fafb;
   font-weight: 600;
+}
+
+.dark .ProseMirror th {
+  background-color: #1f2937;
+  color: #e5e7eb;
+}
+
+.dark .ProseMirror td {
+  color: #d1d5db;
 }
 
 .ProseMirror pre {
@@ -123,6 +214,11 @@
   font-size: 0.875rem;
 }
 
+.dark .ProseMirror pre {
+  background: #111827;
+  border: 1px solid #374151;
+}
+
 .ProseMirror blockquote {
   border-left: 3px solid #d1d5db;
   margin-left: 0;
@@ -130,8 +226,60 @@
   color: #6b7280;
 }
 
+.dark .ProseMirror blockquote {
+  border-left-color: #374151;
+  color: #9ca3af;
+}
+
 .ProseMirror img {
   max-width: 100%;
   height: auto;
   border-radius: 0.25rem;
+}
+
+/* =========================================================
+   prose (마크다운 렌더러) 다크 모드
+   ========================================================= */
+
+.dark .prose {
+  color: #d1d5db;
+}
+.dark .prose h1,
+.dark .prose h2,
+.dark .prose h3,
+.dark .prose h4 {
+  color: #f3f4f6;
+}
+.dark .prose a {
+  color: #60a5fa;
+}
+.dark .prose strong {
+  color: #f3f4f6;
+}
+.dark .prose code {
+  color: #f9a8d4;
+  background-color: #1f2937;
+  padding: 0.1em 0.3em;
+  border-radius: 0.2em;
+}
+.dark .prose pre {
+  background-color: #111827;
+  border: 1px solid #374151;
+}
+.dark .prose blockquote {
+  border-left-color: #374151;
+  color: #9ca3af;
+}
+.dark .prose hr {
+  border-color: #374151;
+}
+.dark .prose thead {
+  border-bottom-color: #374151;
+}
+.dark .prose tbody tr {
+  border-bottom-color: #374151;
+}
+.dark .prose th,
+.dark .prose td {
+  color: #d1d5db;
 }

@@ -3,10 +3,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  createTicket, fetchProjects, fetchProjectMembers,
+  createTicket, fetchProjects, fetchProjectMembers, fetchMilestones,
   uploadFile, fetchTemplates, fetchKBArticles,
 } from '@/lib/api'
-import type { GitLabProject, ProjectMember, TicketTemplate, KBArticle } from '@/types'
+import type { GitLabProject, ProjectMember, Milestone, TicketTemplate, KBArticle } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
 import RichTextEditor from '@/components/RichTextEditor'
 import { useAuth } from '@/context/AuthContext'
@@ -17,23 +17,31 @@ import { formatName, formatFileSize, getFileIcon } from '@/lib/utils'
 const PRIORITIES = [
   {
     value: 'low',      label: '낮음', desc: '일상 업무에 영향 없음',    sla: '5일',
-    icon: '⚪', active: 'border-gray-400 bg-gray-50',   inact: 'border-gray-200',
-    labelColor: 'text-gray-700',
+    icon: '⚪',
+    active: 'border-gray-400 bg-gray-50 dark:bg-gray-700/50',
+    inact:  'border-gray-200 dark:border-gray-600',
+    labelColor: 'text-gray-700 dark:text-gray-300',
   },
   {
     value: 'medium',   label: '보통', desc: '불편하지만 업무 가능',      sla: '3일',
-    icon: '🟡', active: 'border-yellow-500 bg-yellow-50', inact: 'border-gray-200',
-    labelColor: 'text-yellow-800',
+    icon: '🟡',
+    active: 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20',
+    inact:  'border-gray-200 dark:border-gray-600',
+    labelColor: 'text-yellow-800 dark:text-yellow-300',
   },
   {
     value: 'high',     label: '높음', desc: '업무에 지장 있음',          sla: '24시간',
-    icon: '🟠', active: 'border-orange-500 bg-orange-50', inact: 'border-gray-200',
-    labelColor: 'text-orange-800',
+    icon: '🟠',
+    active: 'border-orange-500 bg-orange-50 dark:bg-orange-900/20',
+    inact:  'border-gray-200 dark:border-gray-600',
+    labelColor: 'text-orange-800 dark:text-orange-300',
   },
   {
     value: 'critical', label: '긴급', desc: '업무 불가 · 즉시 조치 필요', sla: '4시간',
-    icon: '🔴', active: 'border-red-500 bg-red-50',      inact: 'border-gray-200',
-    labelColor: 'text-red-700',
+    icon: '🔴',
+    active: 'border-red-500 bg-red-50 dark:bg-red-900/20',
+    inact:  'border-gray-200 dark:border-gray-600',
+    labelColor: 'text-red-700 dark:text-red-400',
   },
 ]
 
@@ -53,6 +61,7 @@ function NewTicketContent() {
   const [projects, setProjects] = useState<GitLabProject[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [members, setMembers] = useState<ProjectMember[]>([])
+  const [milestones, setMilestones] = useState<Milestone[]>([])
   const [templates, setTemplates] = useState<TicketTemplate[]>([])
   const [kbSuggestions, setKbSuggestions] = useState<KBArticle[]>([])
   const [kbLoading, setKbLoading] = useState(false)
@@ -70,6 +79,7 @@ function NewTicketContent() {
     location: '',
     assignee_id: '',
     sla_due_date: '',
+    milestone_id: '',
   })
   const [confidential, setConfidential] = useState(false)
   const [categoryContext, setCategoryContext] = useState('')
@@ -107,6 +117,7 @@ function NewTicketContent() {
   useEffect(() => {
     if (!form.project_id) return
     fetchProjectMembers(form.project_id).then(setMembers).catch(() => setMembers([]))
+    fetchMilestones(form.project_id).then(setMilestones).catch(() => setMilestones([]))
   }, [form.project_id])
 
   // KB 자동 추천 — /kb/suggest 전용 API 사용 (300ms 디바운스)
@@ -216,6 +227,7 @@ function NewTicketContent() {
         department: form.department || undefined,
         location: form.location || undefined,
         sla_due_date: form.sla_due_date || undefined,
+        milestone_id: form.milestone_id ? Number(form.milestone_id) : undefined,
         confidential,
       }
       const ticket = await createTicket(payload)
@@ -236,9 +248,9 @@ function NewTicketContent() {
     <div className="w-full">
       {/* 브레드크럼 */}
       <div className="mb-5">
-        <a href="/" className="text-sm text-blue-600 hover:underline">← 목록으로</a>
-        <h1 className="text-xl font-bold text-gray-900 mt-1">IT 지원 요청</h1>
-        <p className="text-sm text-gray-500 mt-0.5">문제를 자세히 설명해주시면 빠르게 처리해 드립니다.</p>
+        <a href="/" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">← 목록으로</a>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-1">IT 지원 요청</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">문제를 자세히 설명해주시면 빠르게 처리해 드립니다.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-5 items-start">
@@ -248,8 +260,8 @@ function NewTicketContent() {
 
           {/* 템플릿 */}
           {templates.length > 0 && (
-            <div className="bg-white rounded-lg border shadow-sm p-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">📋 템플릿으로 빠르게 시작</p>
+            <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">📋 템플릿으로 빠르게 시작</p>
               <div className="flex flex-wrap gap-2">
                 {templates.map((t) => (
                   <button
@@ -262,7 +274,7 @@ function NewTicketContent() {
                         category: t.category || prev.category,
                       }))
                     }
-                    className="text-xs px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-full border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
                   >
                     {t.name}
                   </button>
@@ -272,8 +284,8 @@ function NewTicketContent() {
           )}
 
           {/* ① 서비스 유형 */}
-          <div className="bg-white rounded-lg border shadow-sm p-5">
-            <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center">
               <SectionNum n={1} />서비스 유형
             </p>
 
@@ -288,12 +300,12 @@ function NewTicketContent() {
                   }}
                   className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 transition-all text-center ${
                     form.category === c.value
-                      ? 'border-blue-500 bg-blue-50 shadow-sm'
-                      : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-sm'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
                   <span className="text-2xl leading-none">{c.emoji}</span>
-                  <span className={`text-xs font-semibold leading-tight mt-0.5 ${form.category === c.value ? 'text-blue-700' : 'text-gray-700'}`}>
+                  <span className={`text-xs font-semibold leading-tight mt-0.5 ${form.category === c.value ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
                     {c.label}
                   </span>
                 </button>
@@ -302,9 +314,9 @@ function NewTicketContent() {
 
             {/* 카테고리별 세부 선택 */}
             {selectedCategory?.context_label && (selectedCategory?.context_options?.length ?? 0) > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                <p className="text-xs font-medium text-gray-600 mb-1.5">
-                  {selectedCategory.context_label} <span className="text-gray-400 font-normal">(선택)</span>
+              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                  {selectedCategory.context_label} <span className="text-gray-400 dark:text-gray-500 font-normal">(선택)</span>
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedCategory.context_options.map((opt) => (
@@ -314,8 +326,8 @@ function NewTicketContent() {
                       onClick={() => setCategoryContext(categoryContext === opt ? '' : opt)}
                       className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                         categoryContext === opt
-                          ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
-                          : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
+                          : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'
                       }`}
                     >
                       {opt}
@@ -327,18 +339,18 @@ function NewTicketContent() {
           </div>
 
           {/* ② 요청 내용 */}
-          <div className="bg-white rounded-lg border shadow-sm p-5 space-y-4">
-            <p className="text-sm font-semibold text-gray-700 flex items-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5 space-y-4">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">
               <SectionNum n={2} />요청 내용
             </p>
 
             {/* 제목 */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   제목 <span className="text-red-500">*</span>
                 </label>
-                <span className={`text-xs tabular-nums ${form.title.length > 180 ? 'text-red-500' : 'text-gray-400'}`}>
+                <span className={`text-xs tabular-nums ${form.title.length > 180 ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'}`}>
                   {form.title.length}/200
                 </span>
               </div>
@@ -350,13 +362,13 @@ function NewTicketContent() {
                 minLength={5}
                 maxLength={200}
                 placeholder="예: 컴퓨터가 켜지지 않습니다"
-                className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             {/* 상세 내용 — 리치 텍스트 에디터 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 상세 내용 <span className="text-red-500">*</span>
               </label>
               <RichTextEditor
@@ -370,15 +382,15 @@ function NewTicketContent() {
 
             {/* 파일 첨부 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 파일 첨부{' '}
-                <span className="text-xs font-normal text-gray-400">(선택, 최대 10MB)</span>
+                <span className="text-xs font-normal text-gray-400 dark:text-gray-500">(선택, 최대 10MB)</span>
               </label>
               <label
                 className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-md px-4 py-3 cursor-pointer transition-colors text-sm ${
                   isDragging
-                    ? 'border-blue-500 bg-blue-50 text-blue-600'
-                    : 'border-gray-300 text-gray-500 hover:border-blue-400 hover:bg-blue-50'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10'
                 }`}
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
                 onDragEnter={(e) => { e.preventDefault(); setIsDragging(true) }}
@@ -398,10 +410,10 @@ function NewTicketContent() {
               {files.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {files.map((file, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm bg-gray-50 rounded px-3 py-1.5">
+                    <li key={idx} className="flex items-center gap-2 text-sm bg-gray-50 dark:bg-gray-700 rounded px-3 py-1.5">
                       <span className="shrink-0">{getFileIcon(file.name)}</span>
-                      <span className="truncate text-gray-700 flex-1">{file.name}</span>
-                      <span className="text-gray-400 text-xs shrink-0">{formatFileSize(file.size)}</span>
+                      <span className="truncate text-gray-700 dark:text-gray-200 flex-1">{file.name}</span>
+                      <span className="text-gray-400 dark:text-gray-500 text-xs shrink-0">{formatFileSize(file.size)}</span>
                       <button type="button" onClick={() => removeFile(idx)} className="text-gray-400 hover:text-red-500 text-xs shrink-0">✕</button>
                     </li>
                   ))}
@@ -411,8 +423,8 @@ function NewTicketContent() {
           </div>
 
           {/* ③ 긴급도 */}
-          <div className="bg-white rounded-lg border shadow-sm p-5">
-            <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center">
               <SectionNum n={3} />긴급도
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -420,7 +432,7 @@ function NewTicketContent() {
                 <label
                   key={p.value}
                   className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
-                    form.priority === p.value ? p.active + ' shadow-sm' : p.inact + ' hover:border-gray-300'
+                    form.priority === p.value ? p.active + ' shadow-sm' : p.inact + ' hover:border-gray-300 dark:hover:border-gray-500'
                   }`}
                 >
                   <input
@@ -433,14 +445,14 @@ function NewTicketContent() {
                   />
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-base leading-none">{p.icon}</span>
-                    <span className={`text-sm font-semibold ${form.priority === p.value ? p.labelColor : 'text-gray-700'}`}>
+                    <span className={`text-sm font-semibold ${form.priority === p.value ? p.labelColor : 'text-gray-700 dark:text-gray-300'}`}>
                       {p.label}
                     </span>
                   </div>
-                  <p className="text-[11px] text-gray-500 leading-snug">{p.desc}</p>
-                  <p className="text-[11px] text-gray-400 mt-1.5">
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">{p.desc}</p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">
                     처리 목표:{' '}
-                    <span className={`font-semibold ${form.priority === p.value ? p.labelColor : 'text-gray-600'}`}>
+                    <span className={`font-semibold ${form.priority === p.value ? p.labelColor : 'text-gray-600 dark:text-gray-300'}`}>
                       {p.sla}
                     </span>
                   </p>
@@ -450,55 +462,55 @@ function NewTicketContent() {
           </div>
 
           {/* ④ 신청자 정보 */}
-          <div className="bg-white rounded-lg border shadow-sm p-5">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-gray-700 flex items-center">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">
                 <SectionNum n={4} />신청자 정보
               </p>
-              <span className="text-xs text-gray-400">GitLab 계정에서 자동 입력</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">GitLab 계정에서 자동 입력</span>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-gray-500 block mb-1">이름</label>
+                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">이름</label>
                 <input
                   name="employee_name"
                   value={form.employee_name}
                   readOnly
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-gray-50 text-gray-600 cursor-not-allowed"
+                  className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">이메일</label>
+                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">이메일</label>
                 <input
                   name="employee_email"
                   type="email"
                   value={form.employee_email}
                   readOnly
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-gray-50 text-gray-600 cursor-not-allowed"
+                  className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">
-                  부서 <span className="text-gray-400">(선택)</span>
+                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+                  부서 <span className="text-gray-400 dark:text-gray-500">(선택)</span>
                 </label>
                 <input
                   name="department"
                   value={form.department}
                   onChange={handleChange}
                   placeholder="예: 개발팀, 영업부"
-                  className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">
-                  위치 <span className="text-gray-400">(선택)</span>
+                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+                  위치 <span className="text-gray-400 dark:text-gray-500">(선택)</span>
                 </label>
                 <input
                   name="location"
                   value={form.location}
                   onChange={handleChange}
                   placeholder="예: 3층 A동, 본사 2층"
-                  className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -506,24 +518,24 @@ function NewTicketContent() {
 
           {/* ⑤ 관리자 설정 (에이전트 이상) */}
           {isAgent && (
-            <div className="bg-white rounded-lg border shadow-sm p-5">
-              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
                 <SectionNum n={5} />관리자 설정
-                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-normal">에이전트 이상</span>
+                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-normal">에이전트 이상</span>
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {/* 프로젝트 (복수인 경우만) */}
                 {projects.length > 1 && (
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">프로젝트</label>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">프로젝트</label>
                     {projectsLoading ? (
-                      <div className="w-full border rounded-md px-3 py-2 text-sm text-gray-400 bg-gray-50">불러오는 중...</div>
+                      <div className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700/50">불러오는 중...</div>
                     ) : (
                       <select
                         name="project_id"
                         value={form.project_id}
                         onChange={handleChange}
-                        className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         {projects.map((p) => (
                           <option key={p.id} value={p.id}>{p.name_with_namespace}</option>
@@ -535,14 +547,14 @@ function NewTicketContent() {
                 {/* 담당자 */}
                 {members.length > 0 && (
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">
-                      담당자 <span className="text-gray-400">(선택)</span>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+                      담당자 <span className="text-gray-400 dark:text-gray-500">(선택)</span>
                     </label>
                     <select
                       name="assignee_id"
                       value={form.assignee_id}
                       onChange={handleChange}
-                      className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">담당자 없음</option>
                       {members.map((m) => (
@@ -553,8 +565,8 @@ function NewTicketContent() {
                 )}
                 {/* SLA */}
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">
-                    처리 기한 <span className="text-gray-400">(비워두면 자동)</span>
+                  <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+                    처리 기한 <span className="text-gray-400 dark:text-gray-500">(비워두면 자동)</span>
                   </label>
                   <input
                     type="date"
@@ -562,32 +574,53 @@ function NewTicketContent() {
                     value={form.sla_due_date}
                     onChange={handleChange}
                     min={new Date().toISOString().split('T')[0]}
-                    className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+                {/* 마일스톤 */}
+                {milestones.length > 0 && (
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+                    마일스톤 <span className="text-gray-400 dark:text-gray-500">(선택)</span>
+                  </label>
+                  <select
+                    name="milestone_id"
+                    value={form.milestone_id}
+                    onChange={handleChange}
+                    className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">마일스톤 없음</option>
+                    {milestones.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.title}{m.due_date ? ` (${m.due_date})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                )}
               </div>
             </div>
           )}
 
           {/* 기밀 티켓 */}
-          <div className="bg-white rounded-lg border shadow-sm p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-4">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={confidential}
                 onChange={(e) => setConfidential(e.target.checked)}
-                className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                className="w-4 h-4 text-red-600 border-gray-300 dark:border-gray-600 rounded focus:ring-red-500"
               />
               <div>
-                <span className="text-sm font-medium text-gray-700">🔒 기밀 티켓</span>
-                <p className="text-xs text-gray-500 mt-0.5">담당자와 관리자만 내용을 확인할 수 있습니다.</p>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">🔒 기밀 티켓</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">담당자와 관리자만 내용을 확인할 수 있습니다.</p>
               </div>
             </label>
           </div>
 
           {/* 오류 */}
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-md p-3 text-sm">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-md p-3 text-sm">
               ⚠️ {error}
             </div>
           )}
@@ -603,7 +636,7 @@ function NewTicketContent() {
             </button>
             <a
               href="/"
-              className="px-6 py-2.5 border rounded-lg text-sm text-gray-600 hover:bg-gray-50 text-center transition-colors"
+              className="px-6 py-2.5 border dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors"
             >
               취소
             </a>
@@ -614,41 +647,41 @@ function NewTicketContent() {
         <div className="w-60 shrink-0 sticky top-4 space-y-3 pb-6">
 
           {/* 요청 요약 */}
-          <div className="bg-white rounded-lg border shadow-sm p-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">요청 요약</p>
+          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">요청 요약</p>
             <div className="space-y-2.5">
               <div className="flex items-start gap-2">
                 <span className="text-lg leading-none shrink-0 mt-0.5">{selectedCategory?.emoji ?? '📋'}</span>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-gray-400 leading-none mb-0.5">유형</p>
-                  <p className="text-sm font-medium text-gray-800">{selectedCategory?.label ?? '-'}</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-none mb-0.5">유형</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedCategory?.label ?? '-'}</p>
                   {categoryContext && (
-                    <p className="text-xs text-gray-500 mt-0.5">· {categoryContext}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">· {categoryContext}</p>
                   )}
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-lg leading-none shrink-0 mt-0.5">{selectedPriority?.icon ?? '🟡'}</span>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-gray-400 leading-none mb-0.5">긴급도</p>
-                  <p className="text-sm font-medium text-gray-800">{selectedPriority?.label ?? '-'}</p>
-                  <p className="text-[11px] text-gray-500">처리 목표: <span className="font-semibold">{selectedPriority?.sla}</span></p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-none mb-0.5">긴급도</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedPriority?.label ?? '-'}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">처리 목표: <span className="font-semibold">{selectedPriority?.sla}</span></p>
                 </div>
               </div>
               {form.title && (
-                <div className="pt-2 border-t border-gray-100">
-                  <p className="text-[10px] text-gray-400 mb-0.5">제목</p>
-                  <p className="text-xs text-gray-700 line-clamp-3 leading-relaxed">{form.title}</p>
+                <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">제목</p>
+                  <p className="text-xs text-gray-700 dark:text-gray-300 line-clamp-3 leading-relaxed">{form.title}</p>
                 </div>
               )}
               {form.employee_name && (
-                <div className="pt-2 border-t border-gray-100 flex items-center gap-2">
+                <div className="pt-2 border-t border-gray-100 dark:border-gray-700 flex items-center gap-2">
                   <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
                     {form.employee_name.charAt(0)}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs text-gray-700 font-medium truncate">{form.employee_name}</p>
-                    {form.department && <p className="text-[11px] text-gray-400 truncate">{form.department}</p>}
+                    <p className="text-xs text-gray-700 dark:text-gray-300 font-medium truncate">{form.employee_name}</p>
+                    {form.department && <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{form.department}</p>}
                   </div>
                 </div>
               )}
@@ -657,20 +690,20 @@ function NewTicketContent() {
 
           {/* KB 문서 제안 */}
           {(kbLoading || kbSuggestions.length > 0) && (
-            <div className="bg-white rounded-lg border shadow-sm p-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">💡 관련 문서</p>
+            <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">💡 관련 문서</p>
               {kbLoading ? (
-                <p className="text-xs text-gray-400 animate-pulse">검색 중...</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 animate-pulse">검색 중...</p>
               ) : (
                 <ul className="space-y-2">
                   {kbSuggestions.map((a) => (
                     <li key={a.id} className="flex items-start gap-1">
-                      <span className="text-blue-400 text-xs mt-0.5 shrink-0">▶</span>
+                      <span className="text-blue-400 dark:text-blue-500 text-xs mt-0.5 shrink-0">▶</span>
                       <a
                         href={`/kb/${a.slug}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline leading-snug"
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline leading-snug"
                       >
                         {a.title}
                       </a>
@@ -678,16 +711,16 @@ function NewTicketContent() {
                   ))}
                 </ul>
               )}
-              <p className="text-[11px] text-gray-400 mt-2 border-t pt-2 border-gray-100">
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 border-t dark:border-gray-700 pt-2 border-gray-100">
                 문서에서 해결 방법을 먼저 확인해보세요.
               </p>
             </div>
           )}
 
           {/* 작성 팁 */}
-          <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
-            <p className="text-xs font-semibold text-amber-800 mb-2">✏️ 작성 팁</p>
-            <ul className="text-[11px] text-amber-700 space-y-1.5">
+          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-700/50 p-4">
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-2">✏️ 작성 팁</p>
+            <ul className="text-[11px] text-amber-700 dark:text-amber-400 space-y-1.5">
               <li className="flex gap-1.5"><span className="shrink-0">•</span><span>언제부터 문제가 발생했는지</span></li>
               <li className="flex gap-1.5"><span className="shrink-0">•</span><span>어떤 오류 메시지가 나오는지</span></li>
               <li className="flex gap-1.5"><span className="shrink-0">•</span><span>이미 시도해본 방법</span></li>
@@ -696,13 +729,13 @@ function NewTicketContent() {
           </div>
 
           {/* 처리 예상 */}
-          <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
-            <p className="text-xs font-semibold text-blue-800 mb-1">⏱ 처리 예상</p>
-            <p className="text-[11px] text-blue-700 leading-relaxed">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700/50 p-4">
+            <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">⏱ 처리 예상</p>
+            <p className="text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed">
               <span className="font-semibold">{selectedPriority?.label}</span> 우선순위의 경우{' '}
               <span className="font-semibold">{selectedPriority?.sla}</span> 내 처리를 목표로 합니다.
             </p>
-            <p className="text-[10px] text-blue-500 mt-1">* 업무 시간 기준 / 상황에 따라 변동</p>
+            <p className="text-[10px] text-blue-500 dark:text-blue-500 mt-1">* 업무 시간 기준 / 상황에 따라 변동</p>
           </div>
         </div>
       </form>

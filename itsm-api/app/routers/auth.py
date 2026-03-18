@@ -14,12 +14,12 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from jose import jwt as jose_jwt, JWTError
 from pydantic import BaseModel
 
-from ..auth import TOKEN_EXPIRE_HOURS, ALGORITHM, create_token, get_current_user, blacklist_token
+from ..auth import TOKEN_EXPIRE_HOURS, ALGORITHM, create_token, get_current_user, blacklist_token, store_gitlab_token, delete_gitlab_token
 from ..crypto import encrypt_token, decrypt_token
 from ..config import get_settings
 from ..database import get_db
 from ..models import UserRole, RefreshToken
-from ..rate_limit import limiter
+from ..rate_limit import limiter, LIMIT_LOGIN
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -96,19 +96,34 @@ def _sync_role_from_gitlab(db: Session, gitlab_user_id: int, username: str, name
                 record.name = name
             if avatar_url:
                 record.avatar_url = avatar_url
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error("Role sync DB operation failed for user %s: %s", gitlab_user_id, e)
+            raise
         return new_role
     else:
         # GitLab 조회 실패 → 기존 역할 유지 (없으면 'user')
         if not record:
             record = UserRole(gitlab_user_id=gitlab_user_id, username=username, name=name or None, role="user", avatar_url=avatar_url or None)
             db.add(record)
-            db.commit()
+            try:
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.error("Role sync DB operation failed for user %s: %s", gitlab_user_id, e)
+                raise
         elif name and not record.name:
             record.name = name
             if avatar_url and not record.avatar_url:
                 record.avatar_url = avatar_url
-            db.commit()
+            try:
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.error("Role sync DB operation failed for user %s: %s", gitlab_user_id, e)
+                raise
         return record.role
 
 
@@ -127,6 +142,7 @@ def _create_refresh_token(db: Session, gitlab_user_id: str, gitlab_refresh_token
                 RefreshToken.expires_at > now,
             )
             .order_by(RefreshToken.created_at.asc())
+            .with_for_update()
             .all()
         )
         if len(active_sessions) >= max_sessions:
@@ -151,7 +167,7 @@ def _create_refresh_token(db: Session, gitlab_user_id: str, gitlab_refresh_token
 
 
 @router.get("/login")
-@(limiter.limit("20/minute") if limiter else lambda f: f)
+@(limiter.limit(LIMIT_LOGIN) if limiter else lambda f: f)
 def login(request: Request):
     settings = get_settings()
     needs_reauth = request.cookies.get("itsm_reauth") == "1"
@@ -180,7 +196,7 @@ def login(request: Request):
 
 
 @router.get("/callback")
-@(limiter.limit("20/minute") if limiter else lambda f: f)
+@(limiter.limit(LIMIT_LOGIN) if limiter else lambda f: f)
 def callback(request: Request, code: str = "", error: str = "", state: str = "", db: Session = Depends(get_db)):
     if error or not code:
         return RedirectResponse("/login?error=access_denied")
@@ -220,7 +236,11 @@ def callback(request: Request, code: str = "", error: str = "", state: str = "",
     # GitLab 권한 기반 역할 동기화
     role = _sync_role_from_gitlab(db, user["id"], user["username"], name=user.get("name", ""), avatar_url=user.get("avatar_url", ""))
 
-    token = create_token(user, gitlab_token=access_token, role=role)
+    token = create_token(user, role=role)
+    # VULN-01: gitlab_token은 JWT payload 대신 Redis에 저장
+    _jti = jose_jwt.get_unverified_claims(token).get("jti", "")
+    if _jti:
+        store_gitlab_token(_jti, access_token, TOKEN_EXPIRE_HOURS * 3600)
     refresh_raw = _create_refresh_token(db, str(user["id"]), gitlab_refresh_token=gitlab_refresh_token)
 
     response = RedirectResponse("/")
@@ -288,7 +308,11 @@ def exchange(request: Request, body: _ExchangeBody, db: Session = Depends(get_db
         user = user_resp.json()
 
     role = _sync_role_from_gitlab(db, user["id"], user["username"], name=user.get("name", ""), avatar_url=user.get("avatar_url", ""))
-    token = create_token(user, gitlab_token=access_token, role=role)
+    token = create_token(user, role=role)
+    # VULN-01: gitlab_token은 JWT payload 대신 Redis에 저장
+    _jti = jose_jwt.get_unverified_claims(token).get("jti", "")
+    if _jti:
+        store_gitlab_token(_jti, access_token, TOKEN_EXPIRE_HOURS * 3600)
     refresh_raw = _create_refresh_token(db, str(user["id"]), gitlab_refresh_token=gitlab_refresh_token)
 
     response = JSONResponse({"ok": True})
@@ -307,6 +331,7 @@ def exchange(request: Request, body: _ExchangeBody, db: Session = Depends(get_db
 
 
 @router.post("/refresh")
+@(limiter.limit("10/minute") if limiter else lambda f: f)
 def refresh_token(request: Request, db: Session = Depends(get_db)):
     """Exchange a valid refresh token for a new access token."""
     raw = request.cookies.get("itsm_refresh")
@@ -314,10 +339,15 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="리프레시 토큰이 없습니다.")
 
     token_hash = hashlib.sha256(raw.encode()).hexdigest()
-    record = db.query(RefreshToken).filter(
-        RefreshToken.token_hash == token_hash,
-        RefreshToken.revoked == False,  # noqa: E712
-    ).first()
+    record = (
+        db.query(RefreshToken)
+        .filter(
+            RefreshToken.token_hash == token_hash,
+            RefreshToken.revoked == False,  # noqa: E712
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not record:
         raise HTTPException(status_code=401, detail="유효하지 않은 리프레시 토큰입니다.")
@@ -373,7 +403,11 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
         "name": (role_record.name or role_record.username) if role_record else "",
         "email": "",
     }
-    new_token = create_token(user_stub, gitlab_token=new_gitlab_token, role=role)
+    new_token = create_token(user_stub, role=role)
+    # VULN-01: gitlab_token은 JWT payload 대신 Redis에 저장
+    _new_jti = jose_jwt.get_unverified_claims(new_token).get("jti", "")
+    if _new_jti:
+        store_gitlab_token(_new_jti, new_gitlab_token, TOKEN_EXPIRE_HOURS * 3600)
 
     # Token Rotation: revoke old refresh token and issue a new one
     record.revoked = True
@@ -423,6 +457,8 @@ def logout(request: Request, db: Session = Depends(get_db)):
                 ttl = int(exp - _time.time())
                 if ttl > 0:
                     blacklist_token(jti, ttl)
+                # VULN-01: 로그아웃 시 Redis에서 gitlab_token도 삭제
+                delete_gitlab_token(jti)
         except Exception:
             pass
 
@@ -435,10 +471,32 @@ def logout(request: Request, db: Session = Depends(get_db)):
             record.revoked = True
             db.commit()
 
+    # H-05: Sudo 토큰도 블랙리스트 등록 후 쿠키 삭제
+    sudo_token = request.cookies.get("itsm_sudo")
+    if sudo_token:
+        try:
+            settings_for_sudo = get_settings()
+            from jose import jwt as _sudo_jwt
+            sudo_payload = _sudo_jwt.decode(
+                sudo_token, settings_for_sudo.SECRET_KEY,
+                algorithms=[ALGORITHM],
+                options={"verify_exp": False},
+            )
+            sudo_jti = sudo_payload.get("jti")
+            sudo_exp = sudo_payload.get("exp")
+            if sudo_jti and sudo_exp:
+                import time as _sudo_time
+                now = int(_sudo_time.time())
+                ttl = max(sudo_exp - now, 0)
+                blacklist_token(sudo_jti, ttl)
+        except Exception as e:
+            logger.warning("Failed to invalidate sudo token on logout: %s", e)
+
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie("itsm_token")
     response.delete_cookie("itsm_refresh")
-    response.set_cookie("itsm_reauth", "1", max_age=300, httponly=True, samesite="lax")
+    response.delete_cookie("itsm_sudo", httponly=True, secure=get_settings().COOKIE_SECURE, samesite="strict")
+    response.set_cookie("itsm_reauth", "1", max_age=300, httponly=True, samesite="strict", secure=get_settings().COOKIE_SECURE)
     return response
 
 
@@ -453,6 +511,85 @@ def me(user: dict = Depends(get_current_user)):
         "organization": user.get("organization", ""),
         "role": user.get("role", "user"),
     }
+
+
+# ---------------------------------------------------------------------------
+# 세션 관리 — 사용자 자신의 활성 세션 조회 및 폐기
+# ---------------------------------------------------------------------------
+
+@router.get("/sessions")
+def list_my_sessions(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """현재 로그인 사용자의 활성 세션 목록."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    sessions = db.query(RefreshToken).filter(
+        RefreshToken.gitlab_user_id == str(user["sub"]),
+        RefreshToken.revoked == False,  # noqa: E712
+        RefreshToken.expires_at > now,
+    ).order_by(RefreshToken.last_used_at.desc().nullslast()).all()
+
+    # 현재 요청의 리프레시 토큰 hash를 구해 "현재 세션" 표시
+    raw_refresh = request.cookies.get("itsm_refresh")
+    current_hash = None
+    if raw_refresh:
+        import hashlib
+        current_hash = hashlib.sha256(raw_refresh.encode()).hexdigest()
+
+    return [
+        {
+            "id": s.id,
+            "device_name": s.device_name,
+            "ip_address": s.ip_address,
+            "last_used_at": s.last_used_at.isoformat() if s.last_used_at else None,
+            "expires_at": s.expires_at.isoformat(),
+            "is_current": (current_hash is not None and s.token_hash == current_hash),
+        }
+        for s in sessions
+    ]
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+def revoke_my_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """현재 로그인 사용자의 특정 세션 폐기."""
+    s = db.query(RefreshToken).filter(
+        RefreshToken.id == session_id,
+        RefreshToken.gitlab_user_id == str(user["sub"]),
+    ).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+    s.revoked = True
+    db.commit()
+
+
+@router.delete("/sessions", status_code=204)
+def revoke_all_other_sessions(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """현재 세션을 제외한 모든 세션 폐기 (다른 기기 일괄 로그아웃)."""
+    raw_refresh = request.cookies.get("itsm_refresh")
+    current_hash = None
+    if raw_refresh:
+        import hashlib
+        current_hash = hashlib.sha256(raw_refresh.encode()).hexdigest()
+
+    q = db.query(RefreshToken).filter(
+        RefreshToken.gitlab_user_id == str(user["sub"]),
+        RefreshToken.revoked == False,  # noqa: E712
+    )
+    if current_hash:
+        q = q.filter(RefreshToken.token_hash != current_hash)
+    q.update({"revoked": True}, synchronize_session=False)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -479,10 +616,10 @@ def create_sudo_token(
         raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
 
     # GitLab token 재검증 (현재 세션 토큰이 여전히 유효한지 확인)
+    settings = get_settings()
     gitlab_token = user.get("gitlab_token", "")
     if gitlab_token:
         try:
-            settings = get_settings()
             resp = _httpx.get(
                 f"{settings.GITLAB_API_URL}/api/v4/user",
                 headers={"Authorization": f"Bearer {gitlab_token}"},
@@ -511,13 +648,21 @@ def create_sudo_token(
     db.commit()
 
     logger.info("Sudo token issued: user=%s ip=%s", user.get("username"), ip)
-    return {"sudo_token": raw, "expires_in": 600}
+    # VULN-07: sudo_token을 JSON body 대신 HttpOnly 쿠키로 전달
+    response = JSONResponse({"ok": True, "expires_in": 600})
+    response.set_cookie(
+        "itsm_sudo", raw,
+        httponly=True, max_age=600,
+        samesite="strict", secure=settings.COOKIE_SECURE,
+    )
+    return response
 
 
-def verify_sudo_token(token: Optional[str], user: dict, db) -> None:
+def verify_sudo_token(request: Request, user: dict, db) -> None:
     """sudo_token 검증 헬퍼 — 유효하지 않으면 403 raise.
 
     고위험 Admin 엔드포인트에서 호출한다.
+    VULN-07: itsm_sudo HttpOnly 쿠키에서 토큰을 읽는다 (X-Sudo-Token 헤더 폴백 유지).
     SUDO_MODE_ENABLED=false 환경변수로 전체 비활성화 가능 (개발 환경용).
     """
     from ..models import SudoToken
@@ -525,10 +670,12 @@ def verify_sudo_token(token: Optional[str], user: dict, db) -> None:
     if not getattr(settings, "SUDO_MODE_ENABLED", True):
         return  # 개발 환경에서 비활성화
 
+    # 쿠키 우선, 헤더 폴백 (마이그레이션 호환)
+    token = request.cookies.get("itsm_sudo") or request.headers.get("X-Sudo-Token")
     if not token:
         raise HTTPException(
             status_code=403,
-            detail="고위험 작업입니다. POST /auth/sudo 로 재인증 후 X-Sudo-Token 헤더를 포함하세요.",
+            detail="고위험 작업입니다. POST /auth/sudo 로 재인증하세요.",
         )
 
     token_hash = hashlib.sha256(token.encode()).hexdigest()

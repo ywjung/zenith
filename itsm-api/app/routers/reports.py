@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -20,6 +20,13 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_csv_cell(value: str) -> str:
+    """Prevent CSV formula injection (Excel/LibreOffice)."""
+    if value and value[0] in ('=', '+', '-', '@', '\t', '\r'):
+        return "'" + value  # prefix with single quote
+    return value
+
+
 @router.get("/current-stats")
 def get_current_stats(
     from_date: Optional[date] = Query(default=None, alias="from"),
@@ -29,9 +36,11 @@ def get_current_stats(
     _user: dict = Depends(require_agent),
 ):
     """실시간 통계: GitLab에서 직접 조회. 날짜 범위가 지정되면 해당 기간의 신규/완료 건수를 반환."""
-    from fastapi import HTTPException as _HTTPException
-    if from_date and to_date and from_date > to_date:
-        raise _HTTPException(status_code=400, detail="시작일이 종료일보다 늦을 수 없습니다.")
+    if from_date and to_date:
+        if from_date > to_date:
+            raise HTTPException(status_code=400, detail="종료일은 시작일 이후여야 합니다.")
+        if (to_date - from_date) > timedelta(days=366):
+            raise HTTPException(status_code=400, detail="날짜 범위는 최대 366일까지 허용됩니다.")
 
     # GitLab API 날짜 필터: ISO 형식 (날짜 경계를 명확히 하기 위해 datetime 문자열 사용)
     from_iso = datetime.combine(from_date, dt_time.min).isoformat() if from_date else None
@@ -107,13 +116,15 @@ def get_current_stats(
         return q.count()
 
     try:
-        with ThreadPoolExecutor(max_workers=6) as pool:
+        # DB 세션은 스레드 안전하지 않으므로 ThreadPool 밖에서 먼저 조회
+        sla_breached_count = _count_sla_breached()
+
+        with ThreadPoolExecutor(max_workers=5) as pool:
             f_new         = pool.submit(_count_new)
             f_open        = pool.submit(_count_open)
             f_in_progress = pool.submit(_count_in_progress)
             f_resolved    = pool.submit(_count_resolved)
             f_closed      = pool.submit(_count_closed)
-            f_breached    = pool.submit(_count_sla_breached)
 
             return {
                 "new":         f_new.result(),
@@ -121,12 +132,11 @@ def get_current_stats(
                 "in_progress": f_in_progress.result(),
                 "resolved":    f_resolved.result(),
                 "closed":      f_closed.result(),
-                "sla_breached":f_breached.result(),
+                "sla_breached":sla_breached_count,
                 "fetched_at":  datetime.now(timezone.utc).isoformat(),
             }
     except Exception as e:
         logger.error("current-stats GitLab error: %s", e)
-        from fastapi import HTTPException
         raise HTTPException(status_code=502, detail="통계를 불러오는 중 오류가 발생했습니다.")
 
 
@@ -139,6 +149,11 @@ def get_trends(
     _user: dict = Depends(require_agent),
 ):
     """날짜별 티켓 스냅샷 추이 (자정마다 기록된 일별 통계)."""
+    if from_date and to_date:
+        if from_date > to_date:
+            raise HTTPException(status_code=400, detail="종료일은 시작일 이후여야 합니다.")
+        if (to_date - from_date) > timedelta(days=366):
+            raise HTTPException(status_code=400, detail="날짜 범위는 최대 366일까지 허용됩니다.")
     q = db.query(DailyStatsSnapshot).order_by(DailyStatsSnapshot.snapshot_date)
     if from_date:
         q = q.filter(DailyStatsSnapshot.snapshot_date >= from_date)
@@ -171,6 +186,11 @@ def export_report(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_agent),
 ):
+    if from_date and to_date:
+        if from_date > to_date:
+            raise HTTPException(status_code=400, detail="종료일은 시작일 이후여야 합니다.")
+        if (to_date - from_date) > timedelta(days=366):
+            raise HTTPException(status_code=400, detail="날짜 범위는 최대 366일까지 허용됩니다.")
     q = db.query(DailyStatsSnapshot).order_by(DailyStatsSnapshot.snapshot_date)
     if from_date:
         q = q.filter(DailyStatsSnapshot.snapshot_date >= from_date)
@@ -186,8 +206,8 @@ def export_report(
     writer.writerow(["날짜", "프로젝트", "당일신규", "접수됨", "처리중(대기·완료포함)", "누적종료", "SLA위반누적"])
     for r in rows:
         writer.writerow([
-            str(r.snapshot_date),
-            r.project_id,
+            _sanitize_csv_cell(str(r.snapshot_date)),
+            _sanitize_csv_cell(r.project_id or ""),
             r.total_new,
             r.total_open,
             r.total_in_progress,
@@ -213,9 +233,11 @@ def get_breakdown(
     _user: dict = Depends(require_agent),
 ):
     """기간 내 티켓을 상태별·카테고리별·우선순위별로 집계."""
-    from fastapi import HTTPException as _HTTPException
-    if from_date and to_date and from_date > to_date:
-        raise _HTTPException(status_code=400, detail="시작일이 종료일보다 늦을 수 없습니다.")
+    if from_date and to_date:
+        if from_date > to_date:
+            raise HTTPException(status_code=400, detail="종료일은 시작일 이후여야 합니다.")
+        if (to_date - from_date) > timedelta(days=366):
+            raise HTTPException(status_code=400, detail="날짜 범위는 최대 366일까지 허용됩니다.")
     from_iso = datetime.combine(from_date, dt_time.min).isoformat() if from_date else None
     to_iso = datetime.combine(to_date, dt_time.max).isoformat() if to_date else None
 
@@ -347,7 +369,7 @@ def get_agent_performance(
                 created_before=to_iso,
             )
             all_issues.extend(issues)
-            if len(all_issues) >= total or not issues:
+            if len(all_issues) >= total or not issues or page >= 50:  # 5,000건 안전 캡
                 break
             page += 1
     except Exception as e:
@@ -464,24 +486,23 @@ def take_snapshot(project_id: str, db) -> dict:
             )
             return total
 
-        with ThreadPoolExecutor(max_workers=7) as pool:
+        # DB 세션은 스레드 안전하지 않으므로 ThreadPool 밖에서 먼저 조회
+        total_breached = db.query(SLARecord).filter(
+            SLARecord.project_id == project_id,
+            SLARecord.breached == True,  # noqa: E712
+        ).count()
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
             f_open     = pool.submit(_get, "opened", None, "status::in_progress,status::waiting,status::resolved")
             f_closed   = pool.submit(_get, "closed")
             f_ip       = pool.submit(_get, "opened", "status::in_progress")
             f_waiting  = pool.submit(_get, "opened", "status::waiting")
             f_resolved = pool.submit(_get, "opened", "status::resolved")
             f_new      = pool.submit(_get, "all", None, None, today_start, today_end)
-            f_breached = pool.submit(
-                lambda: db.query(SLARecord).filter(
-                    SLARecord.project_id == project_id,
-                    SLARecord.breached == True,  # noqa: E712
-                ).count()
-            )
             total_open        = f_open.result()
             total_closed      = f_closed.result()
             total_in_progress = f_ip.result() + f_waiting.result() + f_resolved.result()
             total_new         = f_new.result()
-            total_breached    = f_breached.result()
     except Exception as e:
         logger.error("Snapshot fetch error for project %s: %s", project_id, e)
         total_open = total_closed = total_in_progress = total_new = total_breached = 0
@@ -516,3 +537,180 @@ def create_daily_snapshot(
     if result["message"] == "already_exists":
         return {"message": "오늘 스냅샷이 이미 있습니다.", "date": result["date"]}
     return {"message": "스냅샷이 생성됐습니다.", "date": result["date"]}
+
+
+@router.get("/dora")
+def get_dora_metrics(
+    days: int = Query(default=30, ge=7, le=365),
+    project_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_agent),
+):
+    """DORA 4대 지표 반환.
+
+    - deployment_frequency: 기간 내 completed(closed) 티켓 수 / 주 (변경 배포 빈도 근사치)
+    - lead_time_hours: 접수 → 완료까지 평균 리드타임 (시간)
+    - change_failure_rate: 완료 후 재오픈된 비율 (%)
+    - mttr_hours: 재오픈된 티켓의 두 번째 완료까지 평균 시간 (시간)
+    """
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(days=days)).replace(tzinfo=None)
+    since_iso = since.isoformat()
+
+    pid = project_id or None
+
+    # ── 1. Deployment Frequency ──────────────────────────────────────────
+    # closed 티켓 수를 주(week) 단위로 나눔
+    try:
+        _, total_closed = gitlab_client.get_issues(
+            state="closed",
+            project_id=pid,
+            per_page=1, page=1,
+            updated_after=since_iso,
+        )
+    except Exception:
+        total_closed = 0
+    weeks = max(days / 7, 1)
+    deployment_frequency = round(total_closed / weeks, 2)
+
+    # ── 2. Lead Time (접수 → 완료 평균, SLARecord 기반) ──────────────────
+    try:
+        records = (
+            db.query(SLARecord)
+            .filter(
+                SLARecord.resolved_at.isnot(None),
+                SLARecord.created_at >= since,
+            )
+        )
+        if pid:
+            records = records.filter(SLARecord.project_id == pid)
+        records = records.all()
+
+        if records:
+            lead_times_h = [
+                (r.resolved_at - r.created_at).total_seconds() / 3600
+                for r in records
+                if r.resolved_at and r.created_at
+            ]
+            lead_time_hours = round(sum(lead_times_h) / len(lead_times_h), 1) if lead_times_h else None
+        else:
+            lead_time_hours = None
+    except Exception as e:
+        logger.warning("DORA lead_time query error: %s", e)
+        lead_time_hours = None
+
+    # ── 3. Change Failure Rate (완료 후 재오픈 비율) ──────────────────────
+    # SLA record 중 resolved_at가 있고 이후 재접수된(sla_deadline 갱신) 티켓
+    try:
+        total_resolved = (
+            db.query(SLARecord)
+            .filter(
+                SLARecord.resolved_at.isnot(None),
+                SLARecord.created_at >= since,
+            )
+        )
+        reopened = (
+            db.query(SLARecord)
+            .filter(
+                SLARecord.resolved_at.isnot(None),
+                SLARecord.reopened_at.isnot(None),
+                SLARecord.created_at >= since,
+            )
+        )
+        if pid:
+            total_resolved = total_resolved.filter(SLARecord.project_id == pid)
+            reopened = reopened.filter(SLARecord.project_id == pid)
+
+        total_r = total_resolved.count()
+        reopened_r = reopened.count()
+        change_failure_rate = round(reopened_r / total_r * 100, 1) if total_r > 0 else 0.0
+    except Exception as e:
+        logger.warning("DORA change_failure_rate query error: %s", e)
+        change_failure_rate = 0.0
+        reopened_r = 0
+        total_r = 0
+
+    # ── 4. MTTR (재오픈된 티켓의 두 번째 완료까지 평균 시간) ──────────────
+    try:
+        reopened_records = (
+            db.query(SLARecord)
+            .filter(
+                SLARecord.resolved_at.isnot(None),
+                SLARecord.reopened_at.isnot(None),
+                SLARecord.created_at >= since,
+            )
+        )
+        if pid:
+            reopened_records = reopened_records.filter(SLARecord.project_id == pid)
+        reopened_records = reopened_records.all()
+
+        if reopened_records:
+            mttr_values = [
+                (r.resolved_at - r.reopened_at).total_seconds() / 3600
+                for r in reopened_records
+                if r.resolved_at and r.reopened_at and r.resolved_at > r.reopened_at
+            ]
+            mttr_hours = round(sum(mttr_values) / len(mttr_values), 1) if mttr_values else None
+        else:
+            mttr_hours = None
+    except Exception as e:
+        logger.warning("DORA mttr query error: %s", e)
+        mttr_hours = None
+
+    # ── 등급 계산 (Elite / High / Medium / Low) ────────────────────────────
+    def _df_grade(df: float) -> str:
+        if df >= 7:    return "Elite"
+        if df >= 1:    return "High"
+        if df >= 0.25: return "Medium"
+        return "Low"
+
+    def _lt_grade(lt: Optional[float]) -> str:
+        if lt is None: return "N/A"
+        if lt <= 24:   return "Elite"
+        if lt <= 168:  return "High"
+        if lt <= 720:  return "Medium"
+        return "Low"
+
+    def _cfr_grade(cfr: float) -> str:
+        if cfr <= 5:  return "Elite"
+        if cfr <= 10: return "High"
+        if cfr <= 15: return "Medium"
+        return "Low"
+
+    def _mttr_grade(mt: Optional[float]) -> str:
+        if mt is None:  return "N/A"
+        if mt <= 1:     return "Elite"
+        if mt <= 24:    return "High"
+        if mt <= 168:   return "Medium"
+        return "Low"
+
+    return {
+        "period_days": days,
+        "since": since_iso,
+        "deployment_frequency": {
+            "value": deployment_frequency,
+            "unit": "회/주",
+            "grade": _df_grade(deployment_frequency),
+            "description": "주간 완료(closed) 티켓 수",
+        },
+        "lead_time": {
+            "value": lead_time_hours,
+            "unit": "시간",
+            "grade": _lt_grade(lead_time_hours),
+            "description": "접수에서 완료까지 평균 리드타임",
+        },
+        "change_failure_rate": {
+            "value": change_failure_rate,
+            "unit": "%",
+            "grade": _cfr_grade(change_failure_rate),
+            "description": "완료 후 재오픈된 티켓 비율",
+            "resolved_count": total_r,
+            "reopened_count": reopened_r,
+        },
+        "mttr": {
+            "value": mttr_hours,
+            "unit": "시간",
+            "grade": _mttr_grade(mttr_hours),
+            "description": "재오픈 후 재완료까지 평균 복구 시간",
+        },
+    }

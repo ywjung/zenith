@@ -3,16 +3,26 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
+import { useTheme } from '@/context/ThemeContext'
 import { formatName } from '@/lib/utils'
 import NotificationBell from './NotificationBell'
 import GlobalSearch from './GlobalSearch'
 
 export default function Header() {
   const { user, logout, isAgent, isAdmin } = useAuth()
+  const { theme, setTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
+  function cycleTheme() {
+    const next: Record<string, 'light' | 'dark' | 'system'> = {
+      system: 'light', light: 'dark', dark: 'system',
+    }
+    setTheme(next[theme] ?? 'system')
+  }
+  const themeIcon = theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '🖥️'
+
   return (
-    <header className="bg-blue-700 text-white shadow-md">
+    <header className="bg-blue-700 dark:bg-gray-900 text-white shadow-md dark:shadow-gray-900/50 dark:border-b dark:border-gray-800">
       <div className="w-full px-4 py-3 flex items-center justify-between gap-3">
         <Link href="/" className="text-xl font-bold tracking-tight hover:opacity-90 shrink-0">
           <span className="flex items-center gap-1.5">
@@ -37,32 +47,59 @@ export default function Header() {
               {isAgent && <Link href="/reports" className="hover:underline opacity-90 whitespace-nowrap">리포트</Link>}
               {isAgent && <Link href="/admin" className="hover:underline opacity-90 whitespace-nowrap">관리</Link>}
               <Link href="/help" className="hover:underline opacity-90 whitespace-nowrap">도움말</Link>
-              <a
-                href={process.env.NEXT_PUBLIC_GITLAB_URL || 'http://localhost:8929'}
-                target="_blank" rel="noopener noreferrer"
-                className="hover:underline opacity-90 whitespace-nowrap"
-              >GitLab ↗</a>
+              {process.env.NEXT_PUBLIC_GITLAB_URL && (
+                <a
+                  href={process.env.NEXT_PUBLIC_GITLAB_URL}
+                  target="_blank" rel="noopener noreferrer"
+                  className="hover:underline opacity-90 whitespace-nowrap"
+                >GitLab ↗</a>
+              )}
               <Link
                 href="/tickets/new"
-                className="bg-white text-blue-700 px-3 py-1.5 rounded-md font-semibold hover:bg-blue-50 transition-colors whitespace-nowrap text-xs"
+                className="bg-white dark:bg-gray-700 text-blue-700 dark:text-gray-100 px-3 py-1.5 rounded-md font-semibold hover:bg-blue-50 dark:hover:bg-gray-600 transition-colors whitespace-nowrap text-xs"
               >+ 새 티켓</Link>
               <NotificationBell />
-              <div className="flex items-center gap-2 border-l border-blue-500 pl-3">
-                <span className="opacity-90 text-sm whitespace-nowrap">{formatName(user.name)}</span>
-                {user.role !== 'user' && (
-                  <span className="text-xs bg-blue-500 px-1.5 py-0.5 rounded whitespace-nowrap">
-                    {user.role === 'admin' ? '관리자' : user.role === 'agent' ? 'IT담당' : '개발자'}
-                  </span>
-                )}
-                <button onClick={logout} className="text-blue-200 hover:text-white text-xs underline whitespace-nowrap">
-                  로그아웃
+              <button
+                onClick={cycleTheme}
+                title={`테마: ${theme} (클릭해서 변경)`}
+                className="p-1.5 rounded-md hover:bg-blue-600 dark:hover:bg-gray-700 transition-colors text-sm opacity-80 hover:opacity-100"
+              >
+                {themeIcon}
+              </button>
+              <div className="relative flex items-center gap-2 border-l border-blue-500 dark:border-gray-700 pl-3 group">
+                <button className="flex items-center gap-2 cursor-pointer">
+                  <span className="opacity-90 text-sm whitespace-nowrap">{formatName(user.name)}</span>
+                  {user.role !== 'user' && (
+                    <span className="text-xs bg-blue-500 dark:bg-gray-700 px-1.5 py-0.5 rounded whitespace-nowrap">
+                      {user.role === 'admin' ? '관리자' : user.role === 'agent' ? 'IT담당' : user.role === 'pl' ? 'PL' : '개발자'}
+                    </span>
+                  )}
+                  <span className="text-blue-300 dark:text-gray-500 text-xs">▾</span>
                 </button>
+                {/* 드롭다운 */}
+                <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-150">
+                  <Link
+                    href="/profile/sessions"
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <span>🔒</span>
+                    <span>세션 관리</span>
+                  </Link>
+                  <div className="border-t border-gray-100 dark:border-gray-700" />
+                  <button
+                    onClick={logout}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    <span>↩</span>
+                    <span>로그아웃</span>
+                  </button>
+                </div>
               </div>
             </>
           ) : (
             <>
               <Link href="/portal" className="hover:underline opacity-90">IT 지원 요청</Link>
-              <Link href="/login" className="bg-white text-blue-700 px-4 py-1.5 rounded-md font-semibold hover:bg-blue-50 transition-colors">로그인</Link>
+              <Link href="/login" className="bg-white dark:bg-gray-700 text-blue-700 dark:text-gray-100 px-4 py-1.5 rounded-md font-semibold hover:bg-blue-50 dark:hover:bg-gray-600 transition-colors">로그인</Link>
             </>
           )}
         </nav>
@@ -72,7 +109,7 @@ export default function Header() {
           {user && <NotificationBell />}
           <button
             onClick={() => setMobileMenuOpen(o => !o)}
-            className="p-2 rounded-md hover:bg-blue-600 transition-colors"
+            className="p-2 rounded-md hover:bg-blue-600 dark:hover:bg-gray-700 transition-colors"
             aria-label="메뉴"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -87,17 +124,17 @@ export default function Header() {
 
       {/* 모바일 드롭다운 메뉴 */}
       {mobileMenuOpen && user && (
-        <div className="md:hidden bg-blue-800 border-t border-blue-600 px-4 py-3 space-y-2 text-sm">
-          <Link href="/" className="block py-2 hover:text-blue-200" onClick={() => setMobileMenuOpen(false)}>🎫 티켓 목록</Link>
-          <Link href="/tickets/new" className="block py-2 hover:text-blue-200" onClick={() => setMobileMenuOpen(false)}>+ 새 티켓 등록</Link>
-          <Link href="/kb" className="block py-2 hover:text-blue-200" onClick={() => setMobileMenuOpen(false)}>📚 지식베이스</Link>
-          <Link href="/kanban" className="block py-2 hover:text-blue-200" onClick={() => setMobileMenuOpen(false)}>🗂 칸반</Link>
-          {isAgent && <Link href="/reports" className="block py-2 hover:text-blue-200" onClick={() => setMobileMenuOpen(false)}>📊 리포트</Link>}
-          {isAgent && <Link href="/admin" className="block py-2 hover:text-blue-200" onClick={() => setMobileMenuOpen(false)}>⚙️ 관리</Link>}
-          <Link href="/help" className="block py-2 hover:text-blue-200" onClick={() => setMobileMenuOpen(false)}>❓ 도움말</Link>
-          <div className="border-t border-blue-600 pt-2 flex items-center justify-between">
-            <span className="text-blue-200 text-xs">{user.name} ({user.role})</span>
-            <button onClick={logout} className="text-blue-300 hover:text-white text-xs underline">로그아웃</button>
+        <div className="md:hidden bg-blue-800 dark:bg-gray-900 border-t border-blue-600 dark:border-gray-800 px-4 py-3 space-y-2 text-sm">
+          <Link href="/" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🎫 티켓 목록</Link>
+          <Link href="/tickets/new" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>+ 새 티켓 등록</Link>
+          <Link href="/kb" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📚 지식베이스</Link>
+          <Link href="/kanban" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🗂 칸반</Link>
+          {isAgent && <Link href="/reports" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📊 리포트</Link>}
+          {isAgent && <Link href="/admin" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>⚙️ 관리</Link>}
+          <Link href="/help" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>❓ 도움말</Link>
+          <div className="border-t border-blue-600 dark:border-gray-700 pt-2 flex items-center justify-between">
+            <span className="text-blue-200 dark:text-gray-400 text-xs">{user.name} ({user.role})</span>
+            <button onClick={logout} className="text-blue-300 dark:text-gray-400 hover:text-white dark:hover:text-gray-200 text-xs underline">로그아웃</button>
           </div>
         </div>
       )}

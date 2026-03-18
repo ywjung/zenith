@@ -76,25 +76,25 @@ export default function AdminLabelsPage() {
   return (
     <div className="space-y-6">
       {/* 헤더 */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">GitLab 라벨 동기화 관리</h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">GitLab 라벨 동기화 관리</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               ITSM에서 사용하는 모든 라벨이 GitLab 프로젝트·그룹에 존재하는지 확인하고 동기화합니다.
             </p>
             {data && (
               <div className="flex gap-3 mt-3 text-sm flex-wrap">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
-                  전체 <strong className="text-gray-900">{data.labels.length}개</strong>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                  전체 <strong className="text-gray-900 dark:text-gray-100">{data.labels.length}개</strong>
                 </span>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${allSynced ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${allSynced ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
                   {allSynced ? '✅ 전체 동기화됨' : `⚠️ 미동기화 ${unsyncedCount}개`}
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400">
                   프로젝트 {data.project_label_count}개
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-50 text-purple-700">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400">
                   그룹 {data.group_label_count}개
                 </span>
               </div>
@@ -115,9 +115,9 @@ export default function AdminLabelsPage() {
 
         {/* 동기화 결과 */}
         {syncResult && (
-          <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-4 text-sm">
-            <p className="font-semibold text-green-800 mb-1">동기화 완료</p>
-            <p className="text-green-700">
+          <div className="mt-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-xl p-4 text-sm">
+            <p className="font-semibold text-green-800 dark:text-green-300 mb-1">동기화 완료</p>
+            <p className="text-green-700 dark:text-green-400">
               성공 {syncResult.synced.length}개
               {syncResult.failed.length > 0 && (
                 <span className="text-red-600 ml-2">실패 {syncResult.failed.length}개: {syncResult.failed.join(', ')}</span>
@@ -126,16 +126,16 @@ export default function AdminLabelsPage() {
           </div>
         )}
         {error && (
-          <div className="mt-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">⚠️ {error}</div>
+          <div className="mt-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-xl px-4 py-3 text-sm">⚠️ {error}</div>
         )}
       </div>
 
       {/* 구조 설명 */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-5 text-sm text-amber-800 dark:text-amber-300">
         <p className="font-semibold mb-2">📌 라벨 관리 구조</p>
         <ul className="space-y-1.5 text-xs leading-relaxed">
           <li>• <strong>status:: / prio::</strong> — 워크플로우·SLA 고정값. 이 페이지에서 현황만 확인 가능합니다.</li>
-          <li>• <strong>cat::</strong> — <Link href="/admin/service-types" className="underline text-amber-900 hover:text-amber-700">서비스 유형 관리</Link>에서 추가·수정·삭제 시 GitLab에 자동 동기화됩니다.</li>
+          <li>• <strong>cat::</strong> — <Link href="/admin/service-types" className="underline text-amber-900 dark:text-amber-200 hover:text-amber-700 dark:hover:text-amber-400">서비스 유형 관리</Link>에서 추가·수정·삭제 시 GitLab에 자동 동기화됩니다.</li>
           <li>• <strong>동기화 원칙</strong> — 라벨은 <strong>생성·색상 업데이트만</strong> 수행합니다. 절대 삭제하지 않습니다 (삭제 시 GitLab이 이슈 라벨을 자동 제거).</li>
           <li>• <strong>프로젝트 + 그룹</strong> — 양쪽에 모두 생성하여 전달된 개발 프로젝트에서도 동일 라벨을 사용할 수 있습니다.</li>
         </ul>
@@ -143,30 +143,30 @@ export default function AdminLabelsPage() {
 
       {/* 라벨 그룹별 현황 */}
       {loading ? (
-        <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-gray-400 animate-pulse">불러오는 중...</div>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 shadow-sm p-8 text-center text-gray-400 animate-pulse">불러오는 중...</div>
       ) : data && LABEL_GROUPS.map(group => {
         const groupLabels = data.labels.filter(l => l.name.startsWith(group.prefix))
         if (groupLabels.length === 0) return null
         const groupSynced = groupLabels.every(l => l.synced)
         return (
-          <div key={group.prefix} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-b">
+          <div key={group.prefix} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-b dark:border-gray-700">
               <div className="flex items-center gap-3">
                 <span className="text-xl">{group.icon}</span>
                 <div>
-                  <h3 className="font-semibold text-gray-800">{group.title}</h3>
-                  <p className="text-xs text-gray-500">{group.desc}</p>
+                  <h3 className="font-semibold text-gray-800 dark:text-gray-200">{group.title}</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{group.desc}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {groupSynced ? (
-                  <span className="text-xs text-green-600 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full font-medium">✅ 동기화됨</span>
+                  <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 px-2.5 py-1 rounded-full font-medium">✅ 동기화됨</span>
                 ) : (
-                  <span className="text-xs text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full font-medium">⚠️ 미동기화</span>
+                  <span className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 px-2.5 py-1 rounded-full font-medium">⚠️ 미동기화</span>
                 )}
                 {!group.readonly && (
                   <Link href="/admin/service-types"
-                    className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-2.5 py-1 rounded-full hover:bg-blue-50 transition-colors">
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-700 px-2.5 py-1 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
                     서비스 유형 관리 →
                   </Link>
                 )}
@@ -174,7 +174,7 @@ export default function AdminLabelsPage() {
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-gray-50/50 text-xs text-gray-400 uppercase">
+                <tr className="border-b dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/30 text-xs text-gray-400 uppercase">
                   <th className="px-5 py-2.5 text-left">라벨 이름</th>
                   <th className="px-5 py-2.5 text-left">색상</th>
                   <th className="px-4 py-2.5 text-center">프로젝트</th>
@@ -182,16 +182,16 @@ export default function AdminLabelsPage() {
                   <th className="px-4 py-2.5 text-center">상태</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {groupLabels.map(label => (
-                  <tr key={label.name} className={`hover:bg-gray-50 ${!label.synced ? 'bg-red-50/30' : ''} ${!label.enabled ? 'opacity-50' : ''}`}>
+                  <tr key={label.name} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${!label.synced ? 'bg-red-50/30 dark:bg-red-900/10' : ''} ${!label.enabled ? 'opacity-50' : ''}`}>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2 flex-wrap">
                         <LabelDot color={label.color} />
-                        <code className="font-mono text-sm text-gray-800">{label.name}</code>
+                        <code className="font-mono text-sm text-gray-800 dark:text-gray-200">{label.name}</code>
                         {/* cat:: 라벨: 서비스 유형 이름 표시 */}
                         {label.service_label && (
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                             {label.service_emoji} {label.service_label}
                             {!label.enabled && <span className="text-gray-400">(비활성)</span>}
                           </span>
@@ -201,7 +201,7 @@ export default function AdminLabelsPage() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <LabelDot color={label.color} />
-                        <span className="text-xs font-mono text-gray-500">{label.color}</span>
+                        <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{label.color}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -220,9 +220,9 @@ export default function AdminLabelsPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       {label.synced ? (
-                        <span className="text-xs text-green-600 bg-green-50 border border-green-100 px-2 py-0.5 rounded-full">정상</span>
+                        <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 px-2 py-0.5 rounded-full">정상</span>
                       ) : (
-                        <span className="text-xs text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">누락</span>
+                        <span className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 px-2 py-0.5 rounded-full">누락</span>
                       )}
                     </td>
                   </tr>

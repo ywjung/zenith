@@ -74,7 +74,7 @@ def update_template(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_agent),
 ):
-    t = db.query(TicketTemplate).filter(TicketTemplate.id == template_id).first()
+    t = db.query(TicketTemplate).filter(TicketTemplate.id == template_id).with_for_update().first()
     if not t:
         raise HTTPException(status_code=404, detail="템플릿을 찾을 수 없습니다.")
     t.name = data.name
@@ -92,7 +92,7 @@ def delete_template(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_admin),
 ):
-    t = db.query(TicketTemplate).filter(TicketTemplate.id == template_id).first()
+    t = db.query(TicketTemplate).filter(TicketTemplate.id == template_id).with_for_update().first()
     if not t:
         raise HTTPException(status_code=404, detail="템플릿을 찾을 수 없습니다.")
     db.delete(t)
@@ -145,9 +145,9 @@ def create_ticket_link(
     db: Session = Depends(get_db),
     user: dict = Depends(require_developer),
 ):
-    allowed_types = {"related", "blocks", "duplicate_of"}
+    allowed_types = {"related", "blocks", "duplicate_of", "problem_of"}
     if data.link_type not in allowed_types:
-        raise HTTPException(status_code=400, detail=f"허용된 링크 유형: {', '.join(allowed_types)}")
+        raise HTTPException(status_code=400, detail=f"허용된 링크 유형: {', '.join(sorted(allowed_types))}")
 
     lk = TicketLink(
         source_iid=iid,

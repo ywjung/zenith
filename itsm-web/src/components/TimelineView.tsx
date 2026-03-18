@@ -23,10 +23,17 @@ interface TimelineEvent {
 
 // DB에 실제 저장되는 action 코드 → 한국어 레이블
 const ACTION_LABELS: Record<string, string> = {
-  'ticket.create':    '티켓 생성',
-  'ticket.update':    '티켓 수정',
-  'ticket.delete':    '티켓 삭제',
-  'user.role_change': '역할 변경',
+  'ticket.create':              '티켓 생성',
+  'ticket.update':              '티켓 수정',
+  'ticket.delete':              '티켓 삭제',
+  'ticket.custom_fields.update':'커스텀 필드 변경',
+  'ticket.pipeline_trigger':    '파이프라인 실행',
+  'ticket.merge':               '티켓 병합',
+  'ticket.bulk.status':         '일괄 상태 변경',
+  'ticket.bulk.priority':       '일괄 우선순위 변경',
+  'ticket.bulk.assign':         '일괄 담당자 배정',
+  'ticket.bulk.close':          '일괄 종료',
+  'user.role_change':           '역할 변경',
   // 레거시 (이전 버전 호환)
   create_ticket:    '티켓 생성',
   update_status:    '상태 변경',
@@ -43,10 +50,17 @@ const ACTION_LABELS: Record<string, string> = {
 }
 
 const ACTION_ICONS: Record<string, string> = {
-  'ticket.create':    '🎫',
-  'ticket.update':    '✏️',
-  'ticket.delete':    '🗑️',
-  'user.role_change': '👤',
+  'ticket.create':              '🎫',
+  'ticket.update':              '✏️',
+  'ticket.delete':              '🗑️',
+  'ticket.custom_fields.update':'📋',
+  'ticket.pipeline_trigger':    '🚀',
+  'ticket.merge':               '🔀',
+  'ticket.bulk.status':         '🔄',
+  'ticket.bulk.priority':       '⚡',
+  'ticket.bulk.assign':         '👤',
+  'ticket.bulk.close':          '🔒',
+  'user.role_change':           '👤',
   create_ticket:  '🎫',
   update_status:  '🔄',
   update_priority:'⚡',
@@ -57,10 +71,17 @@ const ACTION_ICONS: Record<string, string> = {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-  'ticket.create':    'bg-blue-500',
-  'ticket.update':    'bg-purple-500',
-  'ticket.delete':    'bg-red-500',
-  'user.role_change': 'bg-teal-500',
+  'ticket.create':              'bg-blue-500',
+  'ticket.update':              'bg-purple-500',
+  'ticket.delete':              'bg-red-500',
+  'ticket.custom_fields.update':'bg-indigo-500',
+  'ticket.pipeline_trigger':    'bg-cyan-500',
+  'ticket.merge':               'bg-violet-500',
+  'ticket.bulk.status':         'bg-purple-500',
+  'ticket.bulk.priority':       'bg-orange-500',
+  'ticket.bulk.assign':         'bg-teal-500',
+  'ticket.bulk.close':          'bg-gray-500',
+  'user.role_change':           'bg-teal-500',
   create_ticket:  'bg-blue-500',
   update_status:  'bg-purple-500',
   update_priority:'bg-orange-500',
@@ -81,6 +102,7 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 function formatDate(iso: string) {
   const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
   return d.toLocaleString('ko-KR', {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit',
@@ -103,7 +125,7 @@ function Avatar({ name, url }: { name?: string; url?: string }) {
     )
   }
   return (
-    <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold text-gray-600 shrink-0">
+    <div className="w-7 h-7 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300 shrink-0">
       {initial}
     </div>
   )
@@ -115,13 +137,13 @@ function CommentEvent({ ev }: { ev: TimelineEvent }) {
       <Avatar name={ev.author_name} url={ev.author_avatar} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-gray-800">{ev.author_name}</span>
+          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{ev.author_name}</span>
           {ev.internal && (
-            <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-300">🔒 내부</span>
+            <span className="text-xs bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-300 dark:border-yellow-700">🔒 내부</span>
           )}
-          <span className="text-xs text-gray-400">{formatDate(ev.created_at)}</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(ev.created_at)}</span>
         </div>
-        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700 leading-relaxed">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
           <MarkdownRenderer content={ev.body ?? ''} />
         </div>
       </div>
@@ -132,12 +154,12 @@ function CommentEvent({ ev }: { ev: TimelineEvent }) {
 function SystemEvent({ ev }: { ev: TimelineEvent }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="w-7 h-7 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center shrink-0">
-        <span className="text-gray-400 text-xs">GL</span>
+      <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 flex items-center justify-center shrink-0">
+        <span className="text-gray-400 dark:text-gray-500 text-xs">GL</span>
       </div>
-      <div className="text-sm text-gray-400 italic flex-1">
+      <div className="text-sm text-gray-400 dark:text-gray-500 italic flex-1">
         {ev.body}
-        <span className="ml-2 text-xs text-gray-300">{formatDate(ev.created_at)}</span>
+        <span className="ml-2 text-xs text-gray-300 dark:text-gray-600">{formatDate(ev.created_at)}</span>
       </div>
     </div>
   )
@@ -198,11 +220,11 @@ function AuditEvent({ ev }: { ev: TimelineEvent }) {
         <span>{icon}</span>
       </div>
       <div className="text-sm flex-1">
-        <span className="font-medium text-gray-700">{ev.actor_name ?? ev.actor_username}</span>
-        <span className="text-gray-500">님이 </span>
-        <span className="font-medium text-gray-800">{label}</span>
-        {detail && <span className="text-gray-500"> — {detail}</span>}
-        <span className="ml-2 text-xs text-gray-400">{formatDate(ev.created_at)}</span>
+        <span className="font-medium text-gray-700 dark:text-gray-300">{ev.actor_name ?? ev.actor_username}</span>
+        <span className="text-gray-500 dark:text-gray-400">님이 </span>
+        <span className="font-medium text-gray-800 dark:text-gray-200">{label}</span>
+        {detail && <span className="text-gray-500 dark:text-gray-400"> — {detail}</span>}
+        <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">{formatDate(ev.created_at)}</span>
       </div>
     </div>
   )
@@ -214,12 +236,24 @@ export default function TimelineView({ iid, projectId }: { iid: number; projectI
   const [error, setError] = useState('')
 
   useEffect(() => {
+    const controller = new AbortController()
+    setLoading(true)
+    setError('')
     const params = projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''
-    fetch(`${API_BASE}/tickets/${iid}/timeline${params}`, { credentials: 'include', cache: 'no-store' })
+    fetch(`${API_BASE}/tickets/${iid}/timeline${params}`, {
+      credentials: 'include',
+      cache: 'no-store',
+      signal: controller.signal,
+    })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(setEvents)
-      .catch(() => setError('타임라인을 불러올 수 없습니다.'))
-      .finally(() => setLoading(false))
+      .catch(err => {
+        if ((err as Error).name !== 'AbortError') setError('타임라인을 불러올 수 없습니다.')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    return () => controller.abort()
   }, [iid, projectId])
 
   if (loading) {
@@ -227,21 +261,21 @@ export default function TimelineView({ iid, projectId }: { iid: number; projectI
       <div className="space-y-4 animate-pulse">
         {[1, 2, 3].map(i => (
           <div key={i} className="flex gap-3">
-            <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0" />
-            <div className="flex-1 h-16 bg-gray-100 rounded-lg" />
+            <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700 shrink-0" />
+            <div className="flex-1 h-16 bg-gray-100 dark:bg-gray-800 rounded-lg" />
           </div>
         ))}
       </div>
     )
   }
 
-  if (error) return <p className="text-sm text-red-500 py-4">{error}</p>
-  if (events.length === 0) return <p className="text-sm text-gray-400 py-8 text-center">이벤트가 없습니다.</p>
+  if (error) return <p className="text-sm text-red-500 dark:text-red-400 py-4">{error}</p>
+  if (events.length === 0) return <p className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">이벤트가 없습니다.</p>
 
   return (
     <div className="relative">
       {/* 세로 연결선 */}
-      <div className="absolute left-3.5 top-0 bottom-0 w-px bg-gray-200" />
+      <div className="absolute left-3.5 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700" />
 
       <div className="space-y-5 relative">
         {events.map(ev => (

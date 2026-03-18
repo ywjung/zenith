@@ -205,46 +205,52 @@ def get_user_accessible_projects(user_token: str) -> list[dict]:
 def get_user_projects(user_id: str) -> list[dict]:
     """사용자가 접근 가능한 GitLab 프로젝트 목록 반환.
 
-    Admin token으로 전체 프로젝트를 조회한 후, 해당 사용자가 멤버인 프로젝트만 반환.
-    멤버십 정보가 없으면 전체 프로젝트를 반환.
+    GitLab API의 membership=true 파라미터를 사용해 해당 사용자가 멤버인
+    프로젝트만 직접 반환한다 (전체 조회 후 필터링 방식 대비 불필요한 API 호출 제거).
     """
+    all_projects: list[dict] = []
+    page = 1
     with _http_ctx() as client:
-        resp = client.get(
-            f"{get_settings().GITLAB_API_URL}/api/v4/projects",
-            headers=_headers(),
-            params={"per_page": 100, "simple": True, "order_by": "name", "sort": "asc"},
-        )
-        resp.raise_for_status()
-        all_projects = resp.json()
-
-        # 사용자 멤버십 조회 (GET /api/v4/users/{user_id}/memberships)
-        try:
-            membership_resp = client.get(
-                f"{get_settings().GITLAB_API_URL}/api/v4/users/{user_id}/memberships",
+        while True:
+            resp = client.get(
+                f"{get_settings().GITLAB_API_URL}/api/v4/projects",
                 headers=_headers(),
-                params={"type": "Project", "per_page": 100},
+                params={
+                    "membership": "true",
+                    "per_page": 100,
+                    "page": page,
+                    "simple": True,
+                    "order_by": "name",
+                    "sort": "asc",
+                },
             )
-            if membership_resp.is_success:
-                memberships = membership_resp.json()
-                member_project_ids = {str(m["source_id"]) for m in memberships if m.get("source_type") == "Project"}
-                if member_project_ids:
-                    return [p for p in all_projects if str(p["id"]) in member_project_ids]
-        except Exception:
-            pass
-
-        return all_projects
+            resp.raise_for_status()
+            batch = resp.json()
+            all_projects.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+    return all_projects
 
 
 def get_project_members(project_id: str) -> list[dict]:
-    """GitLab 프로젝트 멤버 목록 반환."""
+    """GitLab 프로젝트 멤버 목록 반환 (페이지네이션 처리)."""
+    all_members: list[dict] = []
+    page = 1
     with _http_ctx() as client:
-        resp = client.get(
-            f"{_base(project_id)}/members/all",
-            headers=_headers(),
-            params={"per_page": 100},
-        )
-        resp.raise_for_status()
-        return resp.json()
+        while True:
+            resp = client.get(
+                f"{_base(project_id)}/members/all",
+                headers=_headers(),
+                params={"per_page": 100, "page": page},
+            )
+            resp.raise_for_status()
+            batch = resp.json()
+            all_members.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+    return all_members
 
 
 def get_group_members(group_id: str) -> list[dict]:
@@ -282,6 +288,7 @@ def create_issue(
     assignee_id: Optional[int] = None,
     gitlab_token: Optional[str] = None,
     confidential: bool = False,
+    milestone_id: Optional[int] = None,
 ) -> dict:
     """이슈를 생성한다.
 
@@ -297,6 +304,8 @@ def create_issue(
     }
     if assignee_id:
         payload["assignee_ids"] = [assignee_id]
+    if milestone_id:
+        payload["milestone_id"] = milestone_id
     headers = _get_headers(gitlab_token)
     s = get_settings()
     base_url = _base(project_id)
@@ -367,8 +376,12 @@ def get_issues(
             resp = client.get(f"{_base(project_id)}/issues", headers=_headers(), params=params)
             resp.raise_for_status()
             _record_success()
-            total = int(resp.headers.get("X-Total", len(resp.json())))
-            return resp.json(), total
+            _json = resp.json()
+            try:
+                total = int(resp.headers.get("X-Total", len(_json)))
+            except (ValueError, TypeError):
+                total = len(_json)
+            return _json, total
     except Exception:
         _record_failure()
         raise
@@ -421,14 +434,22 @@ def get_issue(iid: int, project_id: Optional[str] = None, gitlab_token: Optional
 
 
 def get_notes(iid: int, project_id: Optional[str] = None) -> list[dict]:
+    all_notes: list[dict] = []
+    page = 1
     with _http_ctx() as client:
-        resp = client.get(
-            f"{_base(project_id)}/issues/{iid}/notes",
-            headers=_headers(),
-            params={"per_page": 100, "sort": "asc"},
-        )
-        resp.raise_for_status()
-        return resp.json()
+        while True:
+            resp = client.get(
+                f"{_base(project_id)}/issues/{iid}/notes",
+                headers=_headers(),
+                params={"per_page": 100, "page": page, "order_by": "created_at", "sort": "asc"},
+            )
+            resp.raise_for_status()
+            notes = resp.json()
+            all_notes.extend(notes)
+            if len(notes) < 100:
+                break  # last page
+            page += 1
+    return all_notes
 
 
 def add_note(
@@ -473,6 +494,7 @@ def update_issue(
     assignee_id: Optional[int] = None,
     title: Optional[str] = None,
     description: Optional[str] = None,
+    milestone_id: Optional[int] = None,
 ) -> dict:
     payload: dict = {}
     if title:
@@ -488,6 +510,9 @@ def update_issue(
     if assignee_id is not None:
         # -1 means unassign, otherwise set
         payload["assignee_ids"] = [] if assignee_id == -1 else [assignee_id]
+    if milestone_id is not None:
+        # 0 means remove milestone, otherwise set
+        payload["milestone_id"] = None if milestone_id == 0 else milestone_id
     with _http_ctx() as client:
         resp = client.put(
             f"{_base(project_id)}/issues/{iid}",
@@ -857,9 +882,30 @@ def search_issues(
             )
             if resp.is_success:
                 return resp.json()
-            logger.warning("search_issues: status %d for query '%s'", resp.status_code, query)
+            logger.warning("search_issues: status %d (query_len=%d)", resp.status_code, len(query))
     except Exception as e:
         logger.warning("search_issues failed: %s", e)
+    return []
+
+
+def get_milestones(project_id: Optional[str] = None, state: str = "active") -> list[dict]:
+    """프로젝트 마일스톤 목록 반환.
+
+    state: 'active' | 'closed' | 'all'
+    반환: [{id, iid, title, due_date, state, description}, ...]
+    """
+    try:
+        with _http_ctx() as client:
+            resp = client.get(
+                f"{_base(project_id)}/milestones",
+                headers=_headers(),
+                params={"state": state, "per_page": 100, "include_parent_milestones": True},
+            )
+            if resp.is_success:
+                return resp.json()
+            logger.warning("get_milestones: status %d for project %s", resp.status_code, project_id)
+    except Exception as e:
+        logger.warning("get_milestones failed: %s", e)
     return []
 
 
@@ -1002,3 +1048,52 @@ def ensure_labels(project_id: Optional[str] = None) -> None:
                 pass
     _labels_initialized.add(pid)
     logger.info("Project labels ensured for project %s", pid)
+
+
+def trigger_pipeline(
+    ref: str,
+    variables: dict[str, str] | None = None,
+    project_id: Optional[str] = None,
+) -> dict:
+    """GitLab CI/CD 파이프라인 트리거.
+
+    Args:
+        ref: 브랜치 또는 태그 이름
+        variables: 파이프라인 변수 딕셔너리
+        project_id: 대상 프로젝트 ID (기본: 설정값)
+
+    Returns:
+        GitLab API pipeline 응답 dict
+    """
+    payload: dict = {"ref": ref}
+    if variables:
+        payload["variables"] = [
+            {"key": k, "value": v} for k, v in variables.items()
+        ]
+    with _http_ctx() as client:
+        resp = client.post(
+            f"{_base(project_id)}/pipeline",
+            headers=_headers(),
+            json=payload,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+def list_pipelines(
+    ref: Optional[str] = None,
+    per_page: int = 10,
+    project_id: Optional[str] = None,
+) -> list[dict]:
+    """최근 파이프라인 목록 조회."""
+    params: dict = {"per_page": per_page, "order_by": "id", "sort": "desc"}
+    if ref:
+        params["ref"] = ref
+    with _http_ctx() as client:
+        resp = client.get(
+            f"{_base(project_id)}/pipelines",
+            headers=_headers(),
+            params=params,
+        )
+        resp.raise_for_status()
+        return resp.json()

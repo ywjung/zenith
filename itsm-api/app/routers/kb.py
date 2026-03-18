@@ -7,6 +7,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import text as sa_text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -166,9 +167,9 @@ def get_article(
     already_viewed = False
     if r:
         try:
-            already_viewed = bool(r.get(view_key))
-            if not already_viewed:
-                r.setex(view_key, _KB_VIEW_COOLDOWN, "1")
+            # set(nx=True)로 원자적으로 확인+설정 — r.get() + setex() 사이 race condition 방지
+            set_result = r.set(view_key, "1", ex=_KB_VIEW_COOLDOWN, nx=True)
+            already_viewed = (set_result is None)
         except Exception:
             pass
     if not already_viewed:
@@ -272,7 +273,15 @@ def create_article(
         published=data.published,
     )
     db.add(article)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # slug 중복 (동시 생성 race condition) → 타임스탬프 suffix 붙여 재시도
+        import time
+        article.slug = f"{slug}-{int(time.time())}"
+        db.add(article)
+        db.commit()
     db.refresh(article)
     _invalidate_kb_cache()
     return _article_to_dict(article, include_content=True)

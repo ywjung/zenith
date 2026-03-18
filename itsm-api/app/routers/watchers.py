@@ -1,5 +1,6 @@
 """Ticket watcher (subscription) endpoints."""
 import logging
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -10,6 +11,17 @@ from ..models import TicketWatcher
 from ..config import get_settings
 
 logger = logging.getLogger(__name__)
+
+_EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
+
+def _validate_email(email: str) -> str:
+    """이메일 형식을 검증하고 소문자로 정규화한다."""
+    if not email or not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="유효하지 않은 이메일 주소")
+    return email.lower()
+
+
 router = APIRouter(prefix="/tickets", tags=["watchers"])
 # 내 구독 목록은 /notifications 아래에 별도 라우터로 등록
 my_router = APIRouter(prefix="/notifications", tags=["watchers"])
@@ -57,7 +69,7 @@ def watch_ticket(
         ticket_iid=iid,
         project_id=project_id,
         user_id=user_id,
-        user_email=user.get("email", ""),
+        user_email=_validate_email(user.get("email", "")),
         user_name=user.get("name", user.get("username", "")),
     )
     try:

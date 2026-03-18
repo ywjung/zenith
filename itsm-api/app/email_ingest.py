@@ -1,6 +1,7 @@
 """IMAP email ingest — poll inbox and convert emails to ITSM tickets."""
 import email
 import email.message
+import html
 import imaplib
 import logging
 import re
@@ -10,7 +11,23 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _REDIS_MSGID_PREFIX = "email:msgid:"
+_REDIS_TICKET_PREFIX = "email:ticket:"   # message_id → ticket_iid
 _REDIS_MSGID_TTL = 60 * 60 * 24 * 30  # 30 days
+
+# 제목에서 티켓 번호 추출 정규식: [티켓 #42], Re: ... #42 ...
+_TICKET_IID_RE = re.compile(r"\[티켓\s*#(\d+)\]|티켓\s*#(\d+)", re.IGNORECASE)
+
+
+def _sanitize_email_body(text: str) -> str:
+    """Strip HTML tags and dangerous content from email body for GitLab issue description."""
+    if not text:
+        return ""
+    # Strip HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Decode common HTML entities
+    text = html.unescape(text)
+    # Limit length
+    return text[:50000]
 
 
 def _decode_str(value: str | bytes, charset: Optional[str] = None) -> str:
@@ -71,6 +88,70 @@ def _is_duplicate(message_id: str) -> bool:
         return False
 
 
+def _store_ticket_msgid(message_id: str, ticket_iid: int) -> None:
+    """Store message_id → ticket_iid mapping so replies can find the parent ticket."""
+    if not message_id:
+        return
+    try:
+        from .redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return
+        r.set(f"{_REDIS_TICKET_PREFIX}{message_id}", str(ticket_iid), ex=_REDIS_MSGID_TTL)
+    except Exception as e:
+        logger.warning("Failed to store ticket msgid mapping: %s", e)
+
+
+def _find_parent_ticket(in_reply_to: str, references: str, subject: str) -> Optional[int]:
+    """Return ticket_iid if this email is a reply to an existing ticket, else None.
+
+    Checks (in order):
+    1. In-Reply-To header → Redis lookup
+    2. References header (space-separated Message-IDs) → Redis lookup
+    3. Subject line containing [티켓 #N]
+    """
+    try:
+        from .redis_client import get_redis
+        r = get_redis()
+
+        def _lookup_msgid(mid: str) -> Optional[int]:
+            if not mid or r is None:
+                return None
+            val = r.get(f"{_REDIS_TICKET_PREFIX}{mid.strip()}")
+            if val:
+                return int(val)
+            return None
+
+        # 1. In-Reply-To
+        if in_reply_to:
+            iid = _lookup_msgid(in_reply_to)
+            if iid:
+                return iid
+
+        # 2. References (last entry is most recent parent)
+        if references:
+            for mid in reversed(references.split()):
+                iid = _lookup_msgid(mid)
+                if iid:
+                    return iid
+
+    except Exception as e:
+        logger.warning("Redis reply lookup failed: %s", e)
+
+    # 3. Subject pattern — works even without Redis
+    # Security: parent_iid comes from untrusted email subject.
+    # Validation against GitLab API should be done before setting parent.
+    # TODO: Verify ticket exists in the expected project before linking.
+    m = _TICKET_IID_RE.search(subject)
+    if m:
+        try:
+            return int(m.group(1) or m.group(2))
+        except (ValueError, TypeError) as e:
+            logger.warning("Failed to parse ticket IID from subject: %s", e)
+
+    return None
+
+
 def _send_confirmation(to_email: str, subject: str, ticket_iid: int) -> None:
     from .notifications import send_email
     confirmation_subject = f"Re: {subject} [티켓 #{ticket_iid} 접수됨]"
@@ -109,7 +190,18 @@ def process_inbox() -> int:
         message_ids = data[0].split() if data[0] else []
         logger.info("Email ingest: found %d unseen messages", len(message_ids))
 
+        MAX_EMAILS_PER_CYCLE = 50
+        processed_count = 0
+
         for num in message_ids:
+            if processed_count >= MAX_EMAILS_PER_CYCLE:
+                logger.warning(
+                    "이메일 처리 한도(%d)에 도달했습니다. 다음 주기에 처리합니다.",
+                    MAX_EMAILS_PER_CYCLE,
+                )
+                break
+            processed_count += 1
+
             try:
                 _, msg_data = imap.fetch(num, "(RFC822)")
                 raw = msg_data[0][1]
@@ -125,9 +217,42 @@ def process_inbox() -> int:
                 from_email = _extract_email_address(from_raw)
                 subject_raw = msg.get("Subject", "(no subject)")
                 subject = _parse_subject(subject_raw)
-                body = _parse_body(msg)
+                body = _sanitize_email_body(_parse_body(msg))
 
-                # Build ticket description
+                in_reply_to = msg.get("In-Reply-To", "").strip()
+                references = msg.get("References", "").strip()
+
+                # Check if this is a reply to an existing ticket
+                parent_iid = _find_parent_ticket(in_reply_to, references, subject)
+
+                if parent_iid:
+                    # Verify the ticket actually exists before adding a comment
+                    try:
+                        gitlab_client.get_issue(parent_iid)
+                    except Exception:
+                        logger.warning(
+                            "Email reply references non-existent ticket #%s — creating new ticket instead",
+                            parent_iid,
+                        )
+                        parent_iid = None
+
+                if parent_iid:
+                    # Add as a comment to the existing ticket
+                    note_body = (
+                        f"**이메일 답장** — {from_email}\n\n"
+                        f"---\n\n"
+                        f"{body}"
+                    )
+                    try:
+                        gitlab_client.add_note(parent_iid, note_body)
+                        imap.store(num, "+FLAGS", "\\Seen")
+                        created += 1
+                        logger.info("Email reply added as comment to ticket #%s from %s", parent_iid, from_email)
+                    except Exception as e:
+                        logger.error("Failed to add email reply as comment to #%s: %s", parent_iid, e)
+                    continue
+
+                # New ticket
                 description = (
                     f"**신청자:** {from_email}\n"
                     f"**이메일:** {from_email}\n\n"
@@ -154,13 +279,21 @@ def process_inbox() -> int:
                 except Exception as e:
                     logger.warning("Auto-assign failed for email ticket: %s", e)
 
-                issue = gitlab_client.create_issue(
-                    title=subject,
-                    description=description,
-                    labels=labels,
-                    assignee_id=assignee_id,
-                )
+                issue_title = subject[:240] if subject else "제목 없음"
+                try:
+                    issue = gitlab_client.create_issue(
+                        title=issue_title,
+                        description=description,
+                        labels=labels,
+                        assignee_id=assignee_id,
+                    )
+                except Exception as e:
+                    logger.error("GitLab issue creation failed for email from %s: %s", from_email, e)
+                    continue
                 ticket_iid = issue.get("iid")
+
+                # Store message_id → ticket_iid mapping for future reply threading
+                _store_ticket_msgid(message_id, ticket_iid)
 
                 # Create SLA record
                 try:

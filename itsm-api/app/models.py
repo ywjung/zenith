@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Index, Integer, BigInteger, String, Text, DateTime, Boolean, Date
+from sqlalchemy import Column, Index, Integer, BigInteger, String, Text, DateTime, Boolean, Date, Time, func
 from sqlalchemy.dialects.postgresql import JSONB, INET, ARRAY
 from .database import Base
 
@@ -70,6 +70,7 @@ class SLARecord(Base):
     sla_deadline = Column(DateTime, nullable=False)
     first_response_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
+    reopened_at = Column(DateTime, nullable=True)
     breached = Column(Boolean, nullable=False, default=False)
     breach_notified = Column(Boolean, nullable=False, default=False)
     warning_sent = Column(Boolean, nullable=False, default=False)
@@ -447,3 +448,186 @@ class Announcement(Base):
     expires_at = Column(DateTime, nullable=True)
     created_by = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class SystemSetting(Base):
+    """시스템 전역 설정 — 관리자가 런타임에 변경 가능한 키-값 저장소."""
+    __tablename__ = "system_settings"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=False)
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime, nullable=True)
+
+
+class BusinessHoursConfig(Base):
+    """업무 시간 설정 — SLA 기한 계산에 사용되는 요일별 업무 시간."""
+    __tablename__ = "business_hours_config"
+
+    id = Column(Integer, primary_key=True)
+    day_of_week = Column(Integer, nullable=False)   # 0=월, 1=화, ..., 6=일
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+
+class BusinessHoliday(Base):
+    """공휴일 — SLA 계산에서 제외되는 날짜."""
+    __tablename__ = "business_holidays"
+
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, nullable=False, unique=True)
+    name = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class HolidayYear(Base):
+    """공휴일 관리 UI에서 활성화된 연도 탭 목록."""
+    __tablename__ = "holiday_years"
+
+    year = Column(Integer, primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class IpAllowlistEntry(Base):
+    """IP 접근 허용 목록 — 관리자 API 접근 허용 CIDR 목록."""
+    __tablename__ = "ip_allowlist"
+
+    id = Column(Integer, primary_key=True)
+    cidr = Column(String(50), nullable=False, unique=True)   # e.g. "10.0.0.0/8"
+    label = Column(String(200), nullable=True)               # 메모
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(100), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CustomFieldDef(Base):
+    """커스텀 필드 정의 — 관리자가 정의하는 추가 티켓 필드."""
+    __tablename__ = "custom_field_defs"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False, unique=True)  # machine key
+    label = Column(String(200), nullable=False)              # 표시 이름
+    field_type = Column(String(20), nullable=False, default="text")  # text|number|select|checkbox
+    options = Column(ARRAY(String), nullable=False, default=list, server_default="{}")  # select 타입 옵션
+    required = Column(Boolean, nullable=False, default=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    created_by = Column(String(100), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class TicketCustomValue(Base):
+    """티켓별 커스텀 필드 값."""
+    __tablename__ = "ticket_custom_values"
+
+    id = Column(Integer, primary_key=True)
+    gitlab_issue_iid = Column(Integer, nullable=False)
+    project_id = Column(String(50), nullable=False)
+    field_id = Column(Integer, nullable=False)  # FK → custom_field_defs.id
+    value = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_ticket_custom_values_issue", "gitlab_issue_iid", "project_id", "field_id", unique=True),
+    )
+
+
+class AutomationRule(Base):
+    __tablename__ = "automation_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    # Trigger events: ticket.created, ticket.status_changed, ticket.assigned, ticket.priority_changed, ticket.commented
+    trigger_event = Column(String(50), nullable=False)
+    # Conditions: [{"field": "priority", "operator": "eq", "value": "high"}, ...]
+    conditions = Column(JSONB, nullable=False, server_default="[]")
+    # Actions: [{"type": "set_status", "value": "in_progress"}, {"type": "assign", "value": "username"}, {"type": "notify", "value": "assignee"}, {"type": "add_label", "value": "urgent"}, {"type": "send_slack", "value": "channel"}]
+    actions = Column(JSONB, nullable=False, server_default="[]")
+    is_active = Column(Boolean, nullable=False, default=True)
+    order = Column(Integer, nullable=False, default=0)
+    created_by = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_automation_rules_active", "is_active", "order"),
+    )
+
+
+class ApprovalRequest(Base):
+    __tablename__ = "approval_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_iid = Column(Integer, nullable=False, index=True)
+    project_id = Column(String(50), nullable=False)
+    requester_username = Column(String(100), nullable=False)
+    requester_name = Column(String(200), nullable=True)
+    approver_username = Column(String(100), nullable=True)  # None = any agent/admin
+    approver_name = Column(String(200), nullable=True)
+    status = Column(String(20), nullable=False, default="pending")  # pending, approved, rejected
+    reason = Column(Text, nullable=True)  # Rejection reason or approval notes
+    approved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_approval_requests_ticket", "ticket_iid", "project_id"),
+        Index("ix_approval_requests_status", "status"),
+    )
+
+
+class TicketTypeMeta(Base):
+    __tablename__ = "ticket_type_meta"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_iid = Column(Integer, nullable=False)
+    project_id = Column(String(50), nullable=False)
+    # incident | service_request | change | problem
+    ticket_type = Column(String(30), nullable=False, default="incident")
+    created_by = Column(String(100), nullable=True)
+    updated_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_ticket_type_meta_ticket", "ticket_iid", "project_id", unique=True),
+    )
+
+
+class ServiceCatalogItem(Base):
+    __tablename__ = "service_catalog_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(100), nullable=True)
+    icon = Column(String(10), nullable=True)
+    # fields_schema: [{"name": "location", "label": "설치 위치", "type": "text", "required": true}, ...]
+    fields_schema = Column(JSONB, nullable=False, server_default="[]")
+    is_active = Column(Boolean, nullable=False, default=True)
+    order = Column(Integer, nullable=False, default=0)
+    created_by = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_service_catalog_items_active", "is_active", "order"),
+    )
+
+
+class UserDashboardConfig(Base):
+    __tablename__ = "user_dashboard_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(100), nullable=False, unique=True)
+    # widgets: [{"id": "stats_bar", "visible": true, "order": 0}, ...]
+    widgets = Column(JSONB, nullable=False, server_default="[]")
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_user_dashboard_configs_username", "username", unique=True),
+    )

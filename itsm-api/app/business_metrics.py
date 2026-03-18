@@ -67,6 +67,23 @@ itsm_escalation_records_total = Gauge(
     "itsm_escalation_records_total", "에스컬레이션 이력 수"
 )
 
+# ── 승인 워크플로우 ──────────────────────────────────────────────
+itsm_approval_requests_total = Gauge(
+    "itsm_approval_requests_total",
+    "승인 요청 수",
+    ["status"],  # pending | approved | rejected
+)
+
+# ── 자동화 규칙 ─────────────────────────────────────────────────
+itsm_automation_rules_total = Gauge(
+    "itsm_automation_rules_total", "자동화 규칙 수", ["enabled"]
+)
+
+# ── IP 허용 목록 ─────────────────────────────────────────────────
+itsm_ip_allowlist_entries_total = Gauge(
+    "itsm_ip_allowlist_entries_total", "IP 허용 목록 항목 수", ["enabled"]
+)
+
 
 def _refresh(session_factory):
     """DB 집계 → Gauge 갱신 (예외 발생 시 로그만 남김)."""
@@ -142,6 +159,34 @@ def _refresh(session_factory):
             itsm_watchers_total.set(scalar("SELECT COUNT(*) FROM ticket_watchers"))
             itsm_resolution_notes_total.set(scalar("SELECT COUNT(*) FROM resolution_notes"))
             itsm_escalation_records_total.set(scalar("SELECT COUNT(*) FROM escalation_records"))
+
+            # 승인 워크플로우
+            rows = db.execute(
+                text("SELECT status, COUNT(*) FROM approval_requests GROUP BY status")
+            ).all()
+            seen_statuses = set()
+            for status, cnt in rows:
+                itsm_approval_requests_total.labels(status=status).set(cnt)
+                seen_statuses.add(status)
+            for s in ("pending", "approved", "rejected"):
+                if s not in seen_statuses:
+                    itsm_approval_requests_total.labels(status=s).set(0)
+
+            # 자동화 규칙 (컬럼명: is_active)
+            itsm_automation_rules_total.labels(enabled="true").set(
+                scalar("SELECT COUNT(*) FROM automation_rules WHERE is_active=true")
+            )
+            itsm_automation_rules_total.labels(enabled="false").set(
+                scalar("SELECT COUNT(*) FROM automation_rules WHERE is_active=false")
+            )
+
+            # IP 허용 목록 (컬럼명: is_active)
+            itsm_ip_allowlist_entries_total.labels(enabled="true").set(
+                scalar("SELECT COUNT(*) FROM ip_allowlist WHERE is_active=true")
+            )
+            itsm_ip_allowlist_entries_total.labels(enabled="false").set(
+                scalar("SELECT COUNT(*) FROM ip_allowlist WHERE is_active=false")
+            )
 
     except Exception as e:
         logger.warning("business_metrics refresh error: %s", e)

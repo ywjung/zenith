@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { fetchAdminUsers, updateUserRole } from '@/lib/api'
+import React, { useEffect, useState } from 'react'
+import { fetchAdminUsers, updateUserRole, triggerSudo } from '@/lib/api'
 import type { UserRole } from '@/types'
 import { useAuth } from '@/context/AuthContext'
-import { ROLES, ROLE_LABELS } from '@/lib/constants'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost/api'
+import { useRoleLabels } from '@/context/RoleLabelsContext'
+import { ROLES, API_BASE } from '@/lib/constants'
 
 type Session = {
   id: number
@@ -25,11 +24,11 @@ const ROLE_ICONS: Record<string, string> = {
 }
 
 const ROLE_BADGE: Record<string, string> = {
-  admin: 'bg-red-50 text-red-700 border-red-200',
-  agent: 'bg-purple-50 text-purple-700 border-purple-200',
-  pl: 'bg-teal-50 text-teal-700 border-teal-200',
-  developer: 'bg-blue-50 text-blue-700 border-blue-200',
-  user: 'bg-gray-100 text-gray-600 border-gray-200',
+  admin: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700',
+  agent: 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700',
+  pl: 'bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-700',
+  developer: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700',
+  user: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600',
 }
 
 const ROLE_AVATAR: Record<string, string> = {
@@ -41,11 +40,11 @@ const ROLE_AVATAR: Record<string, string> = {
 }
 
 const STAT_BG: Record<string, string> = {
-  admin: 'border-red-200 hover:border-red-300',
-  agent: 'border-purple-200 hover:border-purple-300',
-  pl: 'border-teal-200 hover:border-teal-300',
-  developer: 'border-blue-200 hover:border-blue-300',
-  user: 'border-gray-200 hover:border-gray-300',
+  admin: 'border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700',
+  agent: 'border-purple-200 dark:border-purple-800 hover:border-purple-300 dark:hover:border-purple-700',
+  pl: 'border-teal-200 dark:border-teal-800 hover:border-teal-300 dark:hover:border-teal-700',
+  developer: 'border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700',
+  user: 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600',
 }
 
 function getInitials(name?: string, username?: string): string {
@@ -55,6 +54,7 @@ function getInitials(name?: string, username?: string): string {
 
 function AdminUsersContent() {
   const { isAdmin } = useAuth()
+  const ROLE_LABELS = useRoleLabels()
   const [users, setUsers] = useState<UserRole[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -85,6 +85,8 @@ function AdminUsersContent() {
   const handleRoleChange = async (gitlabUserId: number, newRole: string) => {
     setSaving(gitlabUserId)
     try {
+      // 고위험 작업: Sudo 재인증 쿠키를 먼저 획득 후 역할 변경
+      await triggerSudo()
       await updateUserRole(gitlabUserId, newRole)
       setUsers((prev) =>
         prev.map((u) => u.gitlab_user_id === gitlabUserId ? { ...u, role: newRole as UserRole['role'] } : u)
@@ -108,22 +110,34 @@ function AdminUsersContent() {
         const data = await r.json()
         setSessions((prev) => ({ ...prev, [gitlabUserId]: data }))
         setExpandedUserId(gitlabUserId)
+      } else {
+        const err = await r.json().catch(() => ({}))
+        alert((err as { detail?: string }).detail || `세션 로드 실패 (HTTP ${r.status})`)
       }
+    } catch {
+      alert('세션 정보를 불러오는 중 오류가 발생했습니다.')
     } finally {
       setSessionsLoading(null)
     }
   }
 
   const revokeSession = async (gitlabUserId: number, sessionId: number) => {
-    const r = await fetch(`${API_BASE}/admin/sessions/${sessionId}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    })
-    if (r.ok) {
-      setSessions((prev) => ({
-        ...prev,
-        [gitlabUserId]: (prev[gitlabUserId] ?? []).filter((s) => s.id !== sessionId),
-      }))
+    try {
+      const r = await fetch(`${API_BASE}/admin/sessions/${sessionId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (r.ok) {
+        setSessions((prev) => ({
+          ...prev,
+          [gitlabUserId]: (prev[gitlabUserId] ?? []).filter((s) => s.id !== sessionId),
+        }))
+      } else {
+        const err = await r.json().catch(() => ({}))
+        alert(err.detail || '세션 해제에 실패했습니다.')
+      }
+    } catch {
+      alert('세션 해제 중 오류가 발생했습니다.')
     }
   }
 
@@ -154,15 +168,15 @@ function AdminUsersContent() {
           <button
             key={role}
             onClick={() => setRoleFilter(roleFilter === role ? '' : role)}
-            className={`rounded-xl border p-4 text-left bg-white transition-all hover:shadow-sm ${
+            className={`rounded-xl border p-4 text-left bg-white dark:bg-gray-800 transition-all hover:shadow-sm ${
               roleFilter === role
                 ? ROLE_BADGE[role] + ' shadow-sm'
                 : STAT_BG[role]
             }`}
           >
             <div className="text-xl mb-1">{ROLE_ICONS[role]}</div>
-            <div className="text-2xl font-bold text-gray-900">{roleCounts[role]}</div>
-            <div className="text-xs text-gray-500 mt-0.5">{ROLE_LABELS[role]}</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{roleCounts[role]}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{ROLE_LABELS[role]}</div>
           </button>
         ))}
       </div>
@@ -172,16 +186,16 @@ function AdminUsersContent() {
       )}
 
       {/* Table card */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         {/* Search bar */}
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center gap-3">
           <span className="text-gray-400">🔍</span>
           <input
             type="text"
             placeholder="이름, 아이디, 이메일, 소속 검색..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 text-sm focus:outline-none text-gray-700 placeholder-gray-400"
+            className="flex-1 text-sm focus:outline-none text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500 dark:bg-gray-800"
           />
           <div className="flex items-center gap-2">
             {roleFilter && (
@@ -192,7 +206,7 @@ function AdminUsersContent() {
                 필터 해제
               </button>
             )}
-            <span className="text-xs text-gray-400">{filtered.length}명</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">{filtered.length}명</span>
           </div>
         </div>
 
@@ -200,20 +214,20 @@ function AdminUsersContent() {
           <div className="text-center py-16 text-gray-400">불러오는 중...</div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">사용자</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">이메일</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">소속</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">가입일</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 w-52">ITSM 역할</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">세션</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">사용자</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">이메일</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">소속</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">가입일</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400 w-52">ITSM 역할</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">세션</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {filtered.map((u) => (
-                <>
-                  <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                <React.Fragment key={u.id}>
+                  <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div
@@ -223,14 +237,14 @@ function AdminUsersContent() {
                           {getInitials(u.name, u.username)}
                         </div>
                         <div className="min-w-0">
-                          <div className="font-medium text-gray-900 truncate">{u.name || u.username}</div>
-                          <div className="text-xs text-gray-400 font-mono truncate">@{u.username}</div>
+                          <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{u.name || u.username}</div>
+                          <div className="text-xs text-gray-400 dark:text-gray-500 font-mono truncate">@{u.username}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{u.email || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{u.organization || '—'}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{u.email || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{u.organization || '—'}</td>
+                    <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">
                       {new Date(u.created_at).toLocaleDateString('ko-KR')}
                     </td>
                     <td className="px-4 py-3">
@@ -246,14 +260,14 @@ function AdminUsersContent() {
                           ))}
                         </select>
                         {saving === u.gitlab_user_id && (
-                          <span className="text-xs text-gray-400 animate-pulse">저장 중...</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500 animate-pulse">저장 중...</span>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <button
                         onClick={() => loadSessions(u.gitlab_user_id)}
-                        className="text-xs px-2 py-1 border border-gray-300 text-gray-500 rounded hover:bg-gray-50"
+                        className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
                       >
                         {sessionsLoading === u.gitlab_user_id
                           ? '로딩중...'
@@ -265,25 +279,25 @@ function AdminUsersContent() {
                   </tr>
                   {expandedUserId === u.gitlab_user_id && (
                     <tr key={`sessions-${u.id}`}>
-                      <td colSpan={6} className="px-4 py-3 bg-gray-50">
+                      <td colSpan={6} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
                         {(sessions[u.gitlab_user_id] ?? []).length === 0 ? (
                           <p className="text-xs text-gray-400">활성 세션 없음</p>
                         ) : (
                           <table className="w-full text-xs">
                             <thead>
-                              <tr className="text-gray-500">
+                              <tr className="text-gray-500 dark:text-gray-400">
                                 <th className="text-left pb-2 font-medium">기기</th>
                                 <th className="text-left pb-2 font-medium">IP</th>
                                 <th className="text-left pb-2 font-medium">마지막 사용</th>
                                 <th className="pb-2" />
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-200">
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                               {(sessions[u.gitlab_user_id] ?? []).map((s) => (
                                 <tr key={s.id}>
-                                  <td className="py-1.5 font-medium text-gray-700">{s.device_name}</td>
-                                  <td className="py-1.5 font-mono text-gray-400">{s.ip_address}</td>
-                                  <td className="py-1.5 text-gray-400">
+                                  <td className="py-1.5 font-medium text-gray-700 dark:text-gray-300">{s.device_name}</td>
+                                  <td className="py-1.5 font-mono text-gray-400 dark:text-gray-500">{s.ip_address}</td>
+                                  <td className="py-1.5 text-gray-400 dark:text-gray-500">
                                     {s.last_used_at
                                       ? new Date(s.last_used_at).toLocaleString('ko-KR')
                                       : '—'}
@@ -291,7 +305,7 @@ function AdminUsersContent() {
                                   <td className="py-1.5 text-right">
                                     <button
                                       onClick={() => revokeSession(u.gitlab_user_id, s.id)}
-                                      className="text-xs px-2 py-1 border border-red-200 text-red-500 rounded hover:bg-red-50"
+                                      className="text-xs px-2 py-1 border border-red-200 dark:border-red-800 text-red-500 dark:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
                                     >
                                       강제 종료
                                     </button>
@@ -304,11 +318,11 @@ function AdminUsersContent() {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={6} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">
                     {search || roleFilter ? '검색 결과가 없습니다.' : '등록된 사용자가 없습니다.'}
                   </td>
                 </tr>

@@ -10,15 +10,15 @@ import Link from 'next/link'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
 
 const COLUMNS: { id: string; label: string; bg: string; header: string; wip: number }[] = [
-  { id: 'open',              label: '접수됨',       bg: 'bg-gray-50',    header: 'bg-gray-200 text-gray-700',     wip: 20 },
-  { id: 'approved',          label: '승인완료',     bg: 'bg-teal-50',    header: 'bg-teal-200 text-teal-800',     wip: 10 },
-  { id: 'in_progress',       label: '처리 중',      bg: 'bg-blue-50',    header: 'bg-blue-200 text-blue-800',     wip: 10 },
-  { id: 'waiting',           label: '추가정보 대기', bg: 'bg-yellow-50',  header: 'bg-yellow-200 text-yellow-800', wip: 10 },
-  { id: 'resolved',          label: '처리 완료',    bg: 'bg-green-50',   header: 'bg-green-200 text-green-800',   wip: 30 },
-  { id: 'testing',           label: '테스트중',     bg: 'bg-violet-50',  header: 'bg-violet-200 text-violet-800', wip: 10 },
-  { id: 'ready_for_release', label: '운영배포전',   bg: 'bg-amber-50',   header: 'bg-amber-200 text-amber-800',   wip: 20 },
-  { id: 'released',          label: '운영반영완료', bg: 'bg-indigo-50',  header: 'bg-indigo-200 text-indigo-800', wip: 20 },
-  { id: 'closed',            label: '종료됨',       bg: 'bg-slate-50',   header: 'bg-slate-200 text-slate-700',   wip: 50 },
+  { id: 'open',              label: '접수됨',       bg: 'bg-gray-50 dark:bg-gray-800/60',    header: 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200',     wip: 20 },
+  { id: 'approved',          label: '승인완료',     bg: 'bg-teal-50 dark:bg-teal-900/20',    header: 'bg-teal-200 dark:bg-teal-800/60 text-teal-800 dark:text-teal-200',   wip: 10 },
+  { id: 'in_progress',       label: '처리 중',      bg: 'bg-blue-50 dark:bg-blue-900/20',    header: 'bg-blue-200 dark:bg-blue-800/60 text-blue-800 dark:text-blue-200',   wip: 10 },
+  { id: 'waiting',           label: '추가정보 대기', bg: 'bg-yellow-50 dark:bg-yellow-900/20', header: 'bg-yellow-200 dark:bg-yellow-800/60 text-yellow-800 dark:text-yellow-200', wip: 10 },
+  { id: 'resolved',          label: '처리 완료',    bg: 'bg-green-50 dark:bg-green-900/20',  header: 'bg-green-200 dark:bg-green-800/60 text-green-800 dark:text-green-200', wip: 30 },
+  { id: 'testing',           label: '테스트중',     bg: 'bg-violet-50 dark:bg-violet-900/20', header: 'bg-violet-200 dark:bg-violet-800/60 text-violet-800 dark:text-violet-200', wip: 10 },
+  { id: 'ready_for_release', label: '운영배포전',   bg: 'bg-amber-50 dark:bg-amber-900/20',  header: 'bg-amber-200 dark:bg-amber-800/60 text-amber-800 dark:text-amber-200', wip: 20 },
+  { id: 'released',          label: '운영반영완료', bg: 'bg-indigo-50 dark:bg-indigo-900/20', header: 'bg-indigo-200 dark:bg-indigo-800/60 text-indigo-800 dark:text-indigo-200', wip: 20 },
+  { id: 'closed',            label: '종료됨',       bg: 'bg-slate-50 dark:bg-slate-800/50',  header: 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200',  wip: 50 },
 ]
 
 // 백엔드 VALID_TRANSITIONS와 동일 — 드래그 중 이동 불가 컬럼 사전 차단
@@ -31,21 +31,21 @@ const VALID_TRANSITIONS: Record<string, Set<string>> = {
   testing:           new Set(['ready_for_release', 'in_progress', 'closed']),
   ready_for_release: new Set(['released', 'in_progress', 'closed']),
   released:          new Set(['closed']),
-  closed:            new Set(['open']),  // reopened → open으로 표시됨
+  closed:            new Set(['open']),
 }
 
 const PRIORITY_BORDER: Record<string, string> = {
   critical: 'border-l-red-500',
   high:     'border-l-orange-400',
   medium:   'border-l-yellow-400',
-  low:      'border-l-gray-300',
+  low:      'border-l-gray-300 dark:border-l-gray-600',
 }
 
 const PRIORITY_BADGE: Record<string, string> = {
-  critical: 'bg-red-100 text-red-700',
-  high:     'bg-orange-100 text-orange-700',
-  medium:   'bg-yellow-100 text-yellow-700',
-  low:      'bg-gray-100 text-gray-500',
+  critical: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+  high:     'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400',
+  medium:   'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+  low:      'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
 }
 
 const PRIORITY_LABEL: Record<string, string> = {
@@ -72,7 +72,7 @@ function getSLAStatus(t: Ticket): 'breached' | 'warning' | 'ok' | null {
   if (!t.sla_deadline) return null
   if (t.sla_breached) return 'breached'
   const remaining = new Date(t.sla_deadline).getTime() - Date.now()
-  if (remaining < 0) return 'breached'          // 마감 시간 초과
+  if (remaining < 0) return 'breached'
   return remaining < 2 * 3600_000 ? 'warning' : 'ok'
 }
 
@@ -87,6 +87,8 @@ function formatSLATime(deadline: string): string {
 }
 
 
+const CLOSED_PREVIEW = 10 // 기본 미리보기 건수
+
 function KanbanContent() {
   const { getEmoji, getLabel } = useServiceTypes()
   const [tickets, setTickets] = useState<Ticket[]>([])
@@ -97,10 +99,13 @@ function KanbanContent() {
   const [filterPriority, setFilterPriority] = useState('')
   const [filterAssignee, setFilterAssignee] = useState('')
   const initializedRef = useRef(false)
-  const prevProjectRef = useRef('')  // 이전 프로젝트 ID 추적 (init 첫 설정 구분용)
+  const prevProjectRef = useRef('')
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [dragError, setDragError] = useState<string | null>(null)
   const [colOrders, setColOrders] = useState<Record<string, number[]>>({})
   const [draggingFromCol, setDraggingFromCol] = useState<string | null>(null)
+  const [closedExpanded, setClosedExpanded] = useState(false)
+  const [closedCollapsed, setClosedCollapsed] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -116,7 +121,6 @@ function KanbanContent() {
     }
   }, [selectedProject])
 
-  // 프로젝트 목록과 티켓을 병렬로 초기 로딩 (최초 1회)
   useEffect(() => {
     if (initializedRef.current) return
     initializedRef.current = true
@@ -139,17 +143,17 @@ function KanbanContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 프로젝트 변경 시 티켓 재조회
-  // - init에서 '' → 첫 프로젝트ID 로 설정되는 경우는 제외 (init이 이미 티켓을 로드했음)
-  // - 사용자가 직접 드롭다운에서 다른 프로젝트를 선택할 때만 재조회
   useEffect(() => {
     if (!initializedRef.current || selectedProject === '') return
     const prev = prevProjectRef.current
     prevProjectRef.current = selectedProject
-    if (prev === '') return  // init이 처음 세팅한 것 — 이미 병렬 fetch로 로드됨
+    if (prev === '') return
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject])
+
+  // 언마운트 시 백그라운드 동기화 타이머 정리
+  useEffect(() => () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current) }, [])
 
   const filtered = useMemo(() => tickets.filter(t => {
     if (filterPriority && t.priority !== filterPriority) return false
@@ -157,14 +161,12 @@ function KanbanContent() {
     return true
   }), [tickets, filterPriority, filterAssignee])
 
-  // Map from iid → ticket for O(1) lookup (filtered only)
   const ticketMap = useMemo(() => {
     const m: Record<number, Ticket> = {}
     for (const t of filtered) m[t.iid] = t
     return m
   }, [filtered])
 
-  // Returns tickets for a column in current drag order, respecting active filters
   const getColTickets = useCallback((colId: string): Ticket[] => {
     const order = colOrders[colId] || []
     const result: Ticket[] = []
@@ -193,15 +195,10 @@ function KanbanContent() {
 
     if (srcCol === dstCol) {
       if (source.index === destination.index) return
-      // Same column: local reorder only — no API call
       const visibleIids = getColTickets(srcCol).map(t => t.iid)
-
-      // Reorder the visible subset
       const newVisibleIids = [...visibleIids]
       newVisibleIids.splice(source.index, 1)
       newVisibleIids.splice(destination.index, 0, iid)
-
-      // Rebuild full column order, preserving positions of non-visible (filtered-out) items
       const fullOrder = colOrders[srcCol] || []
       const visibleSet = new Set(visibleIids)
       const slotsInFull = fullOrder.reduce<number[]>((acc, id, idx) => {
@@ -212,26 +209,20 @@ function KanbanContent() {
       slotsInFull.forEach((fullIdx, pos) => {
         newFullOrder[fullIdx] = newVisibleIids[pos]
       })
-
       setColOrders(prev => ({ ...prev, [srcCol]: newFullOrder }))
       return
     }
 
-    // Cross-column: status change via API
     const newStatus = dstCol
-
-    // Capture visible dest tickets BEFORE optimistic update to compute insertion point
     const visibleDstIids = getColTickets(dstCol).map(t => t.iid)
     const fullDstOrder = colOrders[dstCol] || []
 
     let insertAt: number
     if (destination.index === 0) {
-      // Before the first visible item (or start of full list if column is empty)
       insertAt = visibleDstIids.length > 0
         ? Math.max(0, fullDstOrder.indexOf(visibleDstIids[0]))
         : 0
     } else {
-      // After the (destination.index − 1)th visible item
       const prevIid = visibleDstIids[destination.index - 1]
       insertAt = fullDstOrder.indexOf(prevIid) + 1
     }
@@ -240,7 +231,6 @@ function KanbanContent() {
     const newDstOrder = [...fullDstOrder]
     newDstOrder.splice(insertAt, 0, iid)
 
-    // Optimistic update
     setTickets(prev => prev.map(t =>
       t.iid === iid
         ? { ...t, status: newStatus, state: newStatus === 'closed' ? 'closed' : 'opened' }
@@ -250,22 +240,18 @@ function KanbanContent() {
 
     try {
       await updateTicket(iid, { status: newStatus }, selectedProject || undefined)
-      // 성공 후 2초 뒤 서버 상태와 조용히 동기화 (GitLab 레이블 전파 지연 대비)
-      // setLoading 없이 백그라운드로만 갱신
-      setTimeout(async () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
+      syncTimerRef.current = setTimeout(async () => {
         try {
           const res = await fetchTickets({ project_id: selectedProject || undefined, per_page: 100 })
           setTickets(res.tickets)
-          // colOrders는 현재 드래그 순서를 유지하되, 서버에서 새 티켓이 추가된 경우만 반영
           setColOrders(prev => {
             const serverOrders = buildOrders(res.tickets)
             const merged: Record<string, number[]> = { ...prev }
-            // 서버에서 사라진 티켓 제거, 새 티켓 추가
             const serverIds = new Set(res.tickets.map((t: { iid: number }) => t.iid))
             for (const col of Object.keys(merged)) {
               merged[col] = merged[col].filter(id => serverIds.has(id))
             }
-            // 서버 orders에서 아직 없는 티켓 추가
             for (const col of Object.keys(serverOrders)) {
               const existing = new Set(merged[col] || [])
               const newIds = (serverOrders[col] || []).filter((id: number) => !existing.has(id))
@@ -280,7 +266,7 @@ function KanbanContent() {
         }
       }, 2000)
     } catch (err) {
-      // 실패 시 즉시 서버 상태로 복원
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
       await load()
       let msg = '상태 변경에 실패했습니다.'
       if (err instanceof Error) {
@@ -301,27 +287,27 @@ function KanbanContent() {
   )
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
+    <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
       {/* Toolbar */}
-      <div className="flex-none bg-white border-b border-gray-200 px-5 py-2.5 flex items-center gap-3 flex-wrap">
-        <h1 className="text-base font-bold text-gray-800">칸반 보드</h1>
+      <div className="flex-none bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-5 py-2.5 flex items-center gap-3 flex-wrap">
+        <h1 className="text-base font-bold text-gray-800 dark:text-gray-100">칸반 보드</h1>
 
         {projects.length > 1 && (
           <select
             value={selectedProject}
             onChange={e => setSelectedProject(e.target.value)}
-            className="border rounded px-2 py-1 text-sm text-gray-700"
+            className="border dark:border-gray-600 rounded px-2 py-1 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700"
           >
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         )}
 
-        <div className="w-px h-4 bg-gray-200" />
+        <div className="w-px h-4 bg-gray-200 dark:bg-gray-600" />
 
         <select
           value={filterPriority}
           onChange={e => setFilterPriority(e.target.value)}
-          className="border rounded px-2 py-1 text-sm text-gray-600"
+          className="border dark:border-gray-600 rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700"
         >
           <option value="">모든 우선순위</option>
           <option value="critical">긴급</option>
@@ -334,7 +320,7 @@ function KanbanContent() {
           <select
             value={filterAssignee}
             onChange={e => setFilterAssignee(e.target.value)}
-            className="border rounded px-2 py-1 text-sm text-gray-600"
+            className="border dark:border-gray-600 rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700"
           >
             <option value="">모든 담당자</option>
             {assignees.map(a => <option key={a} value={a}>{a}</option>)}
@@ -351,29 +337,29 @@ function KanbanContent() {
         )}
 
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs text-gray-400">{filtered.length}건</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">{filtered.length}건</span>
           <button
             onClick={load}
-            className="text-gray-400 hover:text-gray-700 text-base leading-none"
+            className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-base leading-none"
             title="새로고침"
           >
             ↻
           </button>
-          <Link href="/" className="text-sm text-gray-500 hover:text-gray-800">← 목록</Link>
+          <Link href="/" className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">← 목록</Link>
         </div>
       </div>
 
       {error && (
-        <div className="flex-none px-5 py-2 text-sm text-red-600 bg-red-50 border-b border-red-100">{error}</div>
+        <div className="flex-none px-5 py-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-800">{error}</div>
       )}
 
       {dragError && (
-        <div className="flex-none flex items-center gap-3 px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-sm text-amber-800">
+        <div className="flex-none flex items-center gap-3 px-5 py-2.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-700 text-sm text-amber-800 dark:text-amber-300">
           <span className="text-base">⚠️</span>
           <span className="flex-1">{dragError}</span>
           <button
             onClick={() => setDragError(null)}
-            className="text-amber-500 hover:text-amber-800 font-bold text-base leading-none"
+            className="text-amber-500 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 font-bold text-base leading-none"
             aria-label="닫기"
           >
             ✕
@@ -386,16 +372,16 @@ function KanbanContent() {
         {loading ? (
           <div className="grid grid-cols-9 gap-3 h-full">
             {[1,2,3,4,5].map(i => (
-              <div key={i} className="flex flex-col rounded-lg overflow-hidden border border-gray-200 shadow-sm animate-pulse">
-                <div className="h-9 bg-gray-200 shrink-0" />
-                <div className="flex-1 bg-gray-50 p-2 space-y-2">
+              <div key={i} className="flex flex-col rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm animate-pulse">
+                <div className="h-9 bg-gray-200 dark:bg-gray-700 shrink-0" />
+                <div className="flex-1 bg-gray-50 dark:bg-gray-800/60 p-2 space-y-2">
                   {[1,2,3].map(j => (
-                    <div key={j} className="bg-white rounded-lg p-3 space-y-2 border border-gray-100">
-                      <div className="h-3 bg-gray-200 rounded w-full" />
-                      <div className="h-3 bg-gray-100 rounded w-2/3" />
+                    <div key={j} className="bg-white dark:bg-gray-700 rounded-lg p-3 space-y-2 border border-gray-100 dark:border-gray-600">
+                      <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-full" />
+                      <div className="h-3 bg-gray-100 dark:bg-gray-600/60 rounded w-2/3" />
                       <div className="flex gap-1 mt-1">
-                        <div className="h-4 bg-gray-200 rounded-full w-10" />
-                        <div className="h-4 bg-gray-100 rounded-full w-14" />
+                        <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded-full w-10" />
+                        <div className="h-4 bg-gray-100 dark:bg-gray-600/60 rounded-full w-14" />
                       </div>
                     </div>
                   ))}
@@ -407,20 +393,50 @@ function KanbanContent() {
           <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
             <div className="grid grid-cols-9 gap-3 h-full">
               {COLUMNS.map(col => {
-                const colTickets = getColTickets(col.id)
-                const overWip = colTickets.length > col.wip
+                const allColTickets = getColTickets(col.id)
+                const isClosed = col.id === 'closed'
 
-                // 드래그 중: 현재 컬럼(같은 컬럼 재정렬)은 항상 허용
-                // 다른 컬럼: VALID_TRANSITIONS에 없으면 비활성화
+                // 종료됨 컬럼: 접힘 상태이면 미리보기 건수만 노출
+                const colTickets = isClosed && !closedExpanded
+                  ? allColTickets.slice(0, CLOSED_PREVIEW)
+                  : allColTickets
+                const hiddenCount = isClosed ? allColTickets.length - CLOSED_PREVIEW : 0
+
+                const overWip = allColTickets.length > col.wip
+
                 const isDisabled = draggingFromCol !== null
                   && draggingFromCol !== col.id
                   && !(VALID_TRANSITIONS[draggingFromCol]?.has(col.id))
+
+                // 종료됨 컬럼 — 접힘(collapsed) 상태: 세로로 축소해 공간 절약
+                if (isClosed && closedCollapsed) {
+                  return (
+                    <div
+                      key={col.id}
+                      className="flex flex-col min-h-0 rounded-lg overflow-hidden shadow-sm border border-gray-200 dark:border-gray-700"
+                    >
+                      <button
+                        onClick={() => setClosedCollapsed(false)}
+                        className={`flex-none flex flex-col items-center justify-center gap-1 px-2 py-3 h-full ${col.header} hover:opacity-80 transition-opacity`}
+                        title="종료됨 컬럼 펼치기"
+                      >
+                        <span className="text-xs font-bold tracking-wide writing-mode-vertical">{col.label}</span>
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/60 dark:bg-black/20 mt-1">
+                          {allColTickets.length}
+                        </span>
+                        <span className="text-[10px] opacity-60 mt-1">▶</span>
+                      </button>
+                    </div>
+                  )
+                }
 
                 return (
                   <div
                     key={col.id}
                     className={`flex flex-col min-h-0 rounded-lg overflow-hidden shadow-sm border transition-opacity ${
-                      isDisabled ? 'border-gray-200 opacity-40' : 'border-gray-200'
+                      isDisabled
+                        ? 'border-gray-200 dark:border-gray-700 opacity-40'
+                        : 'border-gray-200 dark:border-gray-700'
                     }`}
                   >
                     {/* Column header */}
@@ -428,13 +444,23 @@ function KanbanContent() {
                       <span className="text-xs font-bold tracking-wide">{col.label}</span>
                       <div className="flex items-center gap-1">
                         {isDisabled && (
-                          <span className="text-[10px] text-gray-500" title="이 상태로 바로 이동할 수 없습니다">🚫</span>
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400" title="이 상태로 바로 이동할 수 없습니다">🚫</span>
                         )}
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                          overWip ? 'bg-red-500 text-white' : 'bg-white/60'
+                          overWip ? 'bg-red-500 text-white' : 'bg-white/60 dark:bg-black/20'
                         }`}>
-                          {colTickets.length}{overWip && ' ⚠'}
+                          {allColTickets.length}{overWip && ' ⚠'}
                         </span>
+                        {/* 종료됨 컬럼 접기 버튼 */}
+                        {isClosed && (
+                          <button
+                            onClick={() => setClosedCollapsed(true)}
+                            className="ml-1 text-[10px] opacity-50 hover:opacity-100 transition-opacity"
+                            title="컬럼 접기"
+                          >
+                            ◀
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -447,11 +473,13 @@ function KanbanContent() {
                           className={`flex-1 overflow-y-auto p-2 transition-colors ${col.bg} ${
                             isDisabled
                               ? 'cursor-not-allowed'
-                              : snapshot.isDraggingOver ? 'ring-2 ring-inset ring-blue-300 bg-blue-50/60' : ''
+                              : snapshot.isDraggingOver
+                                ? 'ring-2 ring-inset ring-blue-300 dark:ring-blue-500 !bg-blue-50/60 dark:!bg-blue-900/30'
+                                : ''
                           }`}
                         >
                           {colTickets.length === 0 && !snapshot.isDraggingOver && (
-                            <div className="flex flex-col items-center justify-center py-8 text-gray-300 text-xs gap-1">
+                            <div className="flex flex-col items-center justify-center py-8 text-gray-300 dark:text-gray-600 text-xs gap-1">
                               <span className="text-xl">⊙</span>
                               <span>비어 있음</span>
                             </div>
@@ -467,30 +495,30 @@ function KanbanContent() {
                                     ref={prov.innerRef}
                                     {...prov.draggableProps}
                                     {...prov.dragHandleProps}
-                                    className={`mb-2 bg-white rounded-md border border-gray-200 border-l-4 ${
-                                      PRIORITY_BORDER[priority] ?? 'border-l-gray-300'
+                                    className={`mb-2 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 border-l-4 ${
+                                      PRIORITY_BORDER[priority] ?? 'border-l-gray-300 dark:border-l-gray-600'
                                     } transition-shadow cursor-grab active:cursor-grabbing ${
                                       snap.isDragging
                                         ? 'shadow-xl rotate-1 opacity-95'
-                                        : 'hover:shadow-md'
+                                        : 'hover:shadow-md dark:hover:shadow-gray-900/50'
                                     }`}
                                   >
                                     <div className="p-2.5">
                                       {/* Ticket number + title */}
                                       <Link href={`/tickets/${ticket.iid}`}>
-                                        <p className="text-[10px] text-gray-400 font-mono mb-0.5">#{ticket.iid}</p>
-                                        <p className="text-sm font-medium text-gray-800 line-clamp-2 hover:text-blue-600 leading-snug">
+                                        <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mb-0.5">#{ticket.iid}</p>
+                                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 line-clamp-2 hover:text-blue-600 dark:hover:text-blue-400 leading-snug">
                                           {ticket.title}
                                         </p>
                                       </Link>
 
                                       {/* Badges */}
                                       <div className="mt-1.5 flex flex-wrap gap-1">
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${PRIORITY_BADGE[priority] ?? 'bg-gray-100 text-gray-500'}`}>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${PRIORITY_BADGE[priority] ?? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
                                           {PRIORITY_LABEL[priority] ?? priority}
                                         </span>
                                         {ticket.category && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium">
                                             {getEmoji(ticket.category)} {getLabel(ticket.category)}
                                           </span>
                                         )}
@@ -501,18 +529,18 @@ function KanbanContent() {
                                         <div className="flex items-center gap-1 min-w-0">
                                           {sla && ticket.sla_deadline && (
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono whitespace-nowrap ${
-                                              sla === 'breached' ? 'bg-red-100 text-red-600' :
-                                              sla === 'warning'  ? 'bg-yellow-100 text-yellow-700' :
-                                                                   'bg-green-100 text-green-700'
+                                              sla === 'breached' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
+                                              sla === 'warning'  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
+                                                                   'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                                             }`}>
                                               {sla === 'breached' ? '⚠' : '⏱'} {formatSLATime(ticket.sla_deadline)}
                                             </span>
                                           )}
-                                          <span className="text-[10px] text-gray-400 truncate">{formatDate(ticket.created_at)}</span>
+                                          <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{formatDate(ticket.created_at)}</span>
                                         </div>
                                         <span
                                           className={`flex-none w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${
-                                            ticket.assignee_name ? 'bg-blue-500' : 'bg-gray-300'
+                                            ticket.assignee_name ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'
                                           }`}
                                           title={ticket.assignee_name ?? '미배정'}
                                         >
@@ -526,6 +554,18 @@ function KanbanContent() {
                             )
                           })}
                           {provided.placeholder}
+
+                          {/* 종료됨 컬럼 더보기 / 접기 */}
+                          {isClosed && allColTickets.length > CLOSED_PREVIEW && (
+                            <button
+                              onClick={() => setClosedExpanded(e => !e)}
+                              className="w-full mt-1 py-1.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded transition-colors"
+                            >
+                              {closedExpanded
+                                ? `▴ 최근 ${CLOSED_PREVIEW}건만 보기`
+                                : `▾ +${hiddenCount}건 더 보기`}
+                            </button>
+                          )}
                         </div>
                       )}
                     </Droppable>

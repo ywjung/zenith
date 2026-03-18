@@ -111,6 +111,10 @@ services:
       CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       CLAMAV_ENABLED: ${CLAMAV_ENABLED:-true}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+      GITLAB_BOT_USERNAME: ${GITLAB_BOT_USERNAME:-}
+      ADMIN_ALLOWED_CIDRS: ${ADMIN_ALLOWED_CIDRS:-}
     volumes:
       - gitlab_data:/gitlab_data:ro
     depends_on:
@@ -141,7 +145,7 @@ services:
       itsm-api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -158,7 +162,7 @@ services:
       - itsm-web
       - itsm-api
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -200,7 +204,7 @@ services:
       prometheus:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

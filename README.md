@@ -371,6 +371,7 @@ GITLAB_GROUP_TOKEN=<그룹 Access Token>
 # ── GitLab 웹훅 ────────────────────────────────────────────
 GITLAB_WEBHOOK_SECRET=<랜덤 문자열>
 ITSM_WEBHOOK_URL=http://itsm-api:8000/webhooks/gitlab
+GITLAB_BOT_USERNAME=<ZENITH 서비스 계정 username>  # 웹훅 루프 방지
 
 # ── 이메일 알림 ─────────────────────────────────────────────
 NOTIFICATION_ENABLED=false             # true 로 활성화
@@ -575,13 +576,13 @@ docker compose logs -f clamav
 
 ## 7. DB 마이그레이션
 
-Alembic 마이그레이션 **41단계** (0001~0041)가 관리됩니다.
+Alembic 마이그레이션 **47단계** (0001~0047)가 관리됩니다.
 API 컨테이너 시작 시 **자동으로 최신 버전까지 적용**됩니다.
 
 ```bash
 # 현재 버전 확인
 docker compose exec itsm-api alembic current
-# 출력 예: 0041 (head)
+# 출력 예: 0047 (head)
 
 # 수동으로 최신 버전 적용
 docker compose exec itsm-api alembic upgrade head
@@ -593,7 +594,7 @@ docker compose exec itsm-api alembic history
 docker compose exec itsm-api alembic downgrade -1
 
 # 특정 버전으로 롤백
-docker compose exec itsm-api alembic downgrade 0038
+docker compose exec itsm-api alembic downgrade 0045
 ```
 
 ### 신규 마이그레이션 생성 (개발)
@@ -632,8 +633,9 @@ docker compose exec itsm-api alembic upgrade head
 
 ### 티켓 관리
 - 생성·조회·수정·삭제 (파일 첨부 최대 10 MB, ClamAV 바이러스 스캔)
-- 상태 워크플로우: `접수됨 → 처리중 → 대기중 → 처리완료 → 종료`
+- 상태 워크플로우: `접수됨 → 처리중 → 테스트중 → 대기중 → 처리완료 → 종료`
 - 내부 메모 (신청자 비공개), 연관 티켓 링크, 시간 기록 (분 단위)
+- **티켓 병합**: 중복 티켓을 대상 티켓으로 병합 (댓글 이전 + 소스 티켓 자동 종료)
 - 티켓 복제, Confidential Issue, CSV 내보내기
 - **타임라인 뷰**: 댓글 · 감사로그 · GitLab 시스템 노트 시간순 통합 표시 + 마크다운 렌더링
 - **해결 노트**: 처리완료·종료 시 해결 내용·유형·원인 구조화 기록 → KB 변환 가능
@@ -662,14 +664,44 @@ docker compose exec itsm-api alembic upgrade head
 - 이메일 (SMTP) — Jinja2 템플릿 커스터마이즈, sandbox iframe 미리보기
 - Telegram 봇, 아웃바운드 웹훅 (Slack Incoming Webhook, Teams Power Automate)
 - 개인 알림 설정 (이벤트별 이메일/인앱 토글)
+- **@멘션 인앱 알림**: 댓글에서 `@username` 멘션 시 대상 사용자에게 즉시 알림
 
 ### GitLab 연동
 - MR 머지 → 티켓 자동 해결 (`Closes #N`, `Fixes #N`)
 - CI/CD 파이프라인 실패 → 티켓 자동 알림
 - MR 목록 티켓 상세에서 조회, 개발 프로젝트 전달 (이슈 자동 생성·연결)
+- **양방향 동기화**: GitLab에서 이슈 직접 수정(제목·설명·담당자·라벨) 시 ITSM 감사 로그 기록 + 신청자 인앱 알림
+- **루프 방지**: `GITLAB_BOT_USERNAME` 설정 시 ITSM 봇 계정 변경은 웹훅 처리 스킵
+
+### 에디터
+- **TipTap 리치 텍스트 에디터**: 볼드·이탤릭·코드·표·이미지·코드블록·인용 지원
+- **@멘션**: `@` 입력 시 프로젝트 멤버 자동완성 팝업 (tippy.js 기반)
+- 이미지 붙여넣기·드래그앤드롭 업로드, KB 파일 첨부 삽입
+
+### ITIL 기반 티켓 유형 & 문제 관리
+- **티켓 유형 분류**: 인시던트(incident) · 서비스 요청(service_request) · 변경 요청(change) · 문제(problem) 4가지 ITIL 유형
+- **문제 관리 패널**: 유형이 "problem"인 티켓에서 관련 인시던트를 `problem_of` 링크로 연결 · 통합 추적
+- IT 개발자 이상 권한. 유형 변경 즉시 사이드바 패널 동적 전환
+
+### 서비스 카탈로그 (Service Catalog)
+- 관리자가 `/admin/service-catalog`에서 IT 서비스 항목 정의 (이름·아이콘·설명·카테고리·추가 입력 필드)
+- 고객 포털(`/portal`)에 카드 형태로 노출 — 항목 선택 시 제목 자동 입력 + 서비스별 전용 필드 표시
+- 추가 필드 유형: text / textarea / select / date (JSONB 스키마, 동적 변경 가능)
+
+### 자동화 규칙 엔진 (Automation Rules)
+- 관리자가 `/admin/automation-rules`에서 트리거 이벤트 · 조건 · 액션을 조합하여 규칙 정의
+- 트리거: `ticket.created` / `ticket.updated` / `ticket.closed` 등
+- 조건: AND 방식 다중 조건 (필드 + 연산자 `eq/neq/contains/startswith/in` + 값)
+- 액션: 상태 변경 · 우선순위 설정 · 알림 발송 등 JSONB 배열로 유연하게 확장
+- `order` 기준 우선순위 정렬, `is_active` 토글로 개별 활성/비활성 제어
+
+### 대시보드 위젯 커스터마이징
+- 홈 화면 ⚙️ 버튼으로 위젯 표시 여부 개인 설정 — 서버(`/dashboard/config`)에 저장
+- 위젯: 상태 현황 탭 · 내 담당 티켓 · SLA 현황 · 최근 활동
 
 ### 편의 기능
 - **칸반 보드**: 드래그앤드롭 상태 변경 + **전환 규칙 강제** (이동 불가 컬럼 🚫 자동 비활성화)
+- **DORA 4대 지표**: 배포 빈도 / 리드타임 / 변경 실패율 / MTTR — 리포트 탭에서 기간별 조회
 - 리포트 & 에이전트 성과 분석 (날짜 필터 정확 적용, 역방향 날짜 검증)
 - 빠른 답변 (Canned Response) 템플릿, 티켓 구독 (Watcher)
 - 공지사항·배너 시스템 (info/warning/critical)
@@ -684,6 +716,10 @@ docker compose exec itsm-api alembic upgrade head
 - 이메일 템플릿 관리 (XSS sandbox iframe 미리보기)
 - 감사 로그 (행위자 서버사이드 검색, Immutable PostgreSQL 트리거)
 - GitLab 라벨 동기화, 자동 배정 규칙
+- **업무 부하 현황** (`/admin/workload`): 담당자별 티켓 수·해결율·SLA 충족률·평균 평점 일람
+- **알림 채널 관리**: 이메일·Telegram 활성화 상태 확인 및 전환
+- **IP 접근 제한 설정 가이드**: 관리 API를 특정 CIDR 대역으로 제한하는 방법 안내
+- **업무 시간 설정**: 영업일·업무 시간 기반 SLA 계산 설정
 
 ---
 
@@ -693,8 +729,9 @@ docker compose exec itsm-api alembic upgrade head
 |------|------------|---------|
 | **user** | Reporter / Guest | 티켓 생성·조회, KB 열람, 만족도 평가 |
 | **developer** | Developer | 티켓 수정·상태 변경, 내부 메모, KB 작성, MR 조회 |
-| **agent** | Maintainer | 전체 티켓 관리, 담당자 배정, 일괄 작업, 리포트 |
-| **admin** | Owner / Instance Admin | 사용자 관리, SLA 정책, 에스컬레이션, API 키, 웹훅 |
+| **pl** | Developer | developer 권한 + 팀 내 티켓 병합·우선순위 조정 |
+| **agent** | Maintainer | 전체 티켓 관리, 담당자 배정, 일괄 작업, 리포트, DORA 지표 |
+| **admin** | Owner / Instance Admin | 사용자 관리, SLA 정책, 에스컬레이션, API 키, 웹훅, 업무부하 현황 |
 
 - GitLab 그룹 멤버십은 **1시간마다 자동 동기화**됩니다.
 - 퇴사자 계정은 다음 로그인 시 접근이 자동 차단됩니다.
@@ -720,6 +757,19 @@ docker compose exec itsm-api alembic upgrade head
 | 🟠 높음 | 8시간 | 24시간 | 주요 업무시스템 오류 |
 | 🟡 보통 | 24시간 | 72시간 | 일부 기능 이상, 속도 저하 |
 | ⚪ 낮음 | 48시간 | 168시간 | 장비 교체, 비업무 시간 처리 |
+
+**티켓 상태 워크플로우:**
+
+```
+접수됨(open) → 승인완료(approved) → 처리중(in_progress) → 테스트중(testing) → 운영배포전(ready_for_release) → 운영반영완료(released) → 종료(closed)
+     ↓               ↓                   ↓                        ↑
+     └───────────────┴──→ 대기중(waiting) ┘                       │
+                                                    처리완료(resolved) ──────────────────────────────────┘
+종료(closed) → 재오픈(reopened) → 처리중(in_progress) → ...
+```
+
+> `테스트중` 상태: 처리 완료 전 검증 단계. SLA 타이머 계속 진행.
+> `승인완료` 상태: 에이전트가 접수된 티켓을 승인. 이후 처리중 또는 반려(재접수) 가능.
 
 ### 에스컬레이션 정책
 
@@ -751,9 +801,11 @@ GitLab OAuth 2.0 → JWT Access Token (2시간)
 - 이미지 **EXIF 메타데이터 자동 제거** (Pillow) — GPS·기기정보 포함
 - **ClamAV 바이러스 스캔** (fail-open: ClamAV 장애 시 통과)
 
-### 입력 검증
+### 입력 검증 & PII 보호
 
 - 티켓·댓글 제출 시 **시크릿 스캐닝** (9개 패턴: AWS Key, GitLab PAT, OpenAI Key 등)
+- **PII 자동 마스킹**: `user` 역할 응답에서 주민등록번호·휴대폰·유선전화·여권번호·신용카드번호 자동 치환 (`agent` 이상은 원문 표시)
+- PII 탐지 시 경고 로그 기록 (fail-soft — 요청 차단 없음)
 - Pydantic v2 입력 검증
 - SQLAlchemy ORM (SQL Injection 방지)
 - **SSRF 방지**: 외부 URL 등록 시 내부망 IP 차단
@@ -935,12 +987,22 @@ docker run --rm \
 
 ```
 ZENITH 로그인 → 관리(Admin) 메뉴 진입:
-  - 사용자 관리: 팀원 역할 부여
-  - SLA 정책: 목표 시간 조정
-  - 서비스 유형: 카테고리 추가·수정
+  - 사용자 관리: 팀원 역할 부여, 세션 강제 종료
+  - SLA 정책: 목표 시간 조정 (최소 1시간 검증)
   - 에스컬레이션 정책: 위반 시 자동 처리 규칙
-  - 이메일 템플릿: 알림 메일 문구 커스터마이즈
+  - 이메일 템플릿: 알림 메일 문구 커스터마이즈 (Jinja2)
+  - 서비스 유형: 카테고리 추가·수정 (사용 중 삭제 보호)
+  - 자동배정 규칙: 티켓 자동 담당자 배정
+  - 티켓 템플릿: 반복 티켓용 자동 입력 템플릿
   - 빠른 답변: 자주 쓰는 답변 템플릿 등록
+  - 공지사항/배너: info/warning/critical 시스템 공지
+  - 아웃바운드 웹훅: Slack/Teams 연동
+  - API 키: 외부 시스템 연동용 키 발급·관리
+  - GitLab 라벨 동기화: 라벨 현황 확인 및 수동 복구
+  - 감사 로그: 전체 이벤트 이력 조회·CSV 다운로드
+  - 서비스 카탈로그: 포털에 노출할 IT 서비스 항목 정의 [NEW]
+  - 자동화 규칙 엔진: 티켓 이벤트 기반 자동 액션 규칙 [NEW]
+  - 업무 부하 현황: 담당자별 할당·해결율·SLA 충족률 일람
 ```
 
 ### 사용자 동기화
@@ -1400,16 +1462,22 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ## 20. 버전 이력
 
-### 현재 버전 (2026-03-13)
+### 현재 버전 (2026-03-16)
 
 - **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22
-- **DB 마이그레이션**: 41단계 (0001~0041)
-- **API 엔드포인트**: 130개+
+- **DB 마이그레이션**: 47단계 (0001~0047)
+- **API 엔드포인트**: 150개+
 
 ### 마이그레이션 이력
 
 | 버전 | 주요 변경 |
 |------|---------|
+| `0047` | `ticket_type_meta` · `service_catalog_items` · `user_dashboard_configs` 테이블 — 티켓 유형·서비스 카탈로그·대시보드 위젯 설정 |
+| `0046` | `automation_rules` · `approval_requests` 테이블 — 자동화 규칙 엔진·티켓 승인 워크플로우 |
+| `0045` | `sla_records.reopened_at` — MTTR 계산용 재오픈 시각 기록 |
+| `0044` | 협력사 PL 역할 (`pl`) 추가 |
+| `0043` | 테스트중(`testing`) 티켓 상태 추가 |
+| `0042` | 티켓 병합 이력 감사 로그 |
 | `0041` | 중복 DB 인덱스 17개 제거 (스토리지·쓰기 성능 개선) |
 | `0040` | Sudo 토큰 (관리자 재인증) |
 | `0039` | 사용자 아바타 URL 저장 |
@@ -1429,32 +1497,41 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 | 항목 | 내용 |
 |------|------|
+| **티켓 유형 분류** | ITIL 4가지 유형(incident·service_request·change·problem) 사이드바에서 설정, "문제" 선택 시 문제 관리 패널 활성화 |
+| **문제 관리** | 문제 티켓에서 인시던트를 `problem_of` 링크로 연결·추적 |
+| **서비스 카탈로그** | 관리자가 IT 서비스 항목 정의 → 고객 포털 카드 노출 + 서비스별 추가 필드 수집 |
+| **자동화 규칙 엔진** | 티켓 이벤트 트리거·조건·액션 조합 규칙 — JSONB 배열로 유연한 확장 |
+| **대시보드 위젯 커스터마이징** | 홈 화면 위젯 표시 여부를 서버에 저장 — 기기 간 설정 동기화 |
+| **@멘션** | 댓글 에디터에서 `@username` 입력 시 멤버 자동완성 팝업 + 인앱 알림 발송 |
+| **PII 마스킹** | 주민등록번호·전화번호·여권번호·신용카드 자동 탐지·마스킹 (user 역할만 적용) |
+| **DORA 4대 지표** | 배포 빈도·리드타임·변경 실패율·MTTR 리포트 탭 추가 (Elite/High/Medium/Low 등급) |
+| **티켓 병합** | 중복 티켓 병합 UI — 댓글 이전 + 소스 티켓 종료 자동 처리 |
+| **GitLab 양방향 동기화** | GitLab 이슈 직접 수정 시 ITSM 감사 로그 + 신청자 인앱 알림 발행 |
+| **협력사 PL 역할** | `pl` 역할 추가 — developer 권한 + 팀 내 티켓 병합·우선순위 조정 |
+| **테스트중 상태** | `testing` 상태 추가 — 처리중 → 테스트중 → 처리완료 워크플로우 지원 |
+| **업무 부하 현황** | 담당자별 할당·해결율·SLA 충족률·평점 일람 페이지 (`/admin/workload`) |
+| **알림 채널 관리** | 이메일·Telegram 채널 상태 확인·전환 UI (`/admin/notification-channels`) |
 | **브랜딩** | ITSM 포털 → **ZENITH** 리브랜딩 (아이콘·파비콘·README 포함) |
 | **CPU 100% 수정** | SSE 스트림 tight loop 제거 → CPU 100% 고착 완전 해소 (0.24% 안정) |
 | **성능** | `/health` GitLab 캐시 60초 → 2~8초 → 3ms |
 | **성능** | 타임라인 Redis 캐시 60초 → 1.5~4초 → ~17ms |
-| **성능** | 서비스 유형 Usage API Redis 캐시 5분 → 22초 → 즉시 |
-| **모니터링** | Prometheus scrape 간격 15s → 60s / Docker healthcheck 30s → 60s |
-| **모니터링** | Redis maxmemory 256mb + allkeys-lru 정책 추가 |
 | **병목 개선** | 티켓 목록 초기 로드: 272ms → 176ms (35% 단축) |
 | **네트워크** | nginx gzip 압축 (JSON 응답 90% 압축, 53 KB → 5 KB) |
-| **커넥션 풀** | httpx 공유 클라이언트 (TCP 재사용, max_connections=30) |
-| **캐시** | stats TTL 300s / requesters TTL 600s / 무효화 시 구 키 즉시 삭제 |
 | **모니터링** | 비즈니스 KPI 27개 Prometheus 커스텀 메트릭 + Grafana 대시보드 4개 |
-| **타임라인** | 댓글·감사로그·시스템 노트 통합 뷰 + 마크다운 렌더링 |
-| **칸반** | 드래그 전환 규칙 강제 (이동 불가 컬럼 자동 비활성화·🚫 표시) |
-| **안정성** | label drift 쿨다운 (5분) / 중복 인덱스 제거 / Dead tuple VACUUM |
-| **보안** | Pydantic 입력 길이 검증 전면 적용 (filters·quick_replies·forwards·tickets) |
-| **보안** | ClamAV 내부 오류 정보 API 응답 노출 제거 |
 | **보안** | itsm-api 컨테이너 non-root 실행 (`appuser`) |
-| **Redis** | `get_timeline` Redis 연결 풀 누수 수정 → 싱글턴 `_get_redis()` 통일 |
 | **CI/CD** | 3-환경 파이프라인 (개발기·테스트기·운영기) — 태그 기반 자동/수동 배포 |
-| **Docker** | 로컬 빌드·레지스트리 배포 분리 (`docker-compose.override.yml`) |
 
 ### 주요 버그 수정 이력
 
 | 항목 | 수정 내용 |
 |------|---------|
+| `problem_of` 링크 400 차단 | `templates.py` `allowed_types`에 `"problem_of"` 누락 → 추가, 문제 관리 정상 동작 |
+| 대시보드 위젯 JSONB 저장 안됨 | `dashboard.py` PUT에 `flag_modified(config, "widgets")` 누락 → 추가 |
+| 자동화 규칙 조건·액션 저장 안됨 | `automation.py` PATCH에 JSONB 필드별 `flag_modified()` 누락 → 추가 |
+| 서비스 카탈로그 fields_schema 저장 안됨 | `service_catalog.py` PATCH에 `flag_modified(item, "fields_schema")` 누락 → 추가 |
+| 티켓 유형·승인 패널 빈 projectId | URL `?project_id=` 없이 직접 접근 시 빈 문자열 전달 → `ticket?.project_id` 우선 사용 |
+| 티켓 병합 500 에러 | `write_audit_log()` 잘못된 `extra=` kwarg → `new_value=` 수정 |
+| 감사 로그 인자 순서 | `pipeline_trigger` · `merge` 이벤트의 `resource_type`/`resource_id` 순서 수정 |
 | 티켓 카테고리 필터 | option value 숫자→English description 수정 / 기타 필터 not_labels 방식으로 전환 |
 | KB 카테고리 불일치 | ServiceTypesContext value·label·description 3가지 모두 지원 / DB 이상 데이터 정정 |
 | SLA 음수·0 입력 | `ge=1` 검증 추가 → API 422 반환 |

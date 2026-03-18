@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _USER_STATE_CACHE: dict[str, tuple[str, float]] = {}  # user_id → (state, expiry)
 _USER_STATE_CACHE_MAX = 2000  # 최대 항목 수 (메모리 누수 방지)
+_USER_STATE_CACHE_LOCK = threading.Lock()  # C-03: thread-safety for concurrent access
 
 
 def _get_gitlab_user_state(user_id: str) -> str:
@@ -27,10 +29,15 @@ def _get_gitlab_user_state(user_id: str) -> str:
     interval = getattr(settings, "GITLAB_USER_CHECK_INTERVAL", 300)
     now = time.monotonic()
 
-    cached = _USER_STATE_CACHE.get(user_id)
-    if cached and now < cached[1]:
-        return cached[0]
+    # C-03: guard all cache reads under the lock
+    with _USER_STATE_CACHE_LOCK:
+        cached = _USER_STATE_CACHE.get(user_id)
+        if cached:
+            state, exp = cached
+            if now < exp:
+                return state
 
+    # Perform the network call outside the lock to avoid blocking other threads
     try:
         import httpx
         token = settings.GITLAB_PROJECT_TOKEN
@@ -44,27 +51,41 @@ def _get_gitlab_user_state(user_id: str) -> str:
         if resp.is_success:
             state = resp.json().get("state", "active")
         else:
-            state = "active"  # fail open if API call fails
+            # H-02: on non-2xx, return last-known-good state if available
+            with _USER_STATE_CACHE_LOCK:
+                cached = _USER_STATE_CACHE.get(user_id)
+            if cached:
+                logger.warning(
+                    "GitLab user state API returned %s for %s, using cached state",
+                    resp.status_code, user_id,
+                )
+                return cached[0]
+            logger.warning(
+                "GitLab user state API returned %s for %s, failing open",
+                resp.status_code, user_id,
+            )
+            state = "active"
     except Exception as e:
         logger.warning("GitLab user state check failed for %s: %s", user_id, e)
         state = "active"
 
-    # 캐시 크기 초과 시 만료된 항목 정리 (메모리 누수 방지)
-    if len(_USER_STATE_CACHE) >= _USER_STATE_CACHE_MAX:
-        expired = [k for k, (_, exp) in _USER_STATE_CACHE.items() if now >= exp]
-        for k in expired:
-            _USER_STATE_CACHE.pop(k, None)
-    _USER_STATE_CACHE[user_id] = (state, now + interval)
+    # C-03: guard all cache writes under the lock
+    with _USER_STATE_CACHE_LOCK:
+        # 캐시 크기 초과 시 만료된 항목 정리 (메모리 누수 방지)
+        if len(_USER_STATE_CACHE) >= _USER_STATE_CACHE_MAX:
+            snapshot = list(_USER_STATE_CACHE.items())
+            expired = [k for k, (_, exp) in snapshot if now >= exp]
+            for k in expired:
+                _USER_STATE_CACHE.pop(k, None)
+        _USER_STATE_CACHE[user_id] = (state, now + interval)
     return state
 
 
 def create_token(user: dict, gitlab_token: str = "", role: str = "user") -> str:
     """Create ITSM session token.
 
-    `gitlab_token`은 JWT에 포함된다. JWT는 httponly 쿠키로만 전송되므로
-    JavaScript로는 접근 불가. HTTPS 환경에서 전송 중 탈취도 방지된다.
-    토큰 소유자 자신의 권한 범위 내에서만 GitLab API를 호출하므로
-    admin Sudo 방식보다 blast radius가 작다.
+    JWT는 httponly 쿠키로만 전송되므로 JavaScript로는 접근 불가.
+    VULN-01: gitlab_token은 JWT payload에 포함하지 않고 Redis에 별도 저장.
     jti(JWT ID)를 포함해 로그아웃 시 블랙리스트 무효화가 가능하다.
     """
     settings = get_settings()
@@ -77,7 +98,6 @@ def create_token(user: dict, gitlab_token: str = "", role: str = "user") -> str:
         "organization": user.get("organization") or "",
         "role": role,
         "exp": datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS),
-        "gitlab_token": gitlab_token,
         "jti": str(uuid.uuid4()),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
@@ -92,8 +112,54 @@ def _is_token_blacklisted(jti: str) -> bool:
             return False
         return r.exists(f"jwt:blacklist:{jti}") == 1
     except Exception as e:
-        logger.warning("JWT blacklist check failed (fail-open): %s", e)
+        logger.error("Redis blacklist check failed, failing open: %s", e)
         return False
+
+
+def store_gitlab_token(jti: str, gitlab_token: str, ttl_seconds: int) -> None:
+    """GitLab access token을 Redis에 jti 키로 저장한다 (VULN-01).
+
+    JWT payload에 직접 넣지 않음으로써 JWT 탈취 시 GitLab token 노출을 방지.
+    """
+    if not jti or not gitlab_token or ttl_seconds <= 0:
+        return
+    try:
+        from .redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return
+        r.setex(f"gl_token:{jti}", ttl_seconds, gitlab_token)
+    except Exception as e:
+        logger.warning("gitlab_token store failed: %s", e)
+
+
+def get_gitlab_token(jti: str) -> str:
+    """Redis에서 jti로 GitLab access token을 조회한다."""
+    if not jti:
+        return ""
+    try:
+        from .redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return ""
+        return r.get(f"gl_token:{jti}") or ""
+    except Exception as e:
+        logger.warning("gitlab_token fetch failed: %s", e)
+        return ""
+
+
+def delete_gitlab_token(jti: str) -> None:
+    """Redis에서 jti의 GitLab access token을 삭제한다 (로그아웃 시 호출)."""
+    if not jti:
+        return
+    try:
+        from .redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return
+        r.delete(f"gl_token:{jti}")
+    except Exception as e:
+        logger.warning("gitlab_token delete failed: %s", e)
 
 
 def blacklist_token(jti: str, ttl_seconds: int) -> None:
@@ -177,6 +243,10 @@ def get_current_user(request: Request) -> dict:
     if jti and _is_token_blacklisted(jti):
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
+    # VULN-01: JWT payload에서 제거된 gitlab_token을 Redis에서 복원
+    if jti:
+        payload["gitlab_token"] = get_gitlab_token(jti)
+
     # S-1: Check GitLab account is still active
     user_id = payload.get("sub", "")
     if user_id:
@@ -184,9 +254,9 @@ def get_current_user(request: Request) -> dict:
         if state != "active":
             raise HTTPException(status_code=401, detail="GitLab 계정이 비활성화됨")
 
-    # S-6: 그룹 멤버 동기화 결과 검사 (퇴사자 차단)
+    # S-6: 그룹 멤버 동기화 결과 검사 (퇴사자 차단) — API 키는 숫자 ID가 없으므로 skip
     role = payload.get("role", "user")
-    if user_id:
+    if user_id and str(user_id).isdigit():
         try:
             from .database import SessionLocal
             from .models import UserRole
@@ -206,12 +276,22 @@ def get_current_user(request: Request) -> dict:
     admin_cidrs = getattr(settings, "ADMIN_ALLOWED_CIDRS", "")
     if admin_cidrs and role in ("admin", "agent"):
         from .security import check_ip_whitelist
-        client_ip = request.headers.get("X-Forwarded-For", "")
+        import ipaddress as _ipaddress
+        # VULN-05: trusted proxy 환경에서만 X-Forwarded-For 신뢰
+        client_ip = ""
+        xff = request.headers.get("X-Forwarded-For", "")
+        if xff and request.client:
+            try:
+                proxy_addr = _ipaddress.ip_address(request.client.host)
+                if proxy_addr.is_private:
+                    client_ip = xff.split(",")[0].strip()
+            except ValueError:
+                pass
         if not client_ip and request.client:
             client_ip = request.client.host
         if not check_ip_whitelist(client_ip, admin_cidrs):
-            logger.warning("IP whitelist blocked: role=%s ip=%s", role, client_ip)
-            raise HTTPException(status_code=403, detail=f"허용되지 않은 IP 주소입니다: {client_ip}")
+            logger.warning("IP allowlist: blocked request from %s", client_ip)
+            raise HTTPException(status_code=403, detail="접근이 거부되었습니다.")
 
     # S-11: 2FA 강제 정책 검사
     require_2fa_roles = {r.strip() for r in getattr(settings, "REQUIRE_2FA_FOR_ROLES", "").split(",") if r.strip()}
@@ -234,7 +314,12 @@ def get_current_user(request: Request) -> dict:
                         )
             except HTTPException:
                 raise
-            except Exception:
-                pass  # fail-open
+            except Exception as e:
+                logger.error("2FA 확인 중 오류 발생 (user=%s): %s", user_id, e)
+                # H-24: fail closed — 2FA 요구 역할은 오류 시 접근 거부
+                raise HTTPException(
+                    status_code=403,
+                    detail="2FA 확인에 실패했습니다. 잠시 후 다시 시도해 주세요."
+                )
 
     return payload

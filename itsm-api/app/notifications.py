@@ -2,6 +2,7 @@
 import html
 import logging
 import smtplib
+import ssl
 import json
 import urllib.request
 import urllib.parse
@@ -13,7 +14,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .models import Notification
+from .models import Notification, SystemSetting
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +27,7 @@ def _render_email_template(event_type: str, context: dict) -> tuple[str, str] | 
     반환: (subject, html_body) 튜플, 없으면 None
     """
     try:
-        from jinja2 import Environment, select_autoescape
+        from jinja2.sandbox import SandboxedEnvironment
         from .database import SessionLocal
         from .models import EmailTemplate
 
@@ -39,7 +40,7 @@ def _render_email_template(event_type: str, context: dict) -> tuple[str, str] | 
             if not tmpl:
                 return None
 
-        env = Environment(autoescape=select_autoescape(["html"]))
+        env = SandboxedEnvironment(autoescape=True)
         subject = env.from_string(tmpl.subject).render(**context)
         body = env.from_string(tmpl.html_body).render(**context)
         return subject, body
@@ -53,6 +54,39 @@ _send_email = None  # send_email 정의 후 아래에서 할당
 
 logger = logging.getLogger(__name__)
 
+_SETTINGS_CACHE_TTL = 60  # Redis 캐시 TTL (초)
+
+
+def _get_channel_enabled(setting_key: str, env_flag: bool) -> bool:
+    """알림 채널 활성화 여부를 DB(+Redis 캐시)에서 조회한다.
+
+    - env_flag가 False이면 즉시 False (환경변수가 인프라 수준 off-switch)
+    - DB에 설정이 없으면 기본값 True (하위 호환)
+    """
+    if not env_flag:
+        return False
+    try:
+        from .redis_client import get_redis
+        cache_key = f"itsm:settings:{setting_key}"
+        r = get_redis()
+        if r:
+            cached = r.get(cache_key)
+            if cached is not None:
+                return cached == "true"
+        from .database import SessionLocal
+        with SessionLocal() as db:
+            row = db.query(SystemSetting).filter(SystemSetting.key == setting_key).first()
+            val = row.value if row else "true"
+        if r:
+            try:
+                r.setex(cache_key, _SETTINGS_CACHE_TTL, val)
+            except Exception:
+                pass
+        return val == "true"
+    except Exception as exc:
+        logger.warning("Failed to read system setting %s: %s — falling back to env flag", setting_key, exc)
+        return env_flag
+
 
 # ---------------------------------------------------------------------------
 # Email
@@ -61,8 +95,8 @@ logger = logging.getLogger(__name__)
 def send_email(to: str | list[str], subject: str, body_html: str) -> None:
     """Send an email via SMTP. Silently logs errors if NOTIFICATION_ENABLED=false."""
     settings = get_settings()
-    if not settings.NOTIFICATION_ENABLED:
-        logger.debug("Notifications disabled – skipping email to %s: %s", to, subject)
+    if not _get_channel_enabled("email_enabled", settings.NOTIFICATION_ENABLED):
+        logger.debug("Email notifications disabled – skipping email to %s: %s", to, subject)
         return
 
     if not settings.SMTP_HOST:
@@ -77,22 +111,30 @@ def send_email(to: str | list[str], subject: str, body_html: str) -> None:
     msg["To"] = ", ".join(recipients)
     msg.attach(MIMEText(body_html, "html", "utf-8"))
 
-    try:
-        if settings.SMTP_TLS:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-                server.ehlo()
-                server.starttls()
-                if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.SMTP_FROM, recipients, msg.as_string())
-        else:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-                if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.SMTP_FROM, recipients, msg.as_string())
-        logger.info("Email sent to %s: %s", recipients, subject)
-    except Exception as e:
-        logger.error("Failed to send email to %s: %s", recipients, e)
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            if settings.SMTP_TLS:
+                ssl_context = ssl.create_default_context()
+                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+                    server.ehlo()
+                    server.starttls(context=ssl_context)
+                    if settings.SMTP_USER and settings.SMTP_PASSWORD:
+                        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.sendmail(settings.SMTP_FROM, recipients, msg.as_string())
+            else:
+                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+                    if settings.SMTP_USER and settings.SMTP_PASSWORD:
+                        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.sendmail(settings.SMTP_FROM, recipients, msg.as_string())
+            logger.info("Email sent to %s: %s", recipients, subject)
+            return
+        except Exception as e:
+            last_exc = e
+            if attempt < 2:
+                import time
+                time.sleep(attempt + 1)  # 1s, 2s
+    logger.error("Failed to send email to %s after 3 attempts: %s", recipients, last_exc)
 
 
 # 내부 alias (escalation_policies에서 직접 호출)
@@ -106,8 +148,8 @@ _send_email = send_email
 def send_telegram(message: str) -> None:
     """Send a message via Telegram Bot API. Uses stdlib only (no httpx/requests)."""
     settings = get_settings()
-    if not settings.TELEGRAM_ENABLED:
-        logger.debug("Telegram disabled – skipping message")
+    if not _get_channel_enabled("telegram_enabled", settings.TELEGRAM_ENABLED):
+        logger.debug("Telegram notifications disabled – skipping message")
         return
     if not settings.TELEGRAM_BOT_TOKEN or not settings.TELEGRAM_CHAT_ID:
         logger.warning("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured, skipping")
@@ -215,7 +257,7 @@ def notify_status_changed(ticket: dict, old_status: str, new_status: str, actor_
     if employee_email:
         recipients.append(employee_email)
 
-    watcher_emails = _get_watcher_emails(int(iid), project_id, exclude_email=employee_email)
+    watcher_emails = _get_watcher_emails(int(iid) if str(iid).isdigit() else 0, project_id, exclude_email=employee_email)
     for email in watcher_emails:
         if email not in recipients:
             recipients.append(email)
@@ -244,7 +286,7 @@ def notify_status_changed(ticket: dict, old_status: str, new_status: str, actor_
         f"🔄 <b>티켓 상태 변경</b>\n"
         f"#️⃣ #{iid}: {title}\n"
         f"📌 {status_map.get(old_status, old_status)} → <b>{status_map.get(new_status, new_status)}</b>\n"
-        f"👷 처리자: {actor_name}"
+        f"👷 처리자: {actor_name_e}"
     )
     try:
         from .outbound_webhook import fire_event
@@ -304,7 +346,7 @@ def notify_comment_added(ticket: dict, comment_body: str, author_name: str, is_i
         recipients.append(employee_email)
 
     # Also notify watchers
-    watcher_emails = _get_watcher_emails(int(iid), project_id, exclude_email=employee_email)
+    watcher_emails = _get_watcher_emails(int(iid) if str(iid).isdigit() else 0, project_id, exclude_email=employee_email)
     for email in watcher_emails:
         if email not in recipients:
             recipients.append(email)
@@ -383,7 +425,12 @@ def create_db_notification(
     body: Optional[str] = None,
     link: Optional[str] = None,
 ) -> Notification:
-    """Create a notification record in the DB and publish to Redis."""
+    """Create a notification record in the DB and publish to Redis.
+
+    Uses flush() instead of commit() so that the record participates in the
+    caller's transaction. The caller is responsible for committing. If the
+    outer transaction rolls back, the notification row is also rolled back.
+    """
     notif = Notification(
         recipient_id=recipient_id,
         title=title,
@@ -391,7 +438,7 @@ def create_db_notification(
         link=link,
     )
     db.add(notif)
-    db.commit()
+    db.flush()  # assign PK / created_at without committing the outer transaction
     db.refresh(notif)
 
     # Publish to Redis for SSE delivery

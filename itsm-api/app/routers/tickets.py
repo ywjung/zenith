@@ -1,4 +1,6 @@
 import asyncio
+import concurrent.futures
+import html as _html
 import json as _json
 import logging
 import re as _re_shared
@@ -19,7 +21,11 @@ from ..schemas import TicketCreate, TicketResponse, CommentResponse, TicketUpdat
 from .. import gitlab_client
 from ..rbac import require_developer, require_pl, require_agent, require_admin
 from .. import sla as sla_module
-from ..models import SLARecord, AuditLog
+from ..models import (
+    SLARecord, AuditLog, CustomFieldDef, TicketCustomValue,
+    TicketWatcher, TicketLink, TimeEntry, ProjectForward, GuestToken,
+    Rating, ApprovalRequest, TicketTypeMeta,
+)
 from ..notifications import (
     notify_ticket_created,
     notify_status_changed,
@@ -28,7 +34,7 @@ from ..notifications import (
     create_db_notification,
 )
 from ..assignment import evaluate_rules
-from ..rate_limit import user_limiter, LIMIT_TICKET_CREATE, LIMIT_UPLOAD
+from ..rate_limit import user_limiter, LIMIT_TICKET_CREATE, LIMIT_UPLOAD, LIMIT_COMMENT, LIMIT_SEARCH
 
 from ..redis_client import get_redis as _get_redis, scan_delete as _scan_delete
 
@@ -195,6 +201,23 @@ def _scan_with_clamav(content: bytes, filename: str) -> None:
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
+# H-07: Module-level executor — avoids creating a new thread pool per request.
+_stats_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="stats"
+)
+
+
+def _sanitize_comment(text: str) -> str:
+    """Strip dangerous HTML from comments before forwarding to GitLab. H-25."""
+    if not text:
+        return ""
+    # Remove HTML tags
+    text = _re_shared.sub(r'<[^>]+>', '', text)
+    # Unescape HTML entities
+    text = _html.unescape(text)
+    return text[:50000]
+
+
 CATEGORY_MAP = {
     "hardware": "하드웨어",
     "software": "소프트웨어",
@@ -292,7 +315,7 @@ def _extract_meta(description: str) -> dict:
     return meta
 
 
-def _issue_to_response(issue: dict) -> dict:
+def _issue_to_response(issue: dict, mask_pii: bool = False) -> dict:
     import re as _re
     label_info = _parse_labels(issue.get("labels", []))
     meta = _extract_meta(issue.get("description") or "")
@@ -309,10 +332,17 @@ def _issue_to_response(issue: dict) -> dict:
     if m:
         project_path = m.group(1)
 
+    title = issue["title"]
+    description = meta["body"]
+    if mask_pii:
+        from ..pii_masker import mask_pii as _mask
+        title = _mask(title)
+        description = _mask(description)
+
     return {
         "iid": issue["iid"],
-        "title": issue["title"],
-        "description": meta["body"],
+        "title": title,
+        "description": description,
         "state": issue["state"],
         "labels": issue.get("labels", []),
         "created_at": issue["created_at"],
@@ -331,6 +361,8 @@ def _issue_to_response(issue: dict) -> dict:
         "assignee_name": assignee["name"] if assignee else None,
         "assignee_username": assignee["username"] if assignee else None,
         "project_path": project_path,
+        "milestone_id": issue["milestone"]["id"] if issue.get("milestone") else None,
+        "milestone_title": issue["milestone"]["title"] if issue.get("milestone") else None,
     }
 
 
@@ -417,11 +449,13 @@ def _is_issue_assigned_to_user(issue: dict, user: dict) -> bool:
 
 
 @router.get("/search", response_model=list)
+@(user_limiter.limit(LIMIT_SEARCH) if user_limiter else lambda f: f)
 def search_tickets(
+    request: Request,
     q: str = Query(..., min_length=2, description="검색어 (제목+설명 대상)"),
     project_id: Optional[str] = Query(default=None),
     state: Optional[str] = Query(default=None, description="opened | closed"),
-    per_page: int = Query(default=20, le=50),
+    per_page: int = Query(default=20, ge=1, le=50),
     user: dict = Depends(get_current_user),
 ):
     """티켓 전문검색 — GitLab 이슈 검색 API 활용."""
@@ -522,7 +556,7 @@ def get_ticket_stats(
                 _r.setex(_cache_key, 300, _json.dumps(_result))
             return _result
 
-        from concurrent.futures import ThreadPoolExecutor
+        # SLA 현황 (agent/admin 전용) — DB 조회
 
         def _count(state, labels=None, not_labels=None):
             _, total = gitlab_client.get_issues(
@@ -532,32 +566,51 @@ def get_ticket_stats(
             return total
 
         _all_sl = "status::approved,status::in_progress,status::waiting,status::resolved,status::testing,status::ready_for_release,status::released"
-        with ThreadPoolExecutor(max_workers=10) as pool:
-            f_all               = pool.submit(_count, "all")
-            f_open              = pool.submit(_count, "opened", None, _all_sl)
-            f_approved          = pool.submit(_count, "opened", "status::approved")
-            f_in_progress       = pool.submit(_count, "opened", "status::in_progress")
-            f_waiting           = pool.submit(_count, "opened", "status::waiting")
-            f_resolved          = pool.submit(_count, "opened", "status::resolved")
-            f_testing           = pool.submit(_count, "opened", "status::testing")
-            f_ready_for_release = pool.submit(_count, "opened", "status::ready_for_release")
-            f_released          = pool.submit(_count, "opened", "status::released")
-            f_closed            = pool.submit(_count, "closed")
-            _result = {
-                "all":              f_all.result(),
-                "open":             f_open.result(),
-                "approved":         f_approved.result(),
-                "in_progress":      f_in_progress.result(),
-                "waiting":          f_waiting.result(),
-                "resolved":         f_resolved.result(),
-                "testing":          f_testing.result(),
-                "ready_for_release":f_ready_for_release.result(),
-                "released":         f_released.result(),
-                "closed":           f_closed.result(),
-            }
-            if _r:
-                _r.setex(_cache_key, 300, _json.dumps(_result))
-            return _result
+        f_all               = _stats_executor.submit(_count, "all")
+        f_open              = _stats_executor.submit(_count, "opened", None, _all_sl)
+        f_approved          = _stats_executor.submit(_count, "opened", "status::approved")
+        f_in_progress       = _stats_executor.submit(_count, "opened", "status::in_progress")
+        f_waiting           = _stats_executor.submit(_count, "opened", "status::waiting")
+        f_resolved          = _stats_executor.submit(_count, "opened", "status::resolved")
+        f_testing           = _stats_executor.submit(_count, "opened", "status::testing")
+        f_ready_for_release = _stats_executor.submit(_count, "opened", "status::ready_for_release")
+        f_released          = _stats_executor.submit(_count, "opened", "status::released")
+        f_closed            = _stats_executor.submit(_count, "closed")
+        _result = {
+            "all":              f_all.result(),
+            "open":             f_open.result(),
+            "approved":         f_approved.result(),
+            "in_progress":      f_in_progress.result(),
+            "waiting":          f_waiting.result(),
+            "resolved":         f_resolved.result(),
+            "testing":          f_testing.result(),
+            "ready_for_release":f_ready_for_release.result(),
+            "released":         f_released.result(),
+            "closed":           f_closed.result(),
+        }
+
+        # SLA 현황 DB 조회 (agent/admin 전용, 캐시 미적용)
+        try:
+            from ..models import SLARecord
+            from ..database import SessionLocal
+            from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+            _now_naive = _dt.now(_tz.utc).replace(tzinfo=None)
+            with SessionLocal() as _db:
+                _sla_over     = _db.query(SLARecord).filter(SLARecord.breached == True).count()
+                _sla_imminent = _db.query(SLARecord).filter(
+                    SLARecord.breached == False,
+                    SLARecord.sla_deadline != None,  # noqa: E711
+                    SLARecord.sla_deadline <= _now_naive + _td(hours=2),
+                ).count()
+                _result["sla_over"]     = _sla_over
+                _result["sla_imminent"] = _sla_imminent
+        except Exception:
+            _result["sla_over"]     = 0
+            _result["sla_imminent"] = 0
+
+        if _r:
+            _r.setex(_cache_key, 300, _json.dumps(_result))
+        return _result
     except Exception as e:
         logger.error("GitLab stats error: %s", e)
         raise HTTPException(status_code=502, detail="통계를 불러오는 중 오류가 발생했습니다.")
@@ -636,7 +689,7 @@ def list_tickets(
         status_label: Optional[str] = None
         not_labels: Optional[str] = None
 
-        _all_status_labels = "status::approved,status::in_progress,status::waiting,status::resolved,status::ready_for_release,status::released"
+        _all_status_labels = "status::approved,status::in_progress,status::waiting,status::resolved,status::testing,status::ready_for_release,status::released"
         if state == "open":
             gl_state = "opened"
             not_labels = _all_status_labels
@@ -655,6 +708,9 @@ def list_tickets(
         elif state == "resolved":
             gl_state = "opened"
             status_label = "status::resolved"
+        elif state == "testing":
+            gl_state = "opened"
+            status_label = "status::testing"
         elif state == "ready_for_release":
             gl_state = "opened"
             status_label = "status::ready_for_release"
@@ -671,14 +727,12 @@ def list_tickets(
             if category == "other":
                 # "기타" 카테고리: 명시적 cat:: 라벨이 없는 티켓 포함
                 # → 알려진 다른 카테고리를 not_labels로 제외
-                from ..database import SessionLocal as _SL
                 from ..models import ServiceType as _ST
-                with _SL() as _db:
-                    _other_cats = [
-                        f"cat::{t.description}"
-                        for t in _db.query(_ST).filter(_ST.enabled == True).all()  # noqa: E712
-                        if t.description and t.description != "other"
-                    ]
+                _other_cats = [
+                    f"cat::{t.description}"
+                    for t in db.query(_ST).filter(_ST.enabled == True).all()  # noqa: E712
+                    if t.description and t.description != "other"
+                ]
                 if not_labels:
                     not_labels += "," + ",".join(_other_cats)
                 else:
@@ -723,7 +777,7 @@ def list_tickets(
                     created_after=created_after, created_before=created_before,
                     assignee_username=api_assignee_username,
                 )
-                tickets_page = [_issue_to_response(i) for i in issues]
+                tickets_page = [_issue_to_response(i, mask_pii=(role == "user")) for i in issues]
                 _attach_sla_deadlines(tickets_page, db)
                 _result = {"tickets": tickets_page, "total": total, "page": page, "per_page": per_page}
                 if _r:
@@ -751,7 +805,7 @@ def list_tickets(
                     if _get_issue_requester(i)[0] == created_by_username
                 ]
 
-            all_tickets = [_issue_to_response(i) for i in filtered_issues]
+            all_tickets = [_issue_to_response(i, mask_pii=(role == "user")) for i in filtered_issues]
 
             if sla:
                 from datetime import datetime, timezone
@@ -795,7 +849,7 @@ def list_tickets(
             order_by=sort_by, sort=order,
             created_after=created_after, created_before=created_before,
         )
-        tickets_page = [_issue_to_response(i) for i in issues]
+        tickets_page = [_issue_to_response(i, mask_pii=(role == "user")) for i in issues]
         _attach_sla_deadlines(tickets_page, db)
         _result = {
             "tickets": tickets_page,
@@ -903,13 +957,38 @@ def proxy_upload(
         if not fs_path.startswith(base_dir + os.sep):
             raise HTTPException(status_code=400, detail="잘못된 파일 경로입니다.")
 
-        if os.path.isfile(fs_path):
-            content_type = mimetypes.guess_type(safe_filename)[0] or "application/octet-stream"
-            safe_cd_name = safe_filename.replace('"', '_')
-            # SVG는 브라우저에서 스크립트를 실행할 수 있으므로 항상 다운로드 강제 (C-1)
-            force_download = download or content_type == "image/svg+xml"
-            disposition = f'attachment; filename="{safe_cd_name}"' if force_download else "inline"
-            with open(fs_path, "rb") as f:
+        content_type = mimetypes.guess_type(safe_filename)[0] or "application/octet-stream"
+        # SVG는 브라우저에서 스크립트를 실행할 수 있으므로 항상 다운로드 강제 (C-1)
+        force_download = download or content_type == "image/svg+xml"
+
+        def _make_disposition(fname: str, attach: bool) -> str:
+            if not attach:
+                return "inline"
+            # HTTP 헤더는 latin-1만 허용 → 비ASCII 파일명은 RFC 5987 (filename*) 인코딩
+            from urllib.parse import quote as _q
+            try:
+                fname.encode("latin-1")  # ASCII-safe 이름은 그대로 사용
+                return f'attachment; filename="{fname.replace(chr(34), "_")}"'
+            except UnicodeEncodeError:
+                encoded = _q(fname, safe="")
+                return f"attachment; filename*=UTF-8''{encoded}"
+
+        disposition = _make_disposition(safe_filename, force_download)
+
+        # 1차: 파일시스템에서 직접 읽기 (볼륨 마운트된 경우)
+        # GitLab이 업로드 시 파일명을 sanitize(공백·괄호 → _)하므로, exact match 실패 시 디렉토리 스캔
+        actual_path = fs_path
+        if not os.path.isfile(actual_path):
+            upload_dir = os.path.dirname(fs_path)
+            if os.path.isdir(upload_dir):
+                entries = [e for e in os.listdir(upload_dir) if os.path.isfile(os.path.join(upload_dir, e))]
+                if len(entries) == 1:
+                    actual_path = os.path.join(upload_dir, entries[0])
+                    content_type = mimetypes.guess_type(entries[0])[0] or content_type
+                    disposition = _make_disposition(entries[0], force_download)
+
+        if os.path.isfile(actual_path):
+            with open(actual_path, "rb") as f:
                 return Response(
                     content=f.read(),
                     media_type=content_type,
@@ -918,6 +997,34 @@ def proxy_upload(
                         "Cache-Control": "private, max-age=3600",
                     },
                 )
+
+        # 2차: 파일시스템 접근 불가 시 GitLab HTTP로 fetch
+        # /-/project/.../uploads/... 는 웹 라우트이므로 OAuth Bearer 토큰 필요
+        from urllib.parse import quote as _url_quote
+        encoded_filename = _url_quote(safe_filename, safe='')
+        gitlab_url = f"{settings.GITLAB_API_URL}/-/project/{project_id}/uploads/{upload_id}/{encoded_filename}"
+        oauth_token = _user.get("gitlab_token") if _user else None
+        auth_headers_list = []
+        if oauth_token:
+            auth_headers_list.append({"Authorization": f"Bearer {oauth_token}"})
+        # PRIVATE-TOKEN도 시도 (관리자 토큰인 경우 web route도 허용될 수 있음)
+        auth_headers_list.append({"PRIVATE-TOKEN": settings.GITLAB_PROJECT_TOKEN})
+        try:
+            with httpx.Client(timeout=30, follow_redirects=True) as c:
+                for auth_headers in auth_headers_list:
+                    r = c.get(gitlab_url, headers=auth_headers)
+                    ct_resp = r.headers.get("content-type", "")
+                    if r.status_code == 200 and "text/html" not in ct_resp:
+                        return Response(
+                            content=r.content,
+                            media_type=content_type,
+                            headers={
+                                "Content-Disposition": disposition,
+                                "Cache-Control": "private, max-age=3600",
+                            },
+                        )
+        except Exception as e:
+            logger.warning("GitLab HTTP proxy fallback failed: %s", e)
 
     raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
 
@@ -994,25 +1101,46 @@ def create_ticket(
     db: Session = Depends(get_db),
 ):
     # S-9: 비밀 스캐닝 — 제목·설명에서 민감 정보 탐지 (경고만, 차단 안 함)
-    from ..secret_scanner import check_and_warn
+    from ..secret_scanner import check_and_warn as _secret_check
+    from ..pii_masker import check_and_warn as _pii_check
     _scan_text = f"{data.title}\n{data.description or ''}"
-    check_and_warn(_scan_text, context=f"ticket.create", actor=user.get("username", "?"))
+    _secret_check(_scan_text, context="ticket.create", actor=user.get("username", "?"))
+    _pii_check(_scan_text, context="ticket.create")
 
     gitlab_client.ensure_labels(data.project_id)
 
     labels = [f"cat::{data.category}", f"prio::{data.priority}", "status::open"]
 
-    meta_lines = [
+    # GitLab 이슈 설명: 표 형식으로 신청 정보를 구조화해 가독성 향상
+    table_rows = [
+        ("신청자", data.employee_name),
+        ("이메일", data.employee_email or ""),
+        ("작성자", user["username"]),
+    ]
+    if data.department:
+        table_rows.append(("부서", data.department))
+    if data.location:
+        table_rows.append(("위치", data.location))
+
+    # 하위 호환성을 위해 **신청자:** 플레인 텍스트 라인도 첫 줄에 유지
+    # (webhooks.py _parse_submitter_username 등이 이를 파싱함)
+    header_lines = [
         f"**신청자:** {data.employee_name}",
         f"**이메일:** {data.employee_email}",
         f"**작성자:** {user['username']}",
     ]
     if data.department:
-        meta_lines.append(f"**부서:** {data.department}")
+        header_lines.append(f"**부서:** {data.department}")
     if data.location:
-        meta_lines.append(f"**위치:** {data.location}")
-    meta_lines.extend(["", "---", "", data.description])
-    description = "\n".join(meta_lines)
+        header_lines.append(f"**위치:** {data.location}")
+
+    table_lines = [
+        "| 항목 | 내용 |",
+        "|------|------|",
+    ] + [f"| {k} | {v} |" for k, v in table_rows]
+
+    description_parts = header_lines + ["", "---", ""] + table_lines + ["", "---", "", data.description]
+    description = "\n".join(description_parts)
 
     # Auto-assign if no assignee specified
     assignee_id = data.assignee_id
@@ -1025,6 +1153,7 @@ def create_ticket(
             project_id=data.project_id,
             assignee_id=assignee_id,
             confidential=data.confidential,
+            milestone_id=data.milestone_id,
         )
     except Exception as e:
         logger.error("GitLab create_issue error: %s", e)
@@ -1058,6 +1187,66 @@ def create_ticket(
 def _sla_to_dict(record) -> dict:
     return SLARecordResponse.model_validate(record).model_dump()
 
+
+
+@router.post("/{iid}/pipeline", response_model=dict, status_code=201)
+def trigger_ticket_pipeline(
+    iid: int,
+    request: Request,
+    ref: str = Query(default="main", description="브랜치 또는 태그"),
+    project_id: Optional[str] = Query(default=None),
+    user: dict = Depends(require_agent),
+    db: Session = Depends(get_db),
+):
+    """티켓과 연계하여 GitLab CI/CD 파이프라인을 트리거한다.
+
+    파이프라인 변수로 ITSM_TICKET_IID를 자동 주입한다.
+    """
+    try:
+        result = gitlab_client.trigger_pipeline(
+            ref=ref,
+            variables={"ITSM_TICKET_IID": str(iid)},
+            project_id=project_id,
+        )
+    except Exception as e:
+        logger.error("Pipeline trigger failed for ticket #%s: %s", iid, e)
+        raise HTTPException(status_code=502, detail=f"파이프라인 트리거 실패: {e}")
+
+    # 티켓에 파이프라인 트리거 안내 댓글 추가
+    try:
+        pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
+        pipeline_id = result.get("id", "?")
+        pipeline_url = result.get("web_url", "")
+        actor = user.get("name") or user.get("username", "?")
+        note = (
+            f"⚙️ **파이프라인 트리거됨** (by {actor})\n\n"
+            f"- **브랜치:** `{ref}`\n"
+            f"- **파이프라인:** [{pipeline_id}]({pipeline_url})\n"
+            f"- **상태:** {result.get('status', 'pending')}"
+        )
+        gitlab_client.add_note(iid, note, project_id=pid)
+    except Exception as e:
+        logger.warning("Failed to add pipeline note to ticket #%s: %s", iid, e)
+
+    write_audit_log(db, user, "ticket.pipeline_trigger", "ticket", str(iid),
+                    new_value={"ref": ref, "pipeline_id": result.get("id")}, request=request)
+
+    return result
+
+
+@router.get("/{iid}/pipelines", response_model=list)
+def list_ticket_pipelines(
+    iid: int,
+    ref: Optional[str] = Query(default=None),
+    project_id: Optional[str] = Query(default=None),
+    _user: dict = Depends(require_agent),
+):
+    """티켓 관련 프로젝트의 최근 파이프라인 목록 조회."""
+    try:
+        return gitlab_client.list_pipelines(ref=ref, project_id=project_id)
+    except Exception as e:
+        logger.error("List pipelines error: %s", e)
+        raise HTTPException(status_code=502, detail="파이프라인 목록 조회 실패")
 
 
 @router.get("/{iid}/linked-mrs")
@@ -1097,7 +1286,7 @@ def get_ticket_sla(
     pid = project_id or get_settings().GITLAB_PROJECT_ID
     record = sla_module.get_sla_record(db, iid, pid)
     if not record:
-        raise HTTPException(status_code=404, detail="SLA 레코드를 찾을 수 없습니다.")
+        return None
     return _sla_to_dict(record)
 
 
@@ -1143,7 +1332,7 @@ def get_ticket(
 ):
     try:
         issue = gitlab_client.get_issue(iid, project_id=project_id)
-        ticket = _issue_to_response(issue)
+        ticket = _issue_to_response(issue, mask_pii=(_user.get("role") == "user"))
         # 신청자 이름을 GitLab 실명으로 교체
         creator = ticket.get("created_by_username")
         if creator:
@@ -1228,6 +1417,87 @@ def clone_ticket(
     return _issue_to_response(new_issue)
 
 
+@router.post("/{iid}/merge", response_model=dict)
+def merge_ticket(
+    iid: int,
+    request: Request,
+    target_iid: int = Query(..., description="병합 대상 티켓 IID — 이 티켓이 유지됩니다"),
+    project_id: Optional[str] = Query(default=None),
+    user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """티켓 병합 — iid를 target_iid로 병합한다.
+
+    - source 티켓(iid)의 댓글을 target에 복사
+    - source에 병합 안내 댓글 추가 후 closed 처리
+    - target에 병합 완료 댓글 추가
+    """
+    from ..rbac import require_agent as _req_agent
+    _req_agent(user)
+
+    pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
+
+    if iid == target_iid:
+        raise HTTPException(status_code=400, detail="자기 자신에게 병합할 수 없습니다.")
+
+    try:
+        source = gitlab_client.get_issue(iid, project_id=pid)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"소스 티켓 #{iid}를 찾을 수 없습니다.")
+
+    try:
+        target = gitlab_client.get_issue(target_iid, project_id=pid)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"대상 티켓 #{target_iid}를 찾을 수 없습니다.")
+
+    if target.get("state") == "closed":
+        raise HTTPException(status_code=400, detail=f"대상 티켓 #{target_iid}가 이미 닫혀 있습니다.")
+
+    actor = user.get("name") or user.get("username", "?")
+
+    # 1. source 댓글을 target으로 복사 (시스템 메모 형식)
+    try:
+        source_notes = gitlab_client.get_notes(iid, project_id=pid)
+        user_notes = [n for n in source_notes if not n.get("system", False)]
+        if user_notes:
+            header = f"**#{iid}에서 병합된 댓글 ({len(user_notes)}개)**\n\n---\n\n"
+            combined = header + "\n\n---\n\n".join(
+                f"**{n.get('author', {}).get('name', '?')}** ({n.get('created_at', '')[:10]}):\n{n.get('body', '')}"
+                for n in user_notes
+            )
+            gitlab_client.add_note(target_iid, combined, project_id=pid)
+    except Exception as e:
+        logger.warning("Merge: failed to copy notes from #%s: %s", iid, e)
+
+    # 2. source에 병합 안내 댓글 + 닫기
+    try:
+        gitlab_client.add_note(
+            iid,
+            f"🔀 이 티켓은 #{target_iid}로 병합됐습니다. (by {actor})\n\n"
+            f"추가 문의는 #{target_iid}에서 이어서 처리됩니다.",
+            project_id=pid,
+        )
+        gitlab_client.update_issue(iid, state_event="close", project_id=pid)
+    except Exception as e:
+        logger.warning("Merge: failed to close source #%s: %s", iid, e)
+
+    # 3. target에 병합 완료 알림
+    try:
+        gitlab_client.add_note(
+            target_iid,
+            f"🔀 #{iid} 티켓이 이 티켓으로 병합됐습니다. (by {actor})\n\n"
+            f"**원본 제목:** {source.get('title', '')}",
+            project_id=pid,
+        )
+    except Exception as e:
+        logger.warning("Merge: failed to add merge note to target #%s: %s", target_iid, e)
+
+    write_audit_log(db, user, "ticket.merge", "ticket", str(iid),
+                    new_value={"target_iid": target_iid}, request=request)
+
+    return {"ok": True, "source_iid": iid, "target_iid": target_iid}
+
+
 @router.delete("/{iid}", status_code=204)
 def delete_ticket(
     request: Request,
@@ -1264,6 +1534,43 @@ def delete_ticket(
     except Exception as e:
         logger.error("GitLab delete_issue %d error: %s", iid, e)
         raise HTTPException(status_code=502, detail="티켓 삭제 중 오류가 발생했습니다.")
+
+    # GitLab 삭제 성공 후 DB 연관 레코드 정리 (고아 레코드 방지)
+    pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
+    try:
+        db.query(SLARecord).filter(
+            SLARecord.gitlab_issue_iid == iid, SLARecord.project_id == pid
+        ).delete(synchronize_session=False)
+        db.query(TicketCustomValue).filter(
+            TicketCustomValue.gitlab_issue_iid == iid, TicketCustomValue.project_id == pid
+        ).delete(synchronize_session=False)
+        db.query(TicketWatcher).filter(
+            TicketWatcher.ticket_iid == iid, TicketWatcher.project_id == pid
+        ).delete(synchronize_session=False)
+        db.query(TicketLink).filter(
+            (TicketLink.source_iid == iid) | (TicketLink.target_iid == iid),
+            TicketLink.project_id == pid,
+        ).delete(synchronize_session=False)
+        db.query(TimeEntry).filter(
+            TimeEntry.issue_iid == iid, TimeEntry.project_id == pid
+        ).delete(synchronize_session=False)
+        db.query(ProjectForward).filter(
+            ProjectForward.source_iid == iid, ProjectForward.source_project_id == pid
+        ).delete(synchronize_session=False)
+        db.query(GuestToken).filter(
+            GuestToken.ticket_iid == iid, GuestToken.project_id == pid
+        ).delete(synchronize_session=False)
+        db.query(ApprovalRequest).filter(
+            ApprovalRequest.ticket_iid == iid, ApprovalRequest.project_id == pid
+        ).delete(synchronize_session=False)
+        db.query(TicketTypeMeta).filter(
+            TicketTypeMeta.ticket_iid == iid, TicketTypeMeta.project_id == pid
+        ).delete(synchronize_session=False)
+        db.query(Rating).filter(Rating.gitlab_issue_iid == iid).delete(synchronize_session=False)
+        db.commit()
+    except Exception as e:
+        logger.warning("delete_ticket #%d: DB 연관 레코드 정리 실패 (무시): %s", iid, e)
+        db.rollback()
 
     write_audit_log(db, user, "ticket.delete", "ticket", str(iid), request=request)
 
@@ -1388,6 +1695,7 @@ def update_ticket(
             assignee_id=data.assignee_id,
             title=new_title,
             description=new_description,
+            milestone_id=data.milestone_id,
         )
 
         # 상태 변경 시 감사 코멘트 자동 추가
@@ -1424,6 +1732,20 @@ def update_ticket(
                 sla_module.pause_sla(db, iid, pid)
             elif old_status == "waiting":
                 sla_module.resume_sla(db, iid, pid)
+            # DORA: 재오픈 시점 기록 (MTTR 계산용)
+            if data.status == "reopened":
+                try:
+                    from datetime import datetime as _dt, timezone as _tz
+                    from ..models import SLARecord as _SLARecord
+                    _sla_rec = db.query(_SLARecord).filter(
+                        _SLARecord.gitlab_issue_iid == iid,
+                        _SLARecord.project_id == pid,
+                    ).first()
+                    if _sla_rec:
+                        _sla_rec.reopened_at = _dt.now(_tz.utc)
+                        db.commit()
+                except Exception as _e:
+                    logger.warning("Failed to record reopened_at for ticket #%d: %s", iid, _e)
 
         # 해결 노트 저장 (resolved/closed 전환 시)
         if data.status in ("resolved", "closed") and data.resolution_note:
@@ -1477,6 +1799,24 @@ def update_ticket(
                     )
             except Exception as e:
                 logger.warning("Failed to create in-app notification for ticket %d: %s", iid, e)
+
+            # CSAT 알림: 해결/종료 전환 시 신청자에게 만족도 조사 요청
+            if data.status in ("resolved", "closed"):
+                try:
+                    description_text = updated.get("description") or ""
+                    from ..routers.webhooks import _parse_submitter_username, _get_gitlab_user_id_by_username
+                    submitter_username = _parse_submitter_username(description_text)
+                    submitter_user_id = _get_gitlab_user_id_by_username(submitter_username) if submitter_username else None
+                    if submitter_user_id and submitter_user_id != str(actor_gl_id if actor_gl_id else ""):
+                        create_db_notification(
+                            db,
+                            recipient_id=submitter_user_id,
+                            title=f"티켓 #{iid} 처리가 완료됐습니다",
+                            body="서비스 만족도를 평가해 주세요. 소중한 의견이 서비스 개선에 도움이 됩니다.",
+                            link=f"/tickets/{iid}",
+                        )
+                except Exception as e:
+                    logger.warning("Failed to send CSAT notification for ticket %d: %s", iid, e)
 
         _invalidate_ticket_list_cache(project_id)
         # ETag 응답 헤더로 최신 updated_at 반환 (다음 요청의 If-Match에 활용)
@@ -1562,11 +1902,15 @@ def convert_resolution_to_kb(
         published=False,  # 초안으로 생성
         tags=[],
     )
-    db.add(article)
-    db.flush()
-
-    rn.kb_article_id = article.id
-    db.commit()
+    try:
+        db.add(article)
+        db.flush()
+        rn.kb_article_id = article.id
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.exception("KB article creation failed for ticket #%d: %s", iid, e)
+        raise HTTPException(status_code=500, detail="내부 오류가 발생했습니다.")
     db.refresh(article)
 
     logger.info("Ticket #%d resolution note converted to KB article id=%d (draft)", iid, article.id)
@@ -1574,7 +1918,9 @@ def convert_resolution_to_kb(
 
 
 @router.post("/{iid}/comments", response_model=dict, status_code=201)
+@(user_limiter.limit(LIMIT_COMMENT) if user_limiter else lambda f: f)
 def add_comment(
+    request: Request,
     iid: int,
     data: CommentCreate,
     background_tasks: BackgroundTasks,
@@ -1583,8 +1929,10 @@ def add_comment(
     db: Session = Depends(get_db),
 ):
     # S-9: 비밀 스캐닝 — 댓글 내용 검사 (경고만)
-    from ..secret_scanner import check_and_warn
-    check_and_warn(data.body, context=f"ticket.comment.{iid}", actor=user.get("username", "?"))
+    from ..secret_scanner import check_and_warn as _secret_check
+    from ..pii_masker import check_and_warn as _pii_check
+    _secret_check(data.body, context=f"ticket.comment.{iid}", actor=user.get("username", "?"))
+    _pii_check(data.body, context=f"ticket.comment.{iid}")
 
     # Internal notes require developer role or above
     if data.internal:
@@ -1600,9 +1948,12 @@ def add_comment(
             detail="GitLab 세션이 만료됐습니다. 다시 로그인해 주세요.",
         )
 
+    # H-25: Sanitize comment body before forwarding to GitLab
+    sanitized_body = _sanitize_comment(data.body)
+
     try:
         note = gitlab_client.add_note(
-            iid, data.body,
+            iid, sanitized_body,
             project_id=project_id,
             confidential=data.internal,
             gitlab_token=gitlab_token,
@@ -1628,6 +1979,36 @@ def add_comment(
         )
     except Exception as e:
         logger.warning("Failed to fetch ticket for comment notification on ticket %d: %s", iid, e)
+
+    # @멘션 인앱 알림 — class="mention" span의 data-id 속성 파싱
+    try:
+        import re as _re
+        from ..database import SessionLocal as _SL
+        from ..models import UserRole as _UserRole
+        mentioned_usernames = list(set(_re.findall(r'data-id="([^"]+)"', data.body)))
+        if mentioned_usernames:
+            actor_username = user.get("username", "")
+            actor_id = str(user.get("sub", ""))
+            targets = [u for u in mentioned_usernames if u != actor_username]
+            if targets:
+                with _SL() as _db:
+                    # 일괄 조회로 N+1 방지
+                    user_roles = _db.query(_UserRole).filter(
+                        _UserRole.username.in_(targets)
+                    ).all()
+                    for ur in user_roles:
+                        recipient_id = str(ur.gitlab_user_id)
+                        if recipient_id != actor_id:
+                            create_db_notification(
+                                _db,
+                                recipient_id=recipient_id,
+                                title=f"티켓 #{iid}에서 멘션됨",
+                                body=f"{user.get('name', actor_username)}님이 댓글에서 @{ur.username}을 멘션했습니다.",
+                                link=f"/tickets/{iid}",
+                            )
+                    _db.commit()
+    except Exception as _e:
+        logger.warning("@mention notification error on ticket #%d: %s", iid, _e)
 
     return {
         "id": note["id"],
@@ -1814,8 +2195,8 @@ def bulk_update_tickets(
             if exc is None:
                 results["success"].append(iid)
                 write_audit_log(
-                    db, user, f"ticket.bulk.{data.action}", "ticket", str(iid),
-                    new_value={"action": data.action, "value": data.value},
+                    db, user, f"ticket.bulk.{data.action.value}", "ticket", str(iid),
+                    new_value={"action": data.action.value, "value": data.value},
                     request=request,
                 )
             else:
@@ -1842,6 +2223,8 @@ async def ticket_event_stream(
     channel = f"ticket:events:{pid}:{iid}"
 
     async def event_generator() -> AsyncGenerator[str, None]:
+        r = None
+        pubsub = None
         try:
             import redis.asyncio as aioredis
             r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
@@ -1854,6 +2237,11 @@ async def ticket_event_stream(
             return
         except Exception as e:
             logger.error("Ticket SSE: Redis 연결 실패 (iid=%s): %s", iid, e)
+            if r is not None:
+                try:
+                    await r.aclose()
+                except Exception:
+                    pass
             return
 
         keepalive_interval = 30.0
@@ -1889,3 +2277,91 @@ async def ticket_event_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ---------------------------------------------------------------------------
+# 커스텀 필드 값 — GET / PUT
+# ---------------------------------------------------------------------------
+
+@router.get("/{iid}/custom-fields", response_model=list[dict])
+def get_ticket_custom_fields(
+    iid: int,
+    project_id: Optional[str] = Query(default=None),
+    _user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """티켓의 커스텀 필드 정의 + 값을 합쳐서 반환."""
+    pid = project_id or get_settings().GITLAB_PROJECT_ID
+    fields = (
+        db.query(CustomFieldDef)
+        .filter(CustomFieldDef.enabled == True)  # noqa: E712
+        .order_by(CustomFieldDef.sort_order, CustomFieldDef.id)
+        .all()
+    )
+    values = {
+        v.field_id: v.value
+        for v in db.query(TicketCustomValue).filter(
+            TicketCustomValue.gitlab_issue_iid == iid,
+            TicketCustomValue.project_id == str(pid),
+        ).all()
+    }
+    return [
+        {
+            "id": f.id,
+            "name": f.name,
+            "label": f.label,
+            "field_type": f.field_type,
+            "options": f.options or [],
+            "required": f.required,
+            "value": values.get(f.id),
+        }
+        for f in fields
+    ]
+
+
+@router.put("/{iid}/custom-fields", response_model=list[dict])
+def set_ticket_custom_fields(
+    request: Request,
+    iid: int,
+    body: dict,
+    project_id: Optional[str] = Query(default=None),
+    user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """티켓 커스텀 필드 값을 일괄 저장. body: {field_id: value, ...}"""
+    pid = str(project_id or get_settings().GITLAB_PROJECT_ID)
+
+    # 유효한 field_id 집합 확인
+    field_ids = {f.id for f in db.query(CustomFieldDef).filter(CustomFieldDef.enabled == True).all()}  # noqa: E712
+
+    for field_id_str, value in body.items():
+        try:
+            fid = int(field_id_str)
+        except (ValueError, TypeError):
+            continue
+        if fid not in field_ids:
+            continue
+        existing = db.query(TicketCustomValue).filter(
+            TicketCustomValue.gitlab_issue_iid == iid,
+            TicketCustomValue.project_id == pid,
+            TicketCustomValue.field_id == fid,
+        ).with_for_update().first()
+        if existing:
+            existing.value = str(value) if value is not None else None
+        else:
+            db.add(TicketCustomValue(
+                gitlab_issue_iid=iid,
+                project_id=pid,
+                field_id=fid,
+                value=str(value) if value is not None else None,
+            ))
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.exception("Custom fields update failed for ticket #%d: %s", iid, e)
+        raise HTTPException(status_code=500, detail="내부 오류가 발생했습니다.")
+    write_audit_log(db, user, "ticket.custom_fields.update", "ticket", str(iid), request=request)
+
+    # Return updated values
+    return get_ticket_custom_fields(iid=iid, project_id=pid, _user=user, db=db)

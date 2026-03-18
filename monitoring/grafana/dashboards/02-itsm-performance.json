@@ -2,10 +2,17 @@
   "uid": "itsm-performance",
   "title": "ITSM 성능 분석",
   "description": "엔드포인트별 심층 성능 분석 — 레이턴시 분포, 처리량, 요청/응답 크기",
-  "tags": ["itsm", "performance", "latency"],
+  "tags": [
+    "itsm",
+    "performance",
+    "latency"
+  ],
   "timezone": "browser",
   "refresh": "1m",
-  "time": { "from": "now-3h", "to": "now" },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
   "schemaVersion": 39,
   "version": 1,
   "templating": {
@@ -14,16 +21,25 @@
         "name": "datasource",
         "type": "datasource",
         "query": "prometheus",
-        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "current": {
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
         "hide": 0,
         "label": "데이터소스"
       },
       {
         "name": "handler",
         "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
         "query": "label_values(http_requests_total{job=\"itsm-api\"}, handler)",
-        "current": { "text": "All", "value": "$__all" },
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "includeAll": true,
         "allValue": ".*",
         "multi": true,
@@ -35,7 +51,10 @@
         "name": "interval",
         "type": "interval",
         "query": "1m,5m,10m,30m,1h",
-        "current": { "text": "5m", "value": "5m" },
+        "current": {
+          "text": "5m",
+          "value": "5m"
+        },
         "hide": 0,
         "label": "집계 간격"
       }
@@ -46,30 +65,119 @@
       "id": 1,
       "type": "row",
       "title": "레이턴시 분포",
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
-      "collapsed": false
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 2,
       "type": "timeseries",
       "title": "전체 레이턴시 퍼센타일 (P50 / P90 / P95 / P99)",
       "description": "P99와 P50의 차이가 크면 특정 요청이 매우 느린 것 — 엔드포인트 필터로 원인 추적",
-      "gridPos": { "x": 0, "y": 1, "w": 24, "h": 9 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull","mean","max","p95"] }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max",
+            "p95"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "custom": { "lineWidth": 2, "fillOpacity": 5 }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "spanNulls": false
+          },
+          "noValue": "0"
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "P50" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "P90" }, "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "P95" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "P99" }, "properties": [{ "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P90"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2CC0C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
         ]
       },
       "targets": [
@@ -100,46 +208,150 @@
       "type": "timeseries",
       "title": "엔드포인트별 평균 응답시간",
       "description": "핸들러별 평균 레이턴시 추이 — 특정 API 성능 저하 감지",
-      "gridPos": { "x": 0, "y": 10, "w": 14, "h": 9 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 14,
+        "h": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull","mean"] }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "custom": { "lineWidth": 1.5 }
+          "custom": {
+            "lineWidth": 1.5,
+            "spanNulls": false
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "sort_desc(sum(rate(http_request_duration_seconds_sum{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler) / sum(rate(http_request_duration_seconds_count{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler)) * 1000",
-        "legendFormat": "{{handler}}",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "sort_desc(sum(rate(http_request_duration_seconds_sum{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler) / sum(rate(http_request_duration_seconds_count{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler)) * 1000",
+          "legendFormat": "{{handler}}",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 4,
       "type": "table",
       "title": "느린 엔드포인트 TOP 10",
       "description": "P95 레이턴시 기준 내림차순 — 즉시 최적화가 필요한 엔드포인트",
-      "gridPos": { "x": 14, "y": 10, "w": 10, "h": 9 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "sortBy": [{ "displayName": "P95 ms", "desc": true }] },
+      "gridPos": {
+        "x": 14,
+        "y": 10,
+        "w": 10,
+        "h": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "P95 ms",
+            "desc": true
+          }
+        ]
+      },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "left" } },
+        "defaults": {
+          "custom": {
+            "align": "left"
+          }
+        },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "P95 ms" },
+            "matcher": {
+              "id": "byName",
+              "options": "P95 ms"
+            },
             "properties": [
-              { "id": "unit", "value": "ms" },
-              { "id": "decimals", "value": 0 },
-              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 300 }, { "color": "red", "value": 1000 }] } },
-              { "id": "custom.displayMode", "value": "color-background" }
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 300
+                    },
+                    {
+                      "color": "red",
+                      "value": 1000
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              }
             ]
           },
-          { "matcher": { "id": "byName", "options": "평균 ms" }, "properties": [{ "id": "unit", "value": "ms" }, { "id": "decimals", "value": 0 }] },
-          { "matcher": { "id": "byName", "options": "RPS" }, "properties": [{ "id": "unit", "value": "reqps" }, { "id": "decimals", "value": 3 }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "평균 ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RPS"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "reqps"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          }
         ]
       },
       "targets": [
@@ -155,7 +367,10 @@
         {
           "id": "organize",
           "options": {
-            "renameByName": { "handler": "엔드포인트", "Value": "P95 ms" }
+            "renameByName": {
+              "handler": "엔드포인트",
+              "Value": "P95 ms"
+            }
           }
         }
       ]
@@ -164,170 +379,437 @@
       "id": 5,
       "type": "row",
       "title": "처리량 (Throughput)",
-      "gridPos": { "x": 0, "y": 19, "w": 24, "h": 1 },
-      "collapsed": false
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 6,
       "type": "timeseries",
       "title": "엔드포인트별 RPS",
       "description": "핸들러별 초당 요청 수 — 트래픽 분포와 급격한 변화 감지",
-      "gridPos": { "x": 0, "y": 20, "w": 14, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 14,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull","mean","max"] }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "custom": { "lineWidth": 1.5, "fillOpacity": 5, "stacking": { "mode": "none" } }
+          "custom": {
+            "lineWidth": 1.5,
+            "fillOpacity": 5,
+            "stacking": {
+              "mode": "none"
+            },
+            "spanNulls": false
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "sum(rate(http_requests_total{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler)",
-        "legendFormat": "{{handler}}",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler)",
+          "legendFormat": "{{handler}}",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 7,
       "type": "piechart",
       "title": "트래픽 분포 (엔드포인트별 비율)",
       "description": "어느 엔드포인트에 요청이 집중되는지 확인",
-      "gridPos": { "x": 14, "y": 20, "w": 10, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 14,
+        "y": 20,
+        "w": 10,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
         "pieType": "donut",
-        "legend": { "displayMode": "table", "placement": "right", "values": ["percent","value"] }
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "percent",
+            "value"
+          ]
+        }
       },
-      "fieldConfig": { "defaults": { "unit": "reqps" } },
-      "targets": [{
-        "expr": "sum(rate(http_requests_total{job=\"itsm-api\",handler!=\"/health\",handler!=\"/metrics\"}[$interval])) by (handler)",
-        "legendFormat": "{{handler}}",
-        "refId": "A",
-        "instant": true
-      }]
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",handler!=\"/health\",handler!=\"/metrics\"}[$interval])) by (handler)",
+          "legendFormat": "{{handler}}",
+          "refId": "A",
+          "instant": true
+        }
+      ]
     },
     {
       "id": 8,
       "type": "row",
       "title": "요청/응답 크기",
-      "gridPos": { "x": 0, "y": 28, "w": 24, "h": 1 },
-      "collapsed": false
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 9,
       "type": "timeseries",
       "title": "평균 요청 크기 (Content-Length)",
       "description": "요청 본문 크기 추이 — 파일 업로드 등 대용량 요청 감지",
-      "gridPos": { "x": 0, "y": 29, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull","mean","max"] }
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
-          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "sum(rate(http_request_size_bytes_sum{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler) / sum(rate(http_request_size_bytes_count{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler)",
-        "legendFormat": "{{handler}}",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_size_bytes_sum{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler) / sum(rate(http_request_size_bytes_count{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler)",
+          "legendFormat": "{{handler}}",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 10,
       "type": "timeseries",
       "title": "평균 응답 크기 (Content-Length)",
       "description": "응답 본문 크기 — 과도하게 큰 응답 API 최적화 식별",
-      "gridPos": { "x": 12, "y": 29, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull","mean","max"] }
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
-          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "sum(rate(http_response_size_bytes_sum{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler) / sum(rate(http_response_size_bytes_count{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler)",
-        "legendFormat": "{{handler}}",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "sum(rate(http_response_size_bytes_sum{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler) / sum(rate(http_response_size_bytes_count{job=\"itsm-api\",handler=~\"$handler\"}[$interval])) by (handler)",
+          "legendFormat": "{{handler}}",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 11,
       "type": "row",
       "title": "HTTP 메서드별 분석",
-      "gridPos": { "x": 0, "y": 36, "w": 24, "h": 1 },
-      "collapsed": false
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 12,
       "type": "timeseries",
       "title": "HTTP 메서드별 RPS",
       "description": "GET/POST/PATCH/DELETE 비율 — 읽기 vs 쓰기 부하 파악",
-      "gridPos": { "x": 0, "y": 37, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull","mean"] }
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
         }
       },
       "targets": [
-        { "expr": "sum(rate(http_requests_total{job=\"itsm-api\",method=\"GET\"}[$interval]))", "legendFormat": "GET", "refId": "A" },
-        { "expr": "sum(rate(http_requests_total{job=\"itsm-api\",method=\"POST\"}[$interval]))", "legendFormat": "POST", "refId": "B" },
-        { "expr": "sum(rate(http_requests_total{job=\"itsm-api\",method=\"PATCH\"}[$interval]))", "legendFormat": "PATCH", "refId": "C" },
-        { "expr": "sum(rate(http_requests_total{job=\"itsm-api\",method=\"DELETE\"}[$interval]))", "legendFormat": "DELETE", "refId": "D" }
+        {
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",method=\"GET\"}[$interval]))",
+          "legendFormat": "GET",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",method=\"POST\"}[$interval]))",
+          "legendFormat": "POST",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",method=\"PATCH\"}[$interval]))",
+          "legendFormat": "PATCH",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",method=\"DELETE\"}[$interval]))",
+          "legendFormat": "DELETE",
+          "refId": "D"
+        }
       ]
     },
     {
       "id": 13,
       "type": "stat",
       "title": "24시간 총 요청수",
-      "gridPos": { "x": 12, "y": 37, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } } },
-      "targets": [{ "expr": "sum(increase(http_requests_total{job=\"itsm-api\"}[24h]))", "legendFormat": "24h 총 요청", "refId": "A" }]
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 4,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(http_requests_total{job=\"itsm-api\"}[24h]))",
+          "legendFormat": "24h 총 요청",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 14,
       "type": "stat",
       "title": "24시간 총 에러수",
-      "gridPos": { "x": 16, "y": 37, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "gridPos": {
+        "x": 16,
+        "y": 37,
+        "w": 4,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "red", "value": 100 }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "sum(increase(http_requests_total{job=\"itsm-api\",status=~\"5..\"}[24h]))", "legendFormat": "24h 에러", "refId": "A" }]
+      "targets": [
+        {
+          "expr": "sum(increase(http_requests_total{job=\"itsm-api\",status=\"5xx\"}[24h]))",
+          "legendFormat": "24h 에러",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 15,
       "type": "stat",
       "title": "평균 처리량 (RPS)",
-      "gridPos": { "x": 20, "y": 37, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "value", "graphMode": "area" },
-      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "green" } } },
-      "targets": [{ "expr": "sum(rate(http_requests_total{job=\"itsm-api\"}[24h]))", "legendFormat": "평균 RPS", "refId": "A" }]
+      "gridPos": {
+        "x": 20,
+        "y": 37,
+        "w": 4,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\"}[24h]))",
+          "legendFormat": "평균 RPS",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }

@@ -2,10 +2,18 @@
   "uid": "itsm-sla",
   "title": "ITSM SLA 모니터링",
   "description": "서비스 가용성, 에러 버짓, Apdex 점수 — SLO 기반 서비스 수준 관리",
-  "tags": ["itsm", "sla", "slo", "availability"],
+  "tags": [
+    "itsm",
+    "sla",
+    "slo",
+    "availability"
+  ],
   "timezone": "browser",
   "refresh": "5m",
-  "time": { "from": "now-7d", "to": "now" },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
   "schemaVersion": 39,
   "version": 1,
   "templating": {
@@ -14,7 +22,10 @@
         "name": "datasource",
         "type": "datasource",
         "query": "prometheus",
-        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "current": {
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
         "hide": 0,
         "label": "데이터소스"
       },
@@ -22,7 +33,10 @@
         "name": "slo_availability",
         "type": "constant",
         "query": "99.5",
-        "current": { "text": "99.5", "value": "99.5" },
+        "current": {
+          "text": "99.5",
+          "value": "99.5"
+        },
         "hide": 0,
         "label": "가용성 SLO (%)"
       },
@@ -30,7 +44,10 @@
         "name": "slo_p95_ms",
         "type": "constant",
         "query": "500",
-        "current": { "text": "500", "value": "500" },
+        "current": {
+          "text": "500",
+          "value": "500"
+        },
         "hide": 0,
         "label": "P95 레이턴시 SLO (ms)"
       },
@@ -38,7 +55,10 @@
         "name": "window",
         "type": "custom",
         "query": "1d : 1d,7d : 7d,30d : 30d",
-        "current": { "text": "7d", "value": "7d" },
+        "current": {
+          "text": "7d",
+          "value": "7d"
+        },
         "hide": 0,
         "label": "SLO 측정 기간"
       }
@@ -49,18 +69,38 @@
       "id": 1,
       "type": "row",
       "title": "SLO 핵심 지표",
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
-      "collapsed": false
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 2,
       "type": "stat",
       "title": "서비스 가용성",
       "description": "측정 기간 내 성공 요청 비율 (2xx+3xx+4xx / 전체). SLO: 99.5%",
-      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "background",
         "graphMode": "none",
         "textMode": "value_and_name",
@@ -70,33 +110,59 @@
         "defaults": {
           "unit": "percent",
           "decimals": 3,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 99 },
-              { "color": "green", "value": 99.5 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.5
+              }
             ]
           },
-          "mappings": []
+          "mappings": [],
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "sum(rate(http_requests_total{job=\"itsm-api\",status!~\"5..\"}[$window])) / sum(rate(http_requests_total{job=\"itsm-api\"}[$window])) * 100",
-        "legendFormat": "가용성",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",status!=\"5xx\"}[$window])) / sum(rate(http_requests_total{job=\"itsm-api\"}[$window])) * 100",
+          "legendFormat": "가용성",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 3,
       "type": "stat",
       "title": "Apdex 점수",
       "description": "Application Performance Index. 1.0 = 완벽, 0.7 미만 = 불만족. T=500ms 기준",
-      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "background",
         "graphMode": "none",
         "textMode": "value_and_name"
@@ -105,34 +171,64 @@
         "defaults": {
           "unit": "short",
           "decimals": 3,
-          "min": 0, "max": 1,
-          "color": { "mode": "thresholds" },
+          "min": 0,
+          "max": 1,
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.7 },
-              { "color": "yellow", "value": 0.85 },
-              { "color": "green", "value": 0.94 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.7
+              },
+              {
+                "color": "yellow",
+                "value": 0.85
+              },
+              {
+                "color": "green",
+                "value": 0.94
+              }
             ]
-          }
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "(sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"0.5\"}[$window])) + sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"2.0\"}[$window])) * 0.5) / sum(rate(http_request_duration_highr_seconds_count{job=\"itsm-api\"}[$window]))",
-        "legendFormat": "Apdex (T=500ms)",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "(sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"0.5\"}[$window])) + sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"2.0\"}[$window])) * 0.5) / sum(rate(http_request_duration_highr_seconds_count{job=\"itsm-api\"}[$window]))",
+          "legendFormat": "Apdex (T=500ms)",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 4,
       "type": "stat",
       "title": "에러 버짓 잔여",
       "description": "SLO 99.5% 기준 남은 에러 허용량. 0% 이하 → SLO 위반",
-      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "background",
         "graphMode": "area",
         "textMode": "value_and_name"
@@ -141,33 +237,62 @@
         "defaults": {
           "unit": "percent",
           "decimals": 2,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 10 },
-              { "color": "yellow", "value": 25 },
-              { "color": "green", "value": 50 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "yellow",
+                "value": 25
+              },
+              {
+                "color": "green",
+                "value": 50
+              }
             ]
-          }
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "((1 - (1 - $slo_availability/100)) - (1 - (sum(rate(http_requests_total{job=\"itsm-api\",status!~\"5..\"}[$window])) / sum(rate(http_requests_total{job=\"itsm-api\"}[$window]))))) / (1 - $slo_availability/100) * 100",
-        "legendFormat": "에러 버짓 잔여",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "((1 - (1 - $slo_availability/100)) - (1 - (sum(rate(http_requests_total{job=\"itsm-api\",status!=\"5xx\"}[$window])) / sum(rate(http_requests_total{job=\"itsm-api\"}[$window]))))) / (1 - $slo_availability/100) * 100",
+          "legendFormat": "에러 버짓 잔여",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 5,
       "type": "stat",
       "title": "P95 SLO 준수율",
       "description": "P95 레이턴시가 SLO(500ms) 이내인 시간대 비율",
-      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "background",
         "graphMode": "none"
       },
@@ -175,68 +300,146 @@
         "defaults": {
           "unit": "percent",
           "decimals": 2,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 95 },
-              { "color": "green", "value": 99 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
             ]
-          }
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"0.5\"}[$window])) / sum(rate(http_request_duration_highr_seconds_count{job=\"itsm-api\"}[$window])) * 100",
-        "legendFormat": "P95 SLO 준수",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"0.5\"}[$window])) / sum(rate(http_request_duration_highr_seconds_count{job=\"itsm-api\"}[$window])) * 100",
+          "legendFormat": "P95 SLO 준수",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 6,
       "type": "row",
       "title": "가용성 추이",
-      "gridPos": { "x": 0, "y": 6, "w": 24, "h": 1 },
-      "collapsed": false
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 7,
       "type": "timeseries",
       "title": "가용성 추이 (%) — SLO 목표선 포함",
       "description": "빨간 점선(SLO 99.5%) 아래로 떨어지면 즉시 대응 필요",
-      "gridPos": { "x": 0, "y": 7, "w": 16, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 16,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull","min","mean"] }
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "mean"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "min": 95, "max": 100.5,
-          "custom": { "lineWidth": 2 }
+          "min": 95,
+          "max": 100.5,
+          "custom": {
+            "lineWidth": 2,
+            "spanNulls": false
+          },
+          "noValue": "0"
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "실제 가용성" },
+            "matcher": {
+              "id": "byName",
+              "options": "실제 가용성"
+            },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } },
-              { "id": "custom.fillOpacity", "value": 10 }
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "SLO 목표 (99.5%)" },
+            "matcher": {
+              "id": "byName",
+              "options": "SLO 목표 (99.5%)"
+            },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } },
-              { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } },
-              { "id": "custom.lineWidth", "value": 1 }
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
             ]
           }
         ]
       },
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",status!~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"itsm-api\"}[5m])) * 100",
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",status!=\"5xx\"}[5m])) / sum(rate(http_requests_total{job=\"itsm-api\"}[5m])) * 100",
           "legendFormat": "실제 가용성",
           "refId": "A"
         },
@@ -252,77 +455,179 @@
       "type": "timeseries",
       "title": "에러 버짓 소진율",
       "description": "버짓이 빠르게 소진되면 변경/배포를 중단하고 안정화에 집중해야 함",
-      "gridPos": { "x": 16, "y": 7, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "single" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
           "custom": {
             "lineWidth": 2,
-            "fillOpacity": 20
+            "fillOpacity": 20,
+            "spanNulls": false
           },
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": -50 },
-              { "color": "red", "value": -90 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": -50
+              },
+              {
+                "color": "red",
+                "value": -90
+              }
             ]
-          }
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "((1 - $slo_availability/100) - (1 - sum(rate(http_requests_total{job=\"itsm-api\",status!~\"5..\"}[1h])) / sum(rate(http_requests_total{job=\"itsm-api\"}[1h])))) / (1 - $slo_availability/100) * 100 - 100",
-        "legendFormat": "버짓 소진율",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "((1 - $slo_availability/100) - (1 - sum(rate(http_requests_total{job=\"itsm-api\",status!=\"5xx\"}[1h])) / sum(rate(http_requests_total{job=\"itsm-api\"}[1h])))) / (1 - $slo_availability/100) * 100 - 100",
+          "legendFormat": "버짓 소진율",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 9,
       "type": "row",
       "title": "레이턴시 SLO 추이",
-      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 1 },
-      "collapsed": false
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 10,
       "type": "timeseries",
       "title": "P95 레이턴시 추이 — SLO 목표선 포함",
       "description": "주황 점선(SLO 500ms) 위로 지속되면 성능 개선 필요",
-      "gridPos": { "x": 0, "y": 16, "w": 16, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 16,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull","mean","max"] }
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "custom": { "lineWidth": 2 }
+          "custom": {
+            "lineWidth": 2,
+            "spanNulls": false
+          },
+          "noValue": "0"
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "P95 실제" },
+            "matcher": {
+              "id": "byName",
+              "options": "P95 실제"
+            },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } },
-              { "id": "custom.fillOpacity", "value": 10 }
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "P50 실제" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "P50 실제"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "SLO 목표 (500ms)" },
+            "matcher": {
+              "id": "byName",
+              "options": "SLO 목표 (500ms)"
+            },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } },
-              { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } },
-              { "id": "custom.lineWidth", "value": 1 }
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
             ]
           }
         ]
@@ -350,133 +655,339 @@
       "type": "timeseries",
       "title": "Apdex 점수 추이",
       "description": "1.0=완벽, 0.94~=우수, 0.85~=양호, 0.7~=보통, 0.7 미만=불량",
-      "gridPos": { "x": 16, "y": 16, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 16,
+        "y": 16,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "single" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "min": 0, "max": 1,
-          "custom": { "lineWidth": 2, "fillOpacity": 15 },
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "spanNulls": false
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.7 },
-              { "color": "yellow", "value": 0.85 },
-              { "color": "green", "value": 0.94 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.7
+              },
+              {
+                "color": "yellow",
+                "value": 0.85
+              },
+              {
+                "color": "green",
+                "value": 0.94
+              }
             ]
           },
-          "color": { "mode": "thresholds" }
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "(sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"0.5\"}[5m])) + sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"2.0\"}[5m])) * 0.5) / sum(rate(http_request_duration_highr_seconds_count{job=\"itsm-api\"}[5m]))",
-        "legendFormat": "Apdex",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "(sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"0.5\"}[5m])) + sum(rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\",le=\"2.0\"}[5m])) * 0.5) / sum(rate(http_request_duration_highr_seconds_count{job=\"itsm-api\"}[5m]))",
+          "legendFormat": "Apdex",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 12,
       "type": "row",
       "title": "장애 이력 & 에러 분석",
-      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 },
-      "collapsed": false
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 13,
       "type": "timeseries",
       "title": "서비스 UP/DOWN 이력",
       "description": "0 = 다운타임. 단절 구간이 SLA 계산에 포함됨",
-      "gridPos": { "x": 0, "y": 25, "w": 12, "h": 6 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "single" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "min": 0, "max": 1.1,
+          "min": 0,
+          "max": 1.1,
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 30,
             "spanNulls": false,
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           },
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }]
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
           },
-          "color": { "mode": "thresholds" }
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{ "expr": "up{job=\"itsm-api\"}", "legendFormat": "ITSM API", "refId": "A" }]
+      "targets": [
+        {
+          "expr": "up{job=\"itsm-api\"}",
+          "legendFormat": "ITSM API",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 14,
       "type": "timeseries",
       "title": "5xx 에러 발생 추이",
       "description": "스파이크 발생 시간대 = 배포 또는 외부 의존성 장애와 연관",
-      "gridPos": { "x": 12, "y": 25, "w": 12, "h": 6 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": {
+        "x": 12,
+        "y": 25,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "options": {
-        "tooltip": { "mode": "single" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "custom": { "lineWidth": 2, "fillOpacity": 25 },
-          "color": { "mode": "fixed", "fixedColor": "red" }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 25,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "noValue": "0"
         }
       },
-      "targets": [{
-        "expr": "sum(rate(http_requests_total{job=\"itsm-api\",status=~\"5..\"}[5m]))",
-        "legendFormat": "5xx 에러율",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",status=\"5xx\"}[5m]))",
+          "legendFormat": "5xx 에러율",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 15,
       "type": "table",
       "title": "엔드포인트별 SLO 준수 현황",
       "description": "각 엔드포인트의 가용성 % 및 P95 레이턴시 vs SLO 목표 — 위반 항목 즉시 파악",
-      "gridPos": { "x": 0, "y": 31, "w": 24, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "options": { "sortBy": [{ "displayName": "가용성 (%)", "desc": false }] },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "가용성 (%)",
+            "desc": false
+          }
+        ]
+      },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "left" } },
+        "defaults": {
+          "custom": {
+            "align": "left"
+          }
+        },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "가용성 (%)" },
+            "matcher": {
+              "id": "byName",
+              "options": "가용성 (%)"
+            },
             "properties": [
-              { "id": "unit", "value": "percent" },
-              { "id": "decimals", "value": 2 },
-              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 99 }, { "color": "green", "value": 99.5 }] } },
-              { "id": "custom.displayMode", "value": "color-background" },
-              { "id": "custom.width", "value": 140 }
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 99
+                    },
+                    {
+                      "color": "green",
+                      "value": 99.5
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "P95 (ms)" },
+            "matcher": {
+              "id": "byName",
+              "options": "P95 (ms)"
+            },
             "properties": [
-              { "id": "unit", "value": "ms" },
-              { "id": "decimals", "value": 0 },
-              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 300 }, { "color": "red", "value": 500 }] } },
-              { "id": "custom.displayMode", "value": "color-text" },
-              { "id": "custom.width", "value": 120 }
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 300
+                    },
+                    {
+                      "color": "red",
+                      "value": 500
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-text"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
             ]
           },
-          { "matcher": { "id": "byName", "options": "RPS" }, "properties": [{ "id": "unit", "value": "reqps" }, { "id": "decimals", "value": 3 }, { "id": "custom.width", "value": 100 }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RPS"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "reqps"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          }
         ]
       },
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",handler!=\"/health\",handler!=\"/metrics\",status!~\"5..\"}[$window])) by (handler) / sum(rate(http_requests_total{job=\"itsm-api\",handler!=\"/health\",handler!=\"/metrics\"}[$window])) by (handler) * 100",
+          "expr": "sum(rate(http_requests_total{job=\"itsm-api\",handler!=\"/health\",handler!=\"/metrics\",status!=\"5xx\"}[$window])) by (handler) / sum(rate(http_requests_total{job=\"itsm-api\",handler!=\"/health\",handler!=\"/metrics\"}[$window])) by (handler) * 100",
           "legendFormat": "{{handler}}",
           "refId": "A",
           "instant": true,
@@ -486,7 +997,12 @@
       "transformations": [
         {
           "id": "organize",
-          "options": { "renameByName": { "handler": "엔드포인트", "Value": "가용성 (%)" } }
+          "options": {
+            "renameByName": {
+              "handler": "엔드포인트",
+              "Value": "가용성 (%)"
+            }
+          }
         }
       ]
     }

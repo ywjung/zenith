@@ -95,8 +95,12 @@ function WebhooksContent() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('이 웹훅을 삭제할까요?')) return
-    await apiFetch(`/admin/outbound-webhooks/${id}`, { method: 'DELETE' }).catch(() => {})
-    load()
+    try {
+      await apiFetch(`/admin/outbound-webhooks/${id}`, { method: 'DELETE' })
+      load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+    }
   }
 
   const handleTest = async (id: number) => {
@@ -115,23 +119,23 @@ function WebhooksContent() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">아웃바운드 웹훅</h1>
-          <p className="text-sm text-gray-500 mt-1">ITSM 이벤트를 Slack·Teams·외부 시스템에 자동 전송합니다.</p>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">아웃바운드 웹훅</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">ITSM 이벤트를 Slack·Teams·외부 시스템에 자동 전송합니다.</p>
         </div>
         <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium">
           + 새 웹훅
         </button>
       </div>
 
-      {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>}
-      {success && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg">✅ {success}</div>}
+      {error && <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 text-sm rounded-lg">{error}</div>}
+      {success && <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 text-sm rounded-lg">✅ {success}</div>}
 
       {loading ? (
         <div className="text-center py-12 text-gray-400">로딩 중...</div>
       ) : hooks.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
+        <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
           <div className="text-4xl mb-3">🔗</div>
-          <p className="text-gray-500 font-medium">등록된 웹훅이 없습니다.</p>
+          <p className="text-gray-500 dark:text-gray-400 font-medium">등록된 웹훅이 없습니다.</p>
           <p className="text-sm text-gray-400 mt-1">Slack·Teams와 연동하여 실시간 알림을 받아보세요.</p>
           <button onClick={openCreate} className="mt-4 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
             첫 웹훅 등록
@@ -140,23 +144,23 @@ function WebhooksContent() {
       ) : (
         <div className="space-y-3">
           {hooks.map(h => (
-            <div key={h.id} className={`bg-white rounded-xl border shadow-sm p-5 ${!h.enabled ? 'opacity-60' : ''}`}>
+            <div key={h.id} className={`bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-5 ${!h.enabled ? 'opacity-60' : ''}`}>
               <div className="flex items-start gap-4">
                 <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${h.enabled ? 'bg-green-400' : 'bg-gray-300'}`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-gray-900">{h.name}</span>
-                    {!h.enabled && <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">비활성</span>}
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{h.name}</span>
+                    {!h.enabled && <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">비활성</span>}
                     {h.last_status && (
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${h.last_status >= 200 && h.last_status < 300 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${h.last_status >= 200 && h.last_status < 300 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
                         마지막 응답: {h.last_status}
                       </span>
                     )}
                   </div>
-                  <div className="text-sm text-gray-500 mt-0.5 truncate">{h.url}</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 truncate">{h.url}</div>
                   <div className="flex flex-wrap gap-1 mt-2">
                     {h.events.map(ev => (
-                      <span key={ev} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5">
+                      <span key={ev} className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded-full px-2 py-0.5">
                         {SUPPORTED_EVENTS.find(e => e.value === ev)?.label ?? ev}
                       </span>
                     ))}
@@ -171,12 +175,12 @@ function WebhooksContent() {
                   <button
                     onClick={() => handleTest(h.id)}
                     disabled={testing === h.id}
-                    className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
                   >
                     {testing === h.id ? '발송 중...' : '테스트'}
                   </button>
-                  <button onClick={() => openEdit(h)} className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50">편집</button>
-                  <button onClick={() => handleDelete(h.id)} className="text-xs px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50">삭제</button>
+                  <button onClick={() => openEdit(h)} className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg hover:bg-gray-50">편집</button>
+                  <button onClick={() => handleDelete(h.id)} className="text-xs px-3 py-1.5 border border-red-200 dark:border-red-700 text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">삭제</button>
                 </div>
               </div>
             </div>
@@ -186,33 +190,33 @@ function WebhooksContent() {
 
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b sticky top-0 bg-white">
-              <h2 className="text-lg font-semibold">{editId ? '웹훅 편집' : '새 웹훅 등록'}</h2>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-900">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editId ? '웹훅 편집' : '새 웹훅 등록'}</h2>
             </div>
             <div className="p-6 space-y-4">
-              {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>}
+              {error && <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 text-sm rounded-lg">{error}</div>}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">이름 *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">이름 *</label>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="예: Slack IT팀 채널" className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  placeholder="예: Slack IT팀 채널" className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">웹훅 URL *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">웹훅 URL *</label>
                 <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
-                  placeholder="https://hooks.slack.com/services/..." className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500" />
+                  placeholder="https://hooks.slack.com/services/..." className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">시크릿 키 (선택 — HMAC 서명)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">시크릿 키 (선택 — HMAC 서명)</label>
                 <input type="password" value={form.secret} onChange={e => setForm(f => ({ ...f, secret: e.target.value }))}
-                  placeholder="변경 시에만 입력" className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  placeholder="변경 시에만 입력" className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">이벤트 구독 *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">이벤트 구독 *</label>
                 <div className="grid grid-cols-2 gap-2">
                   {SUPPORTED_EVENTS.map(ev => (
                     <label key={ev.value} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
-                      form.events.includes(ev.value) ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                      form.events.includes(ev.value) ? 'border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                     }`}>
                       <input type="checkbox" checked={form.events.includes(ev.value)} onChange={() => toggleEvent(ev.value)} className="w-4 h-4 text-blue-600" />
                       <span className="text-sm">{ev.label}</span>
@@ -222,11 +226,11 @@ function WebhooksContent() {
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="enabled-wh" checked={form.enabled} onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} className="w-4 h-4" />
-                <label htmlFor="enabled-wh" className="text-sm text-gray-700">활성화</label>
+                <label htmlFor="enabled-wh" className="text-sm text-gray-700 dark:text-gray-300">활성화</label>
               </div>
             </div>
-            <div className="px-6 py-4 border-t flex justify-end gap-3">
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">취소</button>
+            <div className="px-6 py-4 border-t dark:border-gray-700 flex justify-end gap-3">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">취소</button>
               <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium">
                 {saving ? '저장 중...' : '저장'}
               </button>

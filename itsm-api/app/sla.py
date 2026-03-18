@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from .models import SLARecord, SLAPolicy
+from .models import SLARecord, SLAPolicy, BusinessHoursConfig, BusinessHoliday
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,98 @@ def get_sla_resolve_hours(priority: str, db: Optional[Session] = None) -> int:
 SLA_HOURS = _SLA_HOURS_DEFAULT
 
 
+def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Return dt with UTC tzinfo attached; naive datetimes are assumed UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+# ── 업무시간 기반 SLA 마감일 계산 ────────────────────────────────────────────
+
+def _next_business_start(
+    dt: datetime,
+    schedule: dict,   # {day_of_week: (start_time, end_time)}
+    holidays: set,    # set of date objects
+) -> datetime:
+    """dt가 업무 시간 내면 그대로, 아니면 다음 업무 시간 시작으로 전진한다."""
+    for _ in range(30):
+        dow = dt.weekday()
+        if dow in schedule and dt.date() not in holidays:
+            s_t, e_t = schedule[dow]
+            day_start = dt.replace(hour=s_t.hour, minute=s_t.minute, second=0, microsecond=0)
+            day_end   = dt.replace(hour=e_t.hour, minute=e_t.minute, second=0, microsecond=0)
+            if dt < day_start:
+                return day_start
+            if dt < day_end:
+                return dt
+        # 다음 날 00:00 으로 이동
+        dt = (dt + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return dt
+
+
+def calculate_business_deadline(
+    start: datetime,
+    hours: float,
+    db: Optional[Session] = None,
+) -> datetime:
+    """start 기준 업무시간으로 hours 만큼 후의 마감일을 반환한다.
+
+    DB에 업무시간 설정이 없으면 캘린더 타임(24/7)으로 폴백한다.
+    """
+    if db is None:
+        return start + timedelta(hours=hours)
+
+    try:
+        schedules = db.query(BusinessHoursConfig).filter(BusinessHoursConfig.is_active.is_(True)).all()
+        if not schedules:
+            return start + timedelta(hours=hours)
+
+        # start_time >= end_time인 잘못된 설정은 제외 — 무한 루프 방지
+        valid_schedules = [s for s in schedules if s.start_time < s.end_time]
+        if not valid_schedules:
+            logger.warning("Business hours config has no valid entries (start < end), falling back to 24/7")
+            return start + timedelta(hours=hours)
+        schedule = {s.day_of_week: (s.start_time, s.end_time) for s in valid_schedules}
+        holidays = {h.date for h in db.query(BusinessHoliday).all()}
+    except Exception as e:
+        logger.warning("Failed to load business hours config: %s", e)
+        return start + timedelta(hours=hours)
+
+    remaining_s = hours * 3600.0
+    current = _next_business_start(start, schedule, holidays)
+
+    for _ in range(365):   # 최대 1년 순회 (안전 장치)
+        if remaining_s <= 0:
+            break
+        dow = current.weekday()
+        if dow not in schedule or current.date() in holidays:
+            current = (current + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            current = _next_business_start(current, schedule, holidays)
+            continue
+
+        _, e_t = schedule[dow]
+        day_end = current.replace(hour=e_t.hour, minute=e_t.minute, second=0, microsecond=0)
+        available_s = (day_end - current).total_seconds()
+        if available_s <= 0:
+            current = (current + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            current = _next_business_start(current, schedule, holidays)
+            continue
+
+        if remaining_s <= available_s:
+            return current + timedelta(seconds=remaining_s)
+
+        remaining_s -= available_s
+        current = (current + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        current = _next_business_start(current, schedule, holidays)
+
+    raise ValueError(
+        "SLA 마감일을 계산할 수 없습니다: 비즈니스 시간 스케줄에 유효한 근무일이 없습니다"
+    )
+
+
 def create_sla_record(
     db: Session,
     iid: int,
@@ -55,7 +147,12 @@ def create_sla_record(
         )
     else:
         hours = get_sla_resolve_hours(priority, db)  # F-1: DB-driven
-        deadline = datetime.now(timezone.utc) + timedelta(hours=hours)
+        created_now = datetime.now(timezone.utc)
+        try:
+            deadline = calculate_business_deadline(created_now, hours, db)
+        except ValueError as e:
+            logger.error("Business deadline calculation failed, using calendar fallback: %s", e)
+            deadline = created_now + timedelta(hours=hours)
         deadline_naive = deadline.replace(tzinfo=None)
 
     existing = db.query(SLARecord).filter(
@@ -111,13 +208,19 @@ def pause_sla(db: Session, iid: int, project_id: str) -> None:
 
 def resume_sla(db: Session, iid: int, project_id: str) -> None:
     """Resume SLA timer, extending deadline by the time spent paused."""
-    record = db.query(SLARecord).filter(
-        SLARecord.gitlab_issue_iid == iid,
-        SLARecord.project_id == project_id,
-    ).first()
+    record = (
+        db.query(SLARecord)
+        .filter(
+            SLARecord.gitlab_issue_iid == iid,
+            SLARecord.project_id == project_id,
+        )
+        .with_for_update()  # prevent concurrent resume on the same record
+        .first()
+    )
     if record and record.paused_at:
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        pause_seconds = int((now - record.paused_at).total_seconds())
+        now_utc = datetime.now(timezone.utc)
+        paused_at_utc = _ensure_utc(record.paused_at)
+        pause_seconds = max(0, int((now_utc - paused_at_utc).total_seconds()))
         record.total_paused_seconds += pause_seconds
         record.sla_deadline += timedelta(seconds=pause_seconds)
         record.paused_at = None
@@ -185,8 +288,15 @@ def check_and_send_warnings(db: Session, warning_minutes: int = 60) -> list[SLAR
     )
 
     for record in at_risk:
-        remaining = record.sla_deadline - now
+        deadline_utc = _ensure_utc(record.sla_deadline)
+        now_utc = datetime.now(timezone.utc)
+        remaining = deadline_utc - now_utc
         minutes_left = int(remaining.total_seconds() / 60)
+
+        # 외부 알림 전송 전에 먼저 커밋하여 중복 발송 방지
+        record.warning_sent = True
+        db.commit()
+
         try:
             notify_sla_warning(record.gitlab_issue_iid, record.project_id, minutes_left)
         except Exception as e:
@@ -205,17 +315,15 @@ def check_and_send_warnings(db: Session, warning_minutes: int = 60) -> list[SLAR
                     body=f"{minutes_left}분 내에 SLA 기한이 만료됩니다.",
                     link=f"/tickets/{record.gitlab_issue_iid}",
                 )
+            db.commit()
         except Exception as e:
             logger.warning("Failed to create SLA in-app notification for ticket #%s: %s", record.gitlab_issue_iid, e)
 
-        record.warning_sent = True
         logger.info(
             "SLA warning sent for ticket #%s (project %s, %d minutes left)",
             record.gitlab_issue_iid, record.project_id, minutes_left,
         )
 
-    if at_risk:
-        db.commit()
     return at_risk
 
 
@@ -305,11 +413,23 @@ def check_and_escalate(db: Session) -> list[dict]:
                 continue
             try:
                 _execute_escalation(db, policy, record, now)
-                db.add(EscalationRecord(
-                    policy_id=policy.id,
-                    ticket_iid=record.gitlab_issue_iid,
-                    project_id=record.project_id,
-                ))
+                # savepoint로 중복 insert race condition 방지 (unique constraint)
+                sp = db.begin_nested()
+                try:
+                    db.add(EscalationRecord(
+                        policy_id=policy.id,
+                        ticket_iid=record.gitlab_issue_iid,
+                        project_id=record.project_id,
+                    ))
+                    db.flush()
+                    sp.commit()
+                except Exception:
+                    sp.rollback()
+                    logger.warning(
+                        "Escalation record already exists (concurrent run), skipping: policy=%s ticket=#%s",
+                        policy.name, record.gitlab_issue_iid,
+                    )
+                    continue
                 done_set.add(key)
                 executed.append({
                     "policy": policy.name,
