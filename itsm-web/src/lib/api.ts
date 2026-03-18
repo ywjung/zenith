@@ -719,3 +719,40 @@ export function updateQuickReply(id: number, data: { name: string; content: stri
 export function deleteQuickReply(id: number): Promise<void> {
   return request(`/quick-replies/${id}`, { method: 'DELETE' })
 }
+
+// ---------------------------------------------------------------------------
+// FAQ
+// ---------------------------------------------------------------------------
+
+export interface FaqItem {
+  id: number
+  question: string
+  answer: string
+  category: string | null
+  order_num: number
+  is_active: boolean
+  created_by: string
+  created_at: string | null
+  updated_at: string | null
+}
+
+export function fetchFaqItems(params?: { category?: string; active_only?: boolean }): Promise<FaqItem[]> {
+  const qs = buildQuery({ category: params?.category, active_only: params?.active_only === false ? 'false' : undefined })
+  return request<FaqItem[]>(`/faq${qs}`)
+}
+
+export function createFaqItem(data: { question: string; answer: string; category?: string | null; order_num?: number; is_active?: boolean }): Promise<FaqItem> {
+  return request<FaqItem>('/faq', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export function bulkCreateFaqItems(items: Array<{ question: string; answer: string; category?: string | null; order_num?: number; is_active?: boolean }>): Promise<{ created: number; skipped: number }> {
+  return request('/faq/bulk', { method: 'POST', body: JSON.stringify({ items }) })
+}
+
+export function updateFaqItem(id: number, data: Partial<Pick<FaqItem, 'question' | 'answer' | 'category' | 'order_num' | 'is_active'>>): Promise<FaqItem> {
+  return request<FaqItem>(`/faq/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+}
+
+export function deleteFaqItem(id: number): Promise<void> {
+  return request(`/faq/${id}`, { method: 'DELETE' })
+}

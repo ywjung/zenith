@@ -62,6 +62,7 @@ const MENU_GROUPS: MenuGroup[] = [
     items: [
       { href: '/admin/templates', label: '티켓 템플릿', icon: '📋', desc: '자주 쓰는 티켓 양식' },
       { href: '/admin/quick-replies', label: '빠른 답변', icon: '💬', desc: '에이전트 답변 템플릿' },
+      { href: '/admin/faq', label: 'FAQ 관리', icon: '❓', desc: 'DB 기반 자주 묻는 질문 관리' },
     ],
   },
   {

@@ -26,6 +26,7 @@ from .routers.ticket_types import router as ticket_types_router
 from .routers.service_catalog import router as service_catalog_router
 from .routers.dashboard import router as dashboard_router
 from .routers.ip_allowlist import router as ip_allowlist_router
+from .routers.faq import router as faq_router
 from . import gitlab_client
 from . import sla as sla_module
 from .routers.reports import take_snapshot
@@ -553,6 +554,7 @@ app.include_router(ticket_types_router)
 app.include_router(service_catalog_router)
 app.include_router(dashboard_router)
 app.include_router(ip_allowlist_router)
+app.include_router(faq_router)
 
 # I-2: Prometheus metrics
 try:

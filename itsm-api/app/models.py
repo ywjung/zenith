@@ -619,6 +619,25 @@ class ServiceCatalogItem(Base):
     )
 
 
+class FaqItem(Base):
+    """자주 묻는 질문(FAQ) 항목."""
+    __tablename__ = "faq_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    question = Column(String(500), nullable=False)
+    answer = Column(Text, nullable=False)
+    category = Column(String(50), nullable=True)
+    order_num = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_faq_items_active_order", "is_active", "order_num"),
+    )
+
+
 class UserDashboardConfig(Base):
     __tablename__ = "user_dashboard_configs"
 

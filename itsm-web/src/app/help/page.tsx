@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
+import { fetchFaqItems, type FaqItem as ApiFaqItem } from '@/lib/api'
 
 /* ─── 탭 정의 ──────────────────────────────────────────────────────────── */
 
@@ -1243,6 +1244,57 @@ const FAQ_ITEMS = [
   { q: '감사 로그에서 액션이 코드로 표시됩니다 (예: ticket.bulk.BulkActionEnum.SET_PRIORITY).', a: '이 문제는 구버전 백엔드(Python 3.13 이전)의 Enum f-string 직렬화 버그로 발생했습니다. 현재 버전에서는 ticket.bulk.set_priority, ticket.bulk.assign, ticket.bulk.close 형태로 올바르게 표시됩니다.\n\n여전히 코드로 보인다면 다음을 확인하세요:\n• itsm-api 컨테이너가 최신 이미지로 재빌드되었는지 확인합니다.\n  docker compose build itsm-api && docker compose up -d itsm-api\n\n이미 기록된 과거 로그 항목은 수정이 불가능합니다(감사 로그는 Immutable). 해당 항목은 참고용으로만 활용하고, 이후 기록되는 로그는 정상적으로 표시됩니다.' },
 ]
 
+/* ─── FAQ 카테고리 메타데이터 ────────────────────────────────────────── */
+
+const FAQ_CAT_MAP: Record<number, string> = {
+  0: '기본 사용법', 1: '기본 사용법', 2: '기본 사용법',
+  3: '관리자 설정', 4: '관리자 설정', 5: '관리자 설정',
+  6: '기능 안내',   7: '기능 안내',   8: '기능 안내',
+  9: '기능 안내',  10: '기능 안내',  11: '기능 안내',
+  12: '보안',      13: '보안',
+  14: '관리자 설정', 15: '관리자 설정', 16: '관리자 설정', 17: '관리자 설정',
+  18: 'GitLab 연동',
+  19: '기능 안내',  20: '기능 안내',  21: '기능 안내',  22: '기능 안내',
+  23: '관리자 설정',
+  24: '기능 안내',
+  25: 'GitLab 연동', 26: '문제 해결', 27: '문제 해결',
+  28: '권한/역할',
+  29: '기본 사용법', 30: '기본 사용법', 31: '기본 사용법',
+  32: 'GitLab 연동',
+  33: '기능 안내',  34: '기능 안내',  35: '기능 안내',
+  36: 'GitLab 연동', 37: 'GitLab 연동',
+  38: '기능 안내',
+  39: '관리자 설정', 40: '관리자 설정', 41: '관리자 설정', 42: '관리자 설정',
+  43: '기능 안내',  44: '기능 안내',  45: '기능 안내',  46: '기능 안내',
+  47: '보안',
+  48: '기능 안내',
+  49: '문제 해결',  50: '문제 해결',
+  51: '기능 안내',
+  52: '관리자 설정',
+  53: '문제 해결',  54: '문제 해결',  55: '문제 해결',  56: '문제 해결',
+  57: '문제 해결',  58: '문제 해결',  59: '문제 해결',  60: '문제 해결',
+  61: '관리자 설정', 62: '관리자 설정',
+  63: '권한/역할',
+  64: '기능 안내',  65: '기능 안내',  66: '기능 안내',
+  67: '관리자 설정',
+  68: '기능 안내',  69: '기능 안내',
+  70: '권한/역할',
+  71: '기본 사용법',
+  72: '문제 해결',
+}
+
+const FAQ_CAT_ORDER = ['기본 사용법', '기능 안내', 'GitLab 연동', '관리자 설정', '권한/역할', '보안', '문제 해결']
+
+const FAQ_CAT_CONFIG: Record<string, { icon: string; color: string; bg: string; ring: string }> = {
+  '기본 사용법': { icon: '🎫', color: 'text-blue-700 dark:text-blue-300',   bg: 'bg-blue-100 dark:bg-blue-900/40',   ring: 'border-blue-300 dark:border-blue-700' },
+  '기능 안내':   { icon: '⚡', color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-100 dark:bg-violet-900/40', ring: 'border-violet-300 dark:border-violet-700' },
+  'GitLab 연동': { icon: '🦊', color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-100 dark:bg-orange-900/40', ring: 'border-orange-300 dark:border-orange-700' },
+  '관리자 설정': { icon: '⚙️', color: 'text-gray-700 dark:text-gray-300',    bg: 'bg-gray-100 dark:bg-gray-800/60',    ring: 'border-gray-300 dark:border-gray-600' },
+  '권한/역할':   { icon: '🔑', color: 'text-teal-700 dark:text-teal-300',    bg: 'bg-teal-100 dark:bg-teal-900/40',   ring: 'border-teal-300 dark:border-teal-700' },
+  '보안':        { icon: '🛡️', color: 'text-red-700 dark:text-red-300',      bg: 'bg-red-100 dark:bg-red-900/40',     ring: 'border-red-300 dark:border-red-700' },
+  '문제 해결':   { icon: '🔧', color: 'text-amber-700 dark:text-amber-300',  bg: 'bg-amber-100 dark:bg-amber-900/40', ring: 'border-amber-300 dark:border-amber-700' },
+}
+
 /* ─── 헬퍼 컴포넌트 ──────────────────────────────────────────────────── */
 
 function SectionTitle({ number, title }: { number: string; title: string }) {
@@ -1278,6 +1330,91 @@ function MethodBadge({ method }: { method: HttpMethod }) {
     <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded font-mono shrink-0 w-16 text-center ${METHOD_BADGE[method]}`}>
       {method}
     </span>
+  )
+}
+
+/* ─── FAQ 답변 렌더러 ────────────────────────────────────────────────── */
+
+function AnswerContent({ text }: { text: string }) {
+  type Block =
+    | { type: 'text'; content: string }
+    | { type: 'bullet'; items: string[] }
+    | { type: 'numbered'; items: Array<{ num: string; content: string }> }
+
+  const blocks: Block[] = []
+  const lines = text.split('\n')
+  let i = 0
+
+  while (i < lines.length) {
+    const trimmed = lines[i].trim()
+    if (!trimmed) { i++; continue }
+
+    if (trimmed.startsWith('•')) {
+      const items: string[] = []
+      while (i < lines.length && lines[i].trim().startsWith('•')) {
+        items.push(lines[i].trim().slice(1).trim())
+        i++
+      }
+      blocks.push({ type: 'bullet', items })
+      continue
+    }
+
+    const circMatch = trimmed.match(/^([①②③④⑤⑥⑦⑧⑨])/)
+    if (circMatch) {
+      const items: Array<{ num: string; content: string }> = []
+      while (i < lines.length) {
+        const m = lines[i].trim().match(/^([①②③④⑤⑥⑦⑧⑨])(.*)/)
+        if (!m) break
+        items.push({ num: m[1], content: m[2].trim() })
+        i++
+      }
+      blocks.push({ type: 'numbered', items })
+      continue
+    }
+
+    blocks.push({ type: 'text', content: trimmed })
+    i++
+  }
+
+  return (
+    <div className="space-y-2">
+      {blocks.map((block, bi) => {
+        if (block.type === 'text') {
+          return (
+            <p key={bi} className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+              {block.content}
+            </p>
+          )
+        }
+        if (block.type === 'bullet') {
+          return (
+            <ul key={bi} className="space-y-1.5 pl-1">
+              {block.items.map((item, ii) => (
+                <li key={ii} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                  <span className="mt-[7px] w-1.5 h-1.5 rounded-full bg-teal-400 dark:bg-teal-500 shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+        if (block.type === 'numbered') {
+          return (
+            <ol key={bi} className="space-y-1.5 pl-1">
+              {block.items.map((item, ii) => (
+                <li key={ii} className="flex items-start gap-2.5 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                  <span className="shrink-0 mt-0.5 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs font-bold inline-flex items-center justify-center">
+                    {item.num}
+                  </span>
+                  <span>{item.content}</span>
+                </li>
+              ))}
+            </ol>
+          )
+        }
+        return null
+      })}
+    </div>
   )
 }
 
@@ -3132,34 +3269,163 @@ function TabProcess() {
 
 function TabFaq() {
   const [openIdx, setOpenIdx] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
+  const [activeCat, setActiveCat] = useState<string>('전체')
+  const [apiItems, setApiItems] = useState<ApiFaqItem[] | null>(null)
+  const [loadingApi, setLoadingApi] = useState(true)
+
+  useEffect(() => {
+    fetchFaqItems({ active_only: true })
+      .then(setApiItems)
+      .catch(() => setApiItems(null))  // fallback to static
+      .finally(() => setLoadingApi(false))
+  }, [])
+
+  // DB 데이터가 있으면 사용, 없으면 정적 FAQ_ITEMS 폴백
+  const sourceItems: Array<{ id: number; q: string; a: string; cat: string }> =
+    apiItems && apiItems.length > 0
+      ? apiItems.map(i => ({ id: i.id, q: i.question, a: i.answer, cat: i.category ?? '기타' }))
+      : FAQ_ITEMS.map((item, i) => ({ id: i, q: item.q, a: item.a, cat: FAQ_CAT_MAP[i] ?? '기타' }))
+
+  const catCounts = sourceItems.reduce<Record<string, number>>((acc, item) => {
+    acc[item.cat] = (acc[item.cat] ?? 0) + 1
+    return acc
+  }, {})
+
+  // 카테고리 목록: DB 데이터의 경우 실제 카테고리만, 정적은 FAQ_CAT_ORDER 사용
+  const catOrder = apiItems && apiItems.length > 0
+    ? FAQ_CAT_ORDER.filter(c => catCounts[c])
+    : FAQ_CAT_ORDER
+
+  const filtered = sourceItems.filter(item => {
+    const matchesCat = activeCat === '전체' || item.cat === activeCat
+    const q = search.toLowerCase()
+    const matchesSearch = !q || item.q.toLowerCase().includes(q) || item.a.toLowerCase().includes(q)
+    return matchesCat && matchesSearch
+  })
+
+  if (loadingApi) {
+    return (
+      <div className="text-center py-16 text-gray-400 dark:text-gray-500">
+        <div className="text-3xl mb-2 animate-pulse">⏳</div>
+        <p className="text-sm">FAQ를 불러오는 중...</p>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-2">
-      {FAQ_ITEMS.map((item, i) => {
-        const isOpen = openIdx === i
-        return (
-          <div key={i} className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+    <div>
+      {/* 검색 */}
+      <div className="mb-4">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">🔍</span>
+          <input
+            type="text"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setOpenIdx(null) }}
+            placeholder="질문이나 키워드로 검색..."
+            className="w-full pl-9 pr-9 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-gray-100 placeholder:text-gray-400"
+          />
+          {search && (
             <button
-              type="button"
-              className="w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors min-h-[44px]"
-              onClick={() => setOpenIdx(isOpen ? null : i)}
-              aria-expanded={isOpen}
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm"
+            >✕</button>
+          )}
+        </div>
+      </div>
+
+      {/* 카테고리 필터 */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        <button
+          onClick={() => { setActiveCat('전체'); setOpenIdx(null) }}
+          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+            activeCat === '전체'
+              ? 'bg-gray-800 dark:bg-gray-100 text-white dark:text-gray-900'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+          }`}
+        >
+          전체 <span className="opacity-60">{sourceItems.length}</span>
+        </button>
+        {catOrder.map(cat => {
+          const cfg = FAQ_CAT_CONFIG[cat] ?? { icon: '❓', color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-100 dark:bg-gray-800', ring: 'border-gray-300 dark:border-gray-600' }
+          const isActive = activeCat === cat
+          return (
+            <button
+              key={cat}
+              onClick={() => { setActiveCat(cat); setOpenIdx(null) }}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                isActive
+                  ? `${cfg.bg} ${cfg.color}`
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
             >
-              <span className="text-blue-500 font-bold text-sm shrink-0 mt-0.5">Q.</span>
-              <span className="flex-1 font-medium text-sm text-gray-800 dark:text-gray-100 leading-relaxed">{item.q}</span>
-              <span className="text-gray-400 dark:text-gray-500 shrink-0 mt-0.5">{isOpen ? '▲' : '▼'}</span>
+              {cfg.icon} {cat} <span className="opacity-60">{catCounts[cat]}</span>
             </button>
-            {isOpen && (
-              <div className="px-5 pb-4 border-t border-gray-100 dark:border-gray-700 pt-3">
-                <div className="flex gap-3">
-                  <span className="text-teal-500 font-bold text-sm shrink-0">A.</span>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{item.a}</p>
+          )
+        })}
+      </div>
+
+      {/* 검색 결과 없음 */}
+      {filtered.length === 0 && (
+        <div className="text-center py-16 text-gray-400 dark:text-gray-500">
+          <div className="text-4xl mb-3">🔍</div>
+          <p className="text-sm">검색 결과가 없습니다.</p>
+          <button onClick={() => { setSearch(''); setActiveCat('전체') }} className="mt-3 text-xs text-blue-500 hover:underline">
+            필터 초기화
+          </button>
+        </div>
+      )}
+
+      {/* FAQ 아코디언 */}
+      <div className="space-y-2">
+        {filtered.map((item) => {
+          const isOpen = openIdx === item.id
+          const cfg = FAQ_CAT_CONFIG[item.cat] ?? { icon: '❓', color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-100 dark:bg-gray-800', ring: 'border-gray-300 dark:border-gray-600' }
+          return (
+            <div
+              key={item.id}
+              className={`bg-white dark:bg-gray-900 border rounded-xl overflow-hidden shadow-sm transition-all ${
+                isOpen ? `${cfg.ring} shadow-sm` : 'border-gray-200 dark:border-gray-700'
+              }`}
+            >
+              <button
+                type="button"
+                className="w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
+                onClick={() => setOpenIdx(isOpen ? null : item.id)}
+                aria-expanded={isOpen}
+              >
+                <span className="text-blue-500 font-bold text-sm shrink-0 mt-0.5">Q</span>
+                <span className="flex-1 font-medium text-sm text-gray-800 dark:text-gray-100 leading-relaxed">{item.q}</span>
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.color}`}>
+                    {cfg.icon} {item.cat}
+                  </span>
+                  <span className="text-gray-400 dark:text-gray-500 text-xs">{isOpen ? '▲' : '▼'}</span>
                 </div>
-              </div>
-            )}
-          </div>
-        )
-      })}
+              </button>
+
+              {isOpen && (
+                <div className="px-5 pb-5 border-t border-gray-100 dark:border-gray-700 pt-4 bg-gray-50/50 dark:bg-gray-800/20">
+                  <div className="flex gap-3">
+                    <span className="text-teal-500 font-bold text-sm shrink-0 mt-0.5">A</span>
+                    <div className="flex-1 min-w-0">
+                      <AnswerContent text={item.a} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* 결과 수 표시 */}
+      {(search || activeCat !== '전체') && filtered.length > 0 && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 text-right mt-3">
+          {filtered.length}개 항목
+        </p>
+      )}
     </div>
   )
 }
