@@ -18,6 +18,9 @@ server {
   # C-4: unsafe-inline/unsafe-eval 제거 — Next.js 프로덕션 빌드는 외부 스크립트 인라인 불필요
   # style-src unsafe-inline은 Tailwind CSS 런타임 인젝션에 필요 (nonce 도입 전까지 유지)
   add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:8929; connect-src 'self'; font-src 'self'; frame-src 'self' blob:; object-src blob: 'self'; frame-ancestors 'none';" always;
+  # MED-07: HSTS는 HTTPS 환경에서만 유효. HTTP 리버스 프록시(nginx)에서 전송해도
+  # 브라우저는 HTTPS 응답에서만 처리한다. TLS 종단이 nginx 앞단(로드밸런서 등)에 있는
+  # 경우 해당 계층에서도 HSTS를 설정해야 함.
   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
   # Chrome DevTools workspace detection (Chrome 130+)
@@ -97,17 +100,16 @@ server {
     client_max_body_size 20m;  # FastAPI 10MB 검사 앞단에서 막히지 않도록 여유값 설정
   }
 
-  # HIGH-07: 이 파일은 더 이상 사용되지 않습니다.
-  # nginx/templates/default.conf.template 을 사용하고 docker-compose에서
-  # METRICS_TOKEN 환경변수를 설정하세요. (envsubst 자동 처리)
+  # HIGH-07: Prometheus metrics — 내부망 IP + X-Metrics-Token 헤더 이중 인증
+  # METRICS_TOKEN은 .env에서 주입됨 (envsubst로 처리).
+  # Prometheus scrape_config에 headers: {X-Metrics-Token: <동일값>} 설정 필요.
   location = /metrics {
     allow 127.0.0.1;
     allow 10.0.0.0/8;
     allow 172.16.0.0/12;
     allow 192.168.0.0/16;
     deny all;
-    # 아래 값은 .env의 METRICS_TOKEN으로 대체됨 (templates/default.conf.template 사용)
-    set $metrics_expected "CHANGE_THIS_TO_A_STRONG_SECRET";
+    set $metrics_expected "${METRICS_TOKEN}";
     if ($http_x_metrics_token != $metrics_expected) {
       return 403;
     }

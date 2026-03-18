@@ -19,10 +19,40 @@ from ..crypto import encrypt_token, decrypt_token
 from ..config import get_settings
 from ..database import get_db
 from ..models import UserRole, RefreshToken
-from ..rate_limit import limiter, LIMIT_LOGIN
+from ..rate_limit import limiter, login_limiter, LIMIT_LOGIN, LIMIT_LOGIN_PER_USER
+from ..audit import write_audit_log
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _extract_client_ip(request: Request) -> str:
+    """CRIT-01/HIGH-05: TRUSTED_PROXIES를 고려한 클라이언트 IP 추출.
+
+    사설 IP 또는 TRUSTED_PROXIES에 등록된 프록시에서 온 요청만 X-Forwarded-For를 신뢰한다.
+    직접 요청이거나 신뢰하지 않는 프록시이면 client.host를 사용한다.
+    """
+    import ipaddress as _ip
+    from ..config import get_settings as _gs
+    client_host = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if not forwarded or client_host == "unknown":
+        return client_host
+    try:
+        proxy_addr = _ip.ip_address(client_host)
+        is_trusted = proxy_addr.is_private  # 기본: 사설 IP 신뢰
+        trusted_str = _gs().TRUSTED_PROXIES
+        if trusted_str:
+            for cidr in trusted_str.split(","):
+                cidr = cidr.strip()
+                if cidr and proxy_addr in _ip.ip_network(cidr, strict=False):
+                    is_trusted = True
+                    break
+        if is_trusted:
+            return forwarded.split(",")[0].strip()
+    except ValueError:
+        pass
+    return client_host
 
 
 def _gitlab_access_to_itsm_role(access_level: int) -> str:
@@ -168,6 +198,7 @@ def _create_refresh_token(db: Session, gitlab_user_id: str, gitlab_refresh_token
 
 @router.get("/login")
 @(limiter.limit(LIMIT_LOGIN) if limiter else lambda f: f)
+@(login_limiter.limit(LIMIT_LOGIN_PER_USER) if login_limiter else lambda f: f)
 def login(request: Request):
     settings = get_settings()
     needs_reauth = request.cookies.get("itsm_reauth") == "1"
@@ -350,12 +381,14 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
     )
 
     if not record:
+        write_audit_log(db, {"username": "unknown"}, "auth.refresh.invalid_token", "auth", "", request=request)
         raise HTTPException(status_code=401, detail="유효하지 않은 리프레시 토큰입니다.")
 
     expires_at = record.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at < datetime.now(timezone.utc):
+        write_audit_log(db, {"username": record.gitlab_user_id}, "auth.refresh.expired", "auth", record.gitlab_user_id, request=request)
         raise HTTPException(status_code=401, detail="리프레시 토큰이 만료됐습니다.")
 
     settings = get_settings()
@@ -597,6 +630,7 @@ def revoke_all_other_sessions(
 # ---------------------------------------------------------------------------
 
 @router.post("/sudo")
+@(limiter.limit("5/minute") if limiter else lambda f: f)
 def create_sudo_token(
     request: Request,
     db: Session = Depends(get_db),
@@ -637,7 +671,7 @@ def create_sudo_token(
     token_hash = hashlib.sha256(raw.encode()).hexdigest()
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).replace(tzinfo=None)
 
-    ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    ip = _extract_client_ip(request)  # CRIT-01: 신뢰 프록시만 XFF 신뢰
     sudo = SudoToken(
         token_hash=token_hash,
         user_id=str(user.get("sub", "")),
@@ -687,3 +721,12 @@ def verify_sudo_token(request: Request, user: dict, db) -> None:
     ).first()
     if not rec:
         raise HTTPException(status_code=403, detail="Sudo 토큰이 유효하지 않거나 만료됐습니다.")
+
+    # IP 바인딩 검증 — 토큰 발급 IP와 요청 IP가 다르면 거부
+    req_ip = _extract_client_ip(request)  # CRIT-01: 신뢰 프록시만 XFF 신뢰
+    if rec.ip_address and rec.ip_address != req_ip:
+        logger.warning(
+            "Sudo token IP mismatch: token_ip=%s request_ip=%s user=%s",
+            rec.ip_address, req_ip, user.get("username"),
+        )
+        raise HTTPException(status_code=403, detail="Sudo 토큰이 유효하지 않습니다.")

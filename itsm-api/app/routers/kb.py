@@ -10,7 +10,7 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import get_current_user, require_scope
 from ..config import get_settings
 from ..database import get_db
 from ..models import KBArticle
@@ -76,7 +76,7 @@ def list_articles(
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_scope("kb:read")),
 ):
     role = user.get("role", "user")
     is_agent = role in ("agent", "admin")
@@ -102,9 +102,11 @@ def list_articles(
             ).bindparams(q=q)
             query = query.filter(fts_filter)
         except Exception:
-            like = f"%{q}%"
+            # MED-04: LIKE 메타문자 이스케이프 (% _ \ 를 리터럴로 취급)
+            _q = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            like = f"%{_q}%"
             query = query.filter(
-                KBArticle.title.ilike(like) | KBArticle.content.ilike(like)
+                KBArticle.title.ilike(like, escape="\\") | KBArticle.content.ilike(like, escape="\\")
             )
     if category:
         query = query.filter(KBArticle.category == category)
@@ -228,13 +230,14 @@ def suggest_kb_articles(
                 .all()
             )
     except Exception:
-        # FTS 폴백
-        like = f"%{q}%"
+        # FTS 폴백 — MED-04: LIKE 메타문자 이스케이프
+        _q = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{_q}%"
         results = (
             db.query(KBArticle)
             .filter(
                 KBArticle.published == True,  # noqa: E712
-                (KBArticle.title.ilike(like) | KBArticle.content.ilike(like)),
+                (KBArticle.title.ilike(like, escape="\\") | KBArticle.content.ilike(like, escape="\\")),
             )
             .order_by(KBArticle.view_count.desc())
             .limit(limit)

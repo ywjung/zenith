@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-from ..auth import get_current_user
+from ..auth import get_current_user, require_scope
 from ..audit import write_audit_log
 from ..config import get_settings
 from ..database import get_db
@@ -100,11 +100,17 @@ def _detect_mime_from_bytes(data: bytes) -> str | None:
                     return mime
                 return None
             return mime
-    # Try python-magic if available (optional)
+    # python-magic으로 정밀 탐지 (필수 패키지 — ImportError 시 업로드 거부)
     try:
         import magic as _magic
         return _magic.from_buffer(data[:2048], mime=True)
     except ImportError:
+        logger.error("python-magic 패키지가 설치되지 않았습니다. 파일 MIME 탐지 불가.")
+        raise HTTPException(
+            status_code=503,
+            detail="파일 검증 서비스를 사용할 수 없습니다. 관리자에게 문의하세요.",
+        )
+    except Exception:
         pass
     return None
 
@@ -144,8 +150,11 @@ def _strip_image_metadata(content: bytes, mime: str) -> bytes:
     """이미지에서 EXIF 메타데이터를 제거하고 리인코딩.
 
     GPS 좌표, 기기 정보, 작성자 등 민감 정보를 제거한다.
-    Pillow 미설치 시 원본 반환 (fail-open).
+    Pillow 미설치 시 업로드 거부 (필수 패키지).
     """
+    # LOW-04: GIF는 애니메이션 프레임 구조상 무손실 리인코딩이 복잡하므로 EXIF 제거 제외.
+    # GIF 포맷에 EXIF가 포함되는 경우는 드물며, 민감 정보 위험도가 낮다.
+    # 향후 필요 시 Pillow GifImagePlugin을 사용한 프레임별 재처리로 개선 가능.
     _STRIPPABLE = {"image/jpeg", "image/png", "image/webp"}
     if mime not in _STRIPPABLE:
         return content
@@ -162,6 +171,14 @@ def _strip_image_metadata(content: bytes, mime: str) -> bytes:
         cleaned = out.getvalue()
         logger.info("EXIF stripped: %s (%d→%d bytes)", mime, len(content), len(cleaned))
         return cleaned
+    except ImportError:
+        logger.error("Pillow 패키지가 설치되지 않았습니다. 이미지 EXIF 제거 불가.")
+        raise HTTPException(
+            status_code=503,
+            detail="이미지 처리 서비스를 사용할 수 없습니다. 관리자에게 문의하세요.",
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning("EXIF strip failed (fail-open): %s — %s", mime, e)
         return content
@@ -170,17 +187,19 @@ def _strip_image_metadata(content: bytes, mime: str) -> bytes:
 def _scan_with_clamav(content: bytes, filename: str) -> None:
     """ClamAV TCP 소켓으로 바이러스 스캔. 위협 탐지 시 400 raise.
 
-    ClamAV 미설치/연결 실패 시 경고 로그만 남기고 통과(fail-open).
-    CLAMAV_ENABLED=false 환경변수로 비활성화 가능.
+    ClamAV 연결 실패 시 기본값은 업로드 거부(fail-closed).
+    CLAMAV_STRICT=false 환경변수로 개발 환경에서 fail-open으로 전환 가능.
+    CLAMAV_ENABLED=false 환경변수로 스캔 자체를 비활성화 가능.
     """
     settings = get_settings()
     if not getattr(settings, "CLAMAV_ENABLED", True):
         return
+    # CLAMAV_STRICT=false 인 경우에만 연결 실패 시 통과 허용 (개발 환경용)
+    strict_mode = getattr(settings, "CLAMAV_STRICT", True)
     host = getattr(settings, "CLAMAV_HOST", "clamav")
     port = int(getattr(settings, "CLAMAV_PORT", 3310))
     try:
         import socket as _sock
-        import io
         # clamd TCP 프로토콜: INSTREAM 명령
         with _sock.create_connection((host, port), timeout=5) as s:
             s.sendall(b"nINSTREAM\n")
@@ -196,7 +215,13 @@ def _scan_with_clamav(content: bytes, filename: str) -> None:
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning("ClamAV scan skipped (fail-open): %s — %s", filename, e)
+        if strict_mode:
+            logger.error("ClamAV scan failed (fail-closed): %s — %s", filename, e)
+            raise HTTPException(
+                status_code=503,
+                detail="바이러스 스캔 서비스에 연결할 수 없습니다. 잠시 후 다시 시도하세요.",
+            )
+        logger.warning("ClamAV scan skipped (fail-open, CLAMAV_STRICT=false): %s — %s", filename, e)
 
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -681,7 +706,7 @@ def list_tickets(
     order: str = Query(default="desc", description="정렬 방향: asc|desc"),
     created_after: Optional[str] = Query(default=None, description="등록일 시작 (ISO 8601, 예: 2026-01-01)"),
     created_before: Optional[str] = Query(default=None, description="등록일 종료 (ISO 8601, 예: 2026-12-31)"),
-    _user: dict = Depends(get_current_user),
+    _user: dict = Depends(require_scope("tickets:read")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -1068,16 +1093,23 @@ def export_tickets_csv(
     writer = csv.writer(output)
     writer.writerow(["번호", "제목", "상태", "우선순위", "카테고리", "신청자", "담당자", "생성일", "수정일"])
 
+    def _sc(v) -> str:
+        """HIGH-06: CSV formula injection 방어 — reports.py의 _sanitize_csv_cell 동일 로직."""
+        s = str(v) if v is not None else ""
+        if s and s[0] in ('=', '+', '-', '@', '\t', '\r'):
+            return "'" + s
+        return s
+
     for issue in issues:
         ticket = _issue_to_response(issue)
         writer.writerow([
             ticket.get("iid"),
-            ticket.get("title"),
-            ticket.get("status"),
-            ticket.get("priority"),
-            ticket.get("category"),
-            ticket.get("employee_name"),
-            ticket.get("assignee_name"),
+            _sc(ticket.get("title")),
+            _sc(ticket.get("status")),
+            _sc(ticket.get("priority")),
+            _sc(ticket.get("category")),
+            _sc(ticket.get("employee_name")),
+            _sc(ticket.get("assignee_name")),
             ticket.get("created_at", "")[:10] if ticket.get("created_at") else "",
             ticket.get("updated_at", "")[:10] if ticket.get("updated_at") else "",
         ])
@@ -1087,7 +1119,7 @@ def export_tickets_csv(
     return _StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv; charset=utf-8-sig",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},  # LOW-01
     )
 
 
@@ -1097,7 +1129,7 @@ def create_ticket(
     request: Request,
     data: TicketCreate,
     background_tasks: BackgroundTasks,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_scope("tickets:write")),
     db: Session = Depends(get_db),
 ):
     # S-9: 비밀 스캐닝 — 제목·설명에서 민감 정보 탐지 (경고만, 차단 안 함)
@@ -1642,6 +1674,18 @@ def update_ticket(
                     status_code=400,
                     detail=f"'{STATUS_KO.get(old_status, old_status)}'에서 '{STATUS_KO.get(data.status, data.status)}'(으)로의 전환은 허용되지 않습니다.",
                 )
+            # H-7: 대기 중인 승인 요청이 있으면 상태 전환 차단
+            pid = str(project_id or get_settings().GITLAB_PROJECT_ID)
+            pending_approval = db.query(ApprovalRequest).filter(
+                ApprovalRequest.ticket_iid == iid,
+                ApprovalRequest.project_id == pid,
+                ApprovalRequest.status == "pending",
+            ).first()
+            if pending_approval:
+                raise HTTPException(
+                    status_code=409,
+                    detail="대기 중인 승인 요청이 있어 상태를 변경할 수 없습니다. 먼저 승인 요청을 처리하세요.",
+                )
             for label in current_labels:
                 if label.startswith("status::"):
                     remove_labels.append(label)
@@ -1985,7 +2029,10 @@ def add_comment(
         import re as _re
         from ..database import SessionLocal as _SL
         from ..models import UserRole as _UserRole
-        mentioned_usernames = list(set(_re.findall(r'data-id="([^"]+)"', data.body)))
+        # L-6: username 형식 검증 — 최대 100자, 알파숫자/하이픈/점/밑줄만 허용
+        _USERNAME_RE = _re.compile(r'^[a-zA-Z0-9_.\-]{1,100}$')
+        raw_mentions = _re.findall(r'data-id="([^"]{1,100})"', data.body)
+        mentioned_usernames = list({u for u in raw_mentions if _USERNAME_RE.match(u)})
         if mentioned_usernames:
             actor_username = user.get("username", "")
             actor_id = str(user.get("sub", ""))
@@ -2331,8 +2378,9 @@ def set_ticket_custom_fields(
     """티켓 커스텀 필드 값을 일괄 저장. body: {field_id: value, ...}"""
     pid = str(project_id or get_settings().GITLAB_PROJECT_ID)
 
-    # 유효한 field_id 집합 확인
-    field_ids = {f.id for f in db.query(CustomFieldDef).filter(CustomFieldDef.enabled == True).all()}  # noqa: E712
+    # 유효한 field_id → 필드 정의 맵
+    field_defs = {f.id: f for f in db.query(CustomFieldDef).filter(CustomFieldDef.enabled == True).all()}  # noqa: E712
+    field_ids = set(field_defs.keys())
 
     for field_id_str, value in body.items():
         try:
@@ -2341,6 +2389,22 @@ def set_ticket_custom_fields(
             continue
         if fid not in field_ids:
             continue
+
+        # M-9: field_type에 따른 값 검증
+        fdef = field_defs[fid]
+        if value is not None:
+            if fdef.field_type == "number":
+                try:
+                    float(value)
+                except (ValueError, TypeError):
+                    raise HTTPException(status_code=400, detail=f"필드 '{fdef.label}'은(는) 숫자여야 합니다.")
+            elif fdef.field_type == "checkbox":
+                if not isinstance(value, bool) and str(value).lower() not in ("true", "false", "1", "0"):
+                    raise HTTPException(status_code=400, detail=f"필드 '{fdef.label}'은(는) 체크박스(true/false)여야 합니다.")
+            elif fdef.field_type == "select" and fdef.options:
+                if str(value) not in fdef.options:
+                    raise HTTPException(status_code=400, detail=f"필드 '{fdef.label}'의 값이 허용된 옵션 목록에 없습니다.")
+
         existing = db.query(TicketCustomValue).filter(
             TicketCustomValue.gitlab_issue_iid == iid,
             TicketCustomValue.project_id == pid,

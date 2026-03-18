@@ -77,13 +77,16 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 30
     DB_MAX_OVERFLOW: int = 20
 
-    # Token
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    # Token — MED-06: 기본 7일로 단축 (기존 30일 → 과도한 세션 유효기간)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # ClamAV 바이러스 스캔
     CLAMAV_ENABLED: bool = True
     CLAMAV_HOST: str = "clamav"
     CLAMAV_PORT: int = 3310
+    # CLAMAV_STRICT=true (기본): ClamAV 연결 실패 시 업로드 거부 (fail-closed)
+    # CLAMAV_STRICT=false: 개발 환경에서 ClamAV 없이도 업로드 허용 (fail-open)
+    CLAMAV_STRICT: bool = True
 
     # 세션 최대 개수 (동일 계정 동시 로그인 제한, 0=무제한)
     MAX_ACTIVE_SESSIONS: int = 5
@@ -95,6 +98,11 @@ class Settings(BaseSettings):
     # 예: ADMIN_ALLOWED_CIDRS=10.0.0.0/8,192.168.0.0/16
     ADMIN_ALLOWED_CIDRS: str = ""
 
+    # 신뢰할 프록시 IP/CIDR 목록 — X-Forwarded-For 헤더를 신뢰할 프록시 주소
+    # 빈 문자열: 사설 IP 전체 신뢰 (하위 호환 기본값)
+    # 예: TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12
+    TRUSTED_PROXIES: str = ""
+
     # 2FA 강제 적용 역할 (빈 문자열=강제 안 함)
     # 예: REQUIRE_2FA_FOR_ROLES=admin,agent
     REQUIRE_2FA_FOR_ROLES: str = ""
@@ -104,16 +112,44 @@ class Settings(BaseSettings):
 
     # GitLab group member sync interval (seconds, S-6) — 퇴사자 동기화
     USER_SYNC_INTERVAL: int = 3600  # 1시간
+    # USER_SYNC_REQUIRE_GROUP=true (기본): 그룹 멤버에서 제거되면 비활성 (프로젝트만 남아도 차단)
+    # USER_SYNC_REQUIRE_GROUP=false: 그룹 OR 프로젝트 멤버이면 활성 유지
+    USER_SYNC_REQUIRE_GROUP: bool = True
 
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_be_strong(cls, v: str) -> str:
-        weak_defaults = {"change_me", "secret", "your-secret-key", "development-key"}
-        if v.lower() in weak_defaults or len(v) < 32:
+        # CRIT-02: 기본값 포함 — 공개 레포에 노출된 기본값 차단
+        weak_defaults = {
+            "change_me", "secret", "your-secret-key", "development-key",
+            "change_me_to_random_32char_string",
+        }
+        if v.lower() in {w.lower() for w in weak_defaults} or len(v) < 32:
             raise ValueError(
                 "SECRET_KEY가 너무 약합니다. 최소 32자 이상의 강력한 랜덤 키를 설정해 주세요."
             )
         return v
+
+    @field_validator("CORS_ORIGINS")
+    @classmethod
+    def cors_no_wildcard_in_production(cls, v: str) -> str:
+        # LOW-03: 와일드카드 CORS 허용 방지
+        if "*" in v:
+            logger.warning("CORS_ORIGINS에 와일드카드(*)가 포함되어 있습니다. 프로덕션에서는 명시적 출처를 지정하세요.")
+        return v
+
+    @model_validator(mode="after")
+    def validate_production_settings(self) -> "Settings":
+        # INFO-02: 프로덕션에서 토큰 암호화 키 경고
+        if self.ENVIRONMENT == "production":
+            if not self.TOKEN_ENCRYPTION_KEY:
+                logger.warning(
+                    "TOKEN_ENCRYPTION_KEY가 설정되지 않았습니다. "
+                    "GitLab refresh 토큰이 평문으로 DB에 저장됩니다."
+                )
+            if "*" in self.CORS_ORIGINS:
+                raise ValueError("프로덕션에서는 CORS_ORIGINS에 와일드카드(*)를 사용할 수 없습니다.")
+        return self
 
     @field_validator("GITLAB_PROJECT_TOKEN")
     @classmethod
@@ -126,7 +162,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def log_environment(self) -> "Settings":
-        logger.info("🚀 Starting ITSM in '%s' mode", self.ENVIRONMENT)
+        logger.info("Starting ITSM in '%s' mode", self.ENVIRONMENT)
         return self
 
     @property

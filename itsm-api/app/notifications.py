@@ -418,6 +418,25 @@ def notify_sla_breach(ticket_iid: int, project_id: str, assignee_email: Optional
 # In-app notifications (DB + Redis pub/sub)
 # ---------------------------------------------------------------------------
 
+def _validate_notification_link(link: Optional[str]) -> Optional[str]:
+    """LOW-06: 알림 link는 내부 상대 경로만 허용.
+
+    외부 URL(://포함), CRLF 인젝션, 또는 상대 경로가 아닌 값을 거부한다.
+    """
+    if link is None:
+        return None
+    if (
+        not link.startswith("/")
+        or "://" in link
+        or "\n" in link
+        or "\r" in link
+        or link.startswith("//")  # 프로토콜-상대 URL도 차단
+    ):
+        logger.warning("create_db_notification: invalid link rejected (%.100r)", link)
+        return None
+    return link
+
+
 def create_db_notification(
     db: Session,
     recipient_id: str,
@@ -435,7 +454,7 @@ def create_db_notification(
         recipient_id=recipient_id,
         title=title,
         body=body,
-        link=link,
+        link=_validate_notification_link(link),  # LOW-06: 내부 경로만 허용
     )
     db.add(notif)
     db.flush()  # assign PK / created_at without committing the outer transaction

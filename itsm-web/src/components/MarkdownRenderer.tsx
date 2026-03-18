@@ -4,6 +4,10 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import FilePreview from './FilePreview'
+import DOMPurify from 'isomorphic-dompurify'
+
+// M-6: 허용된 URL 스킴 — http, https, mailto, / (상대경로), # (앵커)만 허용
+const ALLOWED_URL_PATTERN = /^(https?:|mailto:|\/|#)/i
 
 interface Props {
   content: string
@@ -14,15 +18,21 @@ function isHtml(text: string): boolean {
   return /^\s*<\/?[a-zA-Z]/.test(text) || /<[a-zA-Z][^>]*>/.test(text)
 }
 
+// C-1: 커스텀 정규식 sanitizer를 isomorphic-dompurify로 교체
 function sanitizeHtml(html: string): string {
-  return html
-    .replace(/<(script|iframe|object|embed|form|link|meta|base)[\s\S]*?<\/\1>/gi, '')
-    .replace(/<(script|iframe|object|embed|form|link|meta|base)[^>]*\/?>/gi, '')
-    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '')
-    .replace(/href\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, 'href="#"')
-    .replace(/src\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, 'src=""')
-    .replace(/src\s*=\s*(?:"data:[^"]*"|'data:[^']*')/gi, 'src=""')
-    .replace(/href\s*=\s*(?:"data:[^"]*"|'data:[^']*')/gi, 'href="#"')
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'p', 'br', 'b', 'i', 'strong', 'em', 'u', 's', 'strike',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'a', 'img', 'span', 'div',
+    ],
+    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'rel'],
+    ALLOW_DATA_ATTR: false,
+    // M-6: 허용되지 않는 URL 스킴 차단 (javascript:, data: 등)
+    ALLOWED_URI_REGEXP: /^(https?:|mailto:|\/|#)/i,
+  })
 }
 
 /** 첨부파일 프록시 URL 여부 */
@@ -49,6 +59,11 @@ function extractFilename(href: string, linkText: string): string {
 const markdownComponents: Components = {
   a({ href, children }) {
     if (!href) return <a href={href}>{children}</a>
+
+    // M-6: 허용되지 않는 URL 스킴 차단
+    if (!ALLOWED_URL_PATTERN.test(href)) {
+      return <span>{children}</span>
+    }
 
     if (isAttachmentUrl(href)) {
       const linkText = typeof children === 'string'

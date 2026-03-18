@@ -1,4 +1,6 @@
 """Customer self-service portal (no GitLab auth required)."""
+import hashlib
+import html as _html_mod
 import logging
 import secrets
 from datetime import datetime, timezone, timedelta
@@ -115,11 +117,18 @@ def portal_submit(request: Request, req: PortalSubmitRequest, db: Session = Depe
     except Exception as e:
         logger.warning("portal_submit: SLA record creation failed: %s", e)
 
-    # Issue guest token (7 days)
+    # Issue guest token (7 days) — DB에는 SHA-256 해시만 저장 (H-5)
+    # M-8: 동일 email + ticket_iid 기존 토큰 무효화 (토큰 중복 방지)
+    db.query(GuestToken).filter(
+        GuestToken.email == str(req.email),
+        GuestToken.ticket_iid == ticket_iid,
+    ).delete(synchronize_session=False)
+
     raw_token = secrets.token_hex(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     expires = datetime.now(timezone.utc) + timedelta(days=7)
     guest_token = GuestToken(
-        token=raw_token,  # TODO: store as SHA-256 hash for security
+        token=token_hash,  # SHA-256 해시로 저장 (평문 미저장)
         email=str(req.email),
         ticket_iid=ticket_iid,
         project_id=project_id,
@@ -142,11 +151,14 @@ def portal_submit(request: Request, req: PortalSubmitRequest, db: Session = Depe
 
 def _send_confirmation(email: str, name: str, ticket_iid: int, track_url: str) -> None:
     subject = f"[ITSM] 티켓 #{ticket_iid} 접수 완료"
+    # MED-02: 사용자 입력값 HTML 이스케이프 처리 (이메일 XSS 방지)
+    safe_name = _html_mod.escape(name)
+    safe_url = _html_mod.escape(track_url)
     body = f"""
-<p>안녕하세요, {name}님.</p>
+<p>안녕하세요, {safe_name}님.</p>
 <p>문의가 정상적으로 접수되었습니다. (티켓 번호: <strong>#{ticket_iid}</strong>)</p>
 <p>아래 링크에서 진행 상황을 확인하실 수 있습니다:</p>
-<p><a href="{track_url}">{track_url}</a></p>
+<p><a href="{safe_url}">{safe_url}</a></p>
 <p>감사합니다.</p>
 """
     try:
@@ -160,11 +172,13 @@ def _send_confirmation(email: str, name: str, ticket_iid: int, track_url: str) -
 # ---------------------------------------------------------------------------
 
 @router.get("/track/{token}", response_model=PortalTicketStatus)
-@(limiter.limit("10/minute") if limiter else lambda f: f)  # C-8: IP당 분당 10회 제한
+@(limiter.limit("5/minute") if limiter else lambda f: f)  # C-2: IP당 분당 5회로 강화
 def portal_track(request: Request, token: str, db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    # H-5: DB에는 SHA-256 해시가 저장되므로 조회 시 해시로 비교
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
     guest = db.query(GuestToken).filter(
-        GuestToken.token == token,
+        GuestToken.token == token_hash,
         GuestToken.expires_at > now,
     ).first()
 

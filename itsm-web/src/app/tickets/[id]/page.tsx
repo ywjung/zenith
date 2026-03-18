@@ -13,6 +13,7 @@ import { useServiceTypes } from '@/context/ServiceTypesContext'
 import { formatName, formatDate, formatFileSize, getFileIcon, isImageFile, markdownToHtml } from '@/lib/utils'
 import { PRIORITY_OPTIONS, API_BASE } from '@/lib/constants'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
+import DOMPurify from 'isomorphic-dompurify'
 import RichTextEditor from '@/components/RichTextEditor'
 import ResolutionNoteModal from '@/components/ResolutionNoteModal'
 import FilePreview from '@/components/FilePreview'
@@ -126,24 +127,20 @@ interface DescPart {
  *   이미지  : ![name](url)  ← 인라인 이미지이므로 본문에 남김
  * HTML 형식(TipTap)도 동일하게 뒤쪽 마크다운 줄을 파싱한다.
  */
+// CRIT-03: 커스텀 regex sanitizer 제거 → isomorphic-dompurify로 교체
 function _sanitizeHtml(html: string): string {
-  return html
-    // Remove dangerous block-level tags entirely (including SVG and details which can host scripts)
-    .replace(/<(script|iframe|object|embed|form|link|meta|base|svg|details)[\s\S]*?<\/\1>/gi, '')
-    .replace(/<(script|iframe|object|embed|form|link|meta|base|svg|details)[^>]*\/?>/gi, '')
-    // Strip all event handler attributes (onclick, onload, onerror, onmouseover, ontoggle, etc.)
-    .replace(/ on\w+\s*=/gi, ' data-removed=')
-    // Neutralise javascript: URIs in href and src
-    .replace(/href\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, 'href="#"')
-    .replace(/src\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, 'src=""')
-    // Neutralise data: URIs in href and src (can carry payloads)
-    .replace(/href\s*=\s*(?:"data:[^"]*"|'data:[^']*')/gi, 'href="#"')
-    .replace(/src\s*=\s*(?:"data:[^"]*"|'data:[^']*')/gi, 'src=""')
-    // Neutralise vbscript: URIs
-    .replace(/href\s*=\s*(?:"vbscript:[^"]*"|'vbscript:[^']*')/gi, 'href="#"')
-    .replace(/src\s*=\s*(?:"vbscript:[^"]*"|'vbscript:[^']*')/gi, 'src=""')
-    // Strip CSS expression() which can execute JS in legacy IE
-    .replace(/expression\s*\(/gi, 'blocked(')
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'p', 'br', 'b', 'i', 'strong', 'em', 'u', 's', 'strike',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'a', 'img', 'span', 'div',
+    ],
+    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'rel'],
+    ALLOW_DATA_ATTR: false,
+    ALLOWED_URI_REGEXP: /^(https?:|mailto:|\/|#)/i,
+  })
 }
 
 function splitBodyAndAttachments(

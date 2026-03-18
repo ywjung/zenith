@@ -22,6 +22,34 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
 _IDEMPOTENCY_TTL = 3600  # seconds — deduplicate within 1 hour
+_MAX_WEBHOOK_BODY = 1 * 1024 * 1024  # 1MB — DoS 방지 (H-4)
+
+
+def _safe_str(value: Any, max_len: int = 200) -> str:
+    """MED-03/LOW-05: 외부 webhook 페이로드에서 온 문자열의 CRLF·제어문자 제거.
+
+    로그 인젝션과 인앱 알림 body의 newline 삽입을 방어한다.
+    """
+    s = str(value) if value is not None else ""
+    # CR/LF/탭 등 제어문자 제거 (로그 인젝션 방지)
+    s = re.sub(r"[\r\n\t\x00-\x1f\x7f]", " ", s)
+    return s[:max_len]
+
+
+def _check_webhook_secret_configured() -> None:
+    """HIGH-04: 시작 시 Webhook 시크릿 미설정 경고."""
+    try:
+        from ..config import get_settings
+        if not get_settings().GITLAB_WEBHOOK_SECRET:
+            logger.error(
+                "GITLAB_WEBHOOK_SECRET이 설정되지 않았습니다. "
+                "모든 Webhook 요청이 거부됩니다. "
+                ".env에 GITLAB_WEBHOOK_SECRET=<secret>을 설정하세요."
+            )
+    except Exception:
+        pass
+
+_check_webhook_secret_configured()
 
 
 def _verify_signature(body: bytes, token: str) -> bool:
@@ -65,6 +93,8 @@ async def gitlab_webhook(
     x_gitlab_event_uuid: str = Header(default=""),
 ):
     body = await request.body()
+    if len(body) > _MAX_WEBHOOK_BODY:
+        raise HTTPException(status_code=413, detail="Webhook payload too large")
     if not _verify_signature(body, x_gitlab_token):
         raise HTTPException(status_code=401, detail="Invalid webhook token")
 
@@ -181,7 +211,7 @@ def _handle_issue_update(iid: int, project_id: str, payload: dict) -> None:
         if not changed_fields:
             return
 
-        actor_name = payload.get("user", {}).get("name", actor_username)
+        actor_name = _safe_str(payload.get("user", {}).get("name", actor_username))
         summary = " / ".join(changed_fields)
         logger.info("Issue #%s updated directly in GitLab by %s: %s", iid, actor_name, summary)
 
@@ -197,7 +227,7 @@ def _handle_issue_update(iid: int, project_id: str, payload: dict) -> None:
                     db,
                     recipient_id=submitter_user_id,
                     title=f"티켓 #{iid}이 GitLab에서 수정됐습니다",
-                    body=f"{actor_name}: {summary}",
+                    body=f"{actor_name}: {_safe_str(summary)}",
                     link=f"/tickets/{iid}",
                 )
 
@@ -355,8 +385,8 @@ def _handle_note_hook(payload: dict) -> None:
         note_body = attrs.get("note", "")
         author = payload.get("user", {})
         author_id = str(author.get("id", ""))
-        author_name = author.get("name", "")
-        author_username = author.get("username", "")
+        author_name = _safe_str(author.get("name", ""))
+        author_username = _safe_str(author.get("username", ""))
         is_internal = attrs.get("confidential", False)
 
         if not iid:
@@ -386,7 +416,7 @@ def _handle_note_hook(payload: dict) -> None:
         submitter_username = _parse_submitter_username(description)
         submitter_user_id = _get_gitlab_user_id_by_username(submitter_username) if submitter_username else None
 
-        preview = note_body[:100] + ("..." if len(note_body) > 100 else "")
+        preview = _safe_str(note_body, max_len=100) + ("..." if len(note_body) > 100 else "")
         label = "내부 메모" if is_internal else "새 댓글"
 
         # 알림 수신 대상: 신청자 + 담당 에이전트 (중복·본인 제외)

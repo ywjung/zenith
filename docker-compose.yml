@@ -115,6 +115,8 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
       GITLAB_BOT_USERNAME: ${GITLAB_BOT_USERNAME:-}
       ADMIN_ALLOWED_CIDRS: ${ADMIN_ALLOWED_CIDRS:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      CLAMAV_STRICT: ${CLAMAV_STRICT:-true}
     volumes:
       - gitlab_data:/gitlab_data:ro
     depends_on:
@@ -156,8 +158,14 @@ services:
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8111}:80"
+    environment:
+      # HIGH-07: metrics 엔드포인트 보호 토큰 — envsubst로 default.conf.template에 주입됨.
+      # .env에 METRICS_TOKEN=<strong_random_secret> 설정 필요.
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN must be set in .env}
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # HIGH-07: nginx:1.19+ 공식 이미지가 /etc/nginx/templates/*.conf.template 파일을
+      # envsubst 처리 후 /etc/nginx/conf.d/에 복사함 (컨테이너 시작 시 자동 실행)
+      - ./nginx/templates:/etc/nginx/templates:ro
     depends_on:
       - itsm-web
       - itsm-api
@@ -171,7 +179,7 @@ services:
     image: prom/prometheus:latest
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"  # HIGH-02: localhost만 바인딩 — 외부 노출 방지
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - itsm_prometheus:/prometheus
@@ -189,9 +197,12 @@ services:
     image: grafana/grafana:latest
     restart: unless-stopped
     ports:
-      - "${GRAFANA_PORT:-3001}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"  # HIGH-01: localhost만 바인딩
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      # HIGH-01: GRAFANA_PASSWORD 미설정 시 빈 문자열 — Grafana가 시작을 거부함
+      # 운영 시 반드시 .env에 GRAFANA_PASSWORD=<strong_password> 설정 필요
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
+      GF_AUTH_DISABLE_SIGNUP: "true"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
       GF_AUTH_BASIC_ENABLED: "true"
       GF_AUTH_DISABLE_LOGIN_FORM: "false"

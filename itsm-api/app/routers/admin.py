@@ -19,6 +19,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..models import UserRole, AuditLog, AssignmentRule, SLAPolicy, ServiceType, EscalationPolicy, EscalationRecord, EmailTemplate, OutboundWebhook, SystemSetting, Rating, SLARecord, BusinessHoursConfig, BusinessHoliday, CustomFieldDef, TicketCustomValue
 from ..rbac import require_agent, require_admin
+from ..rate_limit import limiter
 from ..schemas import (
     AssignmentRuleResponse,
     SLARecordResponse,
@@ -59,10 +60,15 @@ class RolePatch(BaseModel):
 
 @router.get("/users")
 def list_users(
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     _user: dict = Depends(require_admin),
 ):
-    rows = db.query(UserRole).filter(UserRole.gitlab_user_id != 1).order_by(UserRole.username).all()
+    """H-6: 페이지네이션 추가 — 사용자 수 급증 시 응답 크기 제한."""
+    q = db.query(UserRole).filter(UserRole.gitlab_user_id != 1).order_by(UserRole.username)
+    total = q.count()
+    rows = q.offset((page - 1) * per_page).limit(per_page).all()
     gitlab_info = _fetch_gitlab_users_bulk([r.gitlab_user_id for r in rows])
     result = []
     for r in rows:
@@ -78,7 +84,7 @@ def list_users(
             "created_at": r.created_at,
             "updated_at": r.updated_at,
         })
-    return result
+    return {"total": total, "page": page, "per_page": per_page, "items": result}
 
 
 @router.patch("/users/{gitlab_user_id}")
@@ -132,6 +138,21 @@ def update_user_role(
 # Audit logs
 # ---------------------------------------------------------------------------
 
+# MED-01: 감사 로그 필터 허용값 allowlist
+_AUDIT_RESOURCE_TYPES = {
+    "ticket", "comment", "user", "sla", "auth", "custom_field",
+    "label", "assignment_rule", "service_type", "escalation_policy",
+    "email_template", "outbound_webhook", "quick_reply", "template",
+    "api_key", "announcement", "kb_article", "system",
+}
+_AUDIT_ACTION_PREFIX_ALLOWLIST = {
+    "ticket.", "comment.", "user.", "sla.", "auth.", "custom_field.",
+    "label.", "assignment_rule.", "service_type.", "escalation.",
+    "email_template.", "webhook.", "quick_reply.", "template.",
+    "api_key.", "announcement.", "kb.", "holiday.", "system.",
+}
+
+
 def _build_audit_query(db: Session, resource_type=None, actor_id=None, action=None, from_date=None, to_date=None, actor_username=None):
     from sqlalchemy import func, text as sa_text
     # actor_id가 순수 숫자인 경우에만 user_roles와 JOIN
@@ -149,7 +170,11 @@ def _build_audit_query(db: Session, resource_type=None, actor_id=None, action=No
         .order_by(AuditLog.created_at.desc())
     )
     if resource_type:
-        q = q.filter(AuditLog.resource_type == resource_type)
+        # MED-01: allowlist 검증
+        if resource_type not in _AUDIT_RESOURCE_TYPES:
+            resource_type = None  # 허용되지 않은 값은 무시
+        else:
+            q = q.filter(AuditLog.resource_type == resource_type)
     if actor_id:
         q = q.filter(AuditLog.actor_id == actor_id)
     if actor_username:
@@ -157,7 +182,11 @@ def _build_audit_query(db: Session, resource_type=None, actor_id=None, action=No
         escaped = actor_username.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         q = q.filter(AuditLog.actor_username.ilike(f"%{escaped}%", escape="\\"))
     if action:
-        q = q.filter(AuditLog.action == action)
+        # MED-01: action은 prefix allowlist 검증
+        if not any(action.startswith(p) for p in _AUDIT_ACTION_PREFIX_ALLOWLIST):
+            action = None
+        else:
+            q = q.filter(AuditLog.action == action)
     if from_date:
         q = q.filter(AuditLog.created_at >= from_date)
     if to_date:
@@ -209,6 +238,7 @@ def list_audit_logs(
 
 @router.get("/audit/download")
 def download_audit_logs(
+    request: Request,
     resource_type: Optional[str] = None,
     actor_id: Optional[str] = None,
     actor_username: Optional[str] = Query(None),
@@ -216,9 +246,11 @@ def download_audit_logs(
     from_date: Optional[datetime] = None,
     to_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_agent),
+    user: dict = Depends(require_admin),
 ):
-    """감사 로그 CSV 다운로드 (최대 10,000건, 청크 스트리밍)."""
+    """감사 로그 CSV 다운로드 (최대 10,000건, 청크 스트리밍). 관리자 전용."""
+    from ..routers.auth import verify_sudo_token
+    verify_sudo_token(request, user, db)
     q = _build_audit_query(db, resource_type, actor_id, action, from_date, to_date, actor_username)
 
     def _generate():
@@ -255,7 +287,7 @@ def download_audit_logs(
     return StreamingResponse(
         _generate(),
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},  # LOW-01
     )
 
 
@@ -563,10 +595,13 @@ def update_service_type(
 
 @router.delete("/service-types/{type_id}", status_code=204)
 def delete_service_type(
+    request: Request,
     type_id: int,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
+    user: dict = Depends(require_admin),
 ):
+    from ..routers.auth import verify_sudo_token  # HIGH-03
+    verify_sudo_token(request, user, db)
     st = db.query(ServiceType).filter(ServiceType.id == type_id).first()
     if not st:
         raise HTTPException(status_code=404, detail="서비스 유형을 찾을 수 없습니다.")
@@ -720,11 +755,14 @@ def update_escalation_policy(
 
 @router.delete("/escalation-policies/{policy_id}", status_code=204)
 def delete_escalation_policy(
+    request: Request,
     policy_id: int,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
+    user: dict = Depends(require_admin),
 ):
     """에스컬레이션 정책 삭제 (실행 기록도 함께 삭제)."""
+    from ..routers.auth import verify_sudo_token  # HIGH-03
+    verify_sudo_token(request, user, db)
     policy = db.query(EscalationPolicy).filter(EscalationPolicy.id == policy_id).first()
     if not policy:
         raise HTTPException(404, "정책을 찾을 수 없습니다.")
@@ -797,12 +835,12 @@ def update_email_template(
     """이메일 템플릿 수정. Jinja2 문법 검증 후 저장."""
     # Jinja2 문법 유효성 검사
     try:
-        from jinja2 import Environment, select_autoescape, TemplateSyntaxError
-        env = Environment(autoescape=select_autoescape(["html"]))
+        from jinja2.sandbox import SandboxedEnvironment
+        env = SandboxedEnvironment(autoescape=True)
         env.parse(body.subject)
         env.parse(body.html_body)
-    except Exception as e:
-        raise HTTPException(400, f"템플릿 문법 오류: {e}")
+    except Exception:
+        raise HTTPException(400, "템플릿 문법 오류입니다. 문법을 확인해 주세요.")
 
     tmpl = db.query(EmailTemplate).filter(EmailTemplate.event_type == event_type).first()
     if not tmpl:
@@ -840,13 +878,13 @@ def preview_email_template(
         "portal_url": "http://itsm.example.com/tickets/42",
     }
     try:
-        from jinja2 import Environment, select_autoescape
-        env = Environment(autoescape=select_autoescape(["html"]))
+        from jinja2.sandbox import SandboxedEnvironment
+        env = SandboxedEnvironment(autoescape=True)
         subject = env.from_string(body.subject).render(**sample_ctx)
         html_body = env.from_string(body.html_body).render(**sample_ctx)
         return {"subject": subject, "html_body": html_body}
-    except Exception as e:
-        raise HTTPException(400, f"렌더링 오류: {e}")
+    except Exception:
+        raise HTTPException(400, "템플릿 렌더링 오류입니다. 문법을 확인해 주세요.")
 
 
 
@@ -930,10 +968,13 @@ def update_outbound_webhook(
 
 @router.delete("/outbound-webhooks/{hook_id}", status_code=204)
 def delete_outbound_webhook(
+    request: Request,
     hook_id: int,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
+    user: dict = Depends(require_admin),
 ):
+    from ..routers.auth import verify_sudo_token  # HIGH-03
+    verify_sudo_token(request, user, db)
     hook = db.query(OutboundWebhook).filter(OutboundWebhook.id == hook_id).first()
     if not hook:
         raise HTTPException(404, "웹훅을 찾을 수 없습니다.")
@@ -942,7 +983,9 @@ def delete_outbound_webhook(
 
 
 @router.post("/outbound-webhooks/{hook_id}/test")
+@(limiter.limit("10/minute") if limiter else lambda f: f)
 def test_outbound_webhook(
+    request: Request,
     hook_id: int,
     db: Session = Depends(get_db),
     _user: dict = Depends(require_admin),
@@ -1213,10 +1256,13 @@ def create_api_key(
 
 @router.delete("/api-keys/{key_id}", status_code=204)
 def revoke_api_key(
+    request: Request,
     key_id: int,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
+    user: dict = Depends(require_admin),
 ):
+    from ..routers.auth import verify_sudo_token  # HIGH-03
+    verify_sudo_token(request, user, db)
     from ..models import ApiKey
     rec = db.query(ApiKey).filter(ApiKey.id == key_id).first()
     if not rec:

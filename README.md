@@ -340,10 +340,10 @@ GITLAB_EXTERNAL_URL=http://<HOST>:8929 # 브라우저에서 GitLab에 직접 접
 REDIS_PASSWORD=<openssl rand -hex 16>
 
 # ── ZENITH API ──────────────────────────────────────────────
-SECRET_KEY=<openssl rand -hex 32>          # JWT 서명 키 (최소 32자)
-TOKEN_ENCRYPTION_KEY=<Fernet 키>           # Refresh Token 암호화
+SECRET_KEY=<openssl rand -hex 32>          # JWT 서명 키 (최소 32자, 기본값 사용 시 시작 거부)
+TOKEN_ENCRYPTION_KEY=<Fernet 키>           # Refresh Token 암호화 (미설정 시 시작 경고)
 ENVIRONMENT=production                      # development | production
-REFRESH_TOKEN_EXPIRE_DAYS=30               # Refresh Token 유효 기간
+REFRESH_TOKEN_EXPIRE_DAYS=7                # Refresh Token 유효 기간 (기본 7일)
 FRONTEND_URL=http://<HOST>:8111            # 이메일 알림 링크에 사용되는 ZENITH URL
 
 # ── 프론트엔드 빌드 시 주입 ────────────────────────────────
@@ -407,9 +407,10 @@ CLAMAV_HOST=clamav
 CLAMAV_PORT=3310
 
 # ── 모니터링 ────────────────────────────────────────────────
-GRAFANA_PASSWORD=<Grafana 관리자 비밀번호>
+GRAFANA_PASSWORD=<Grafana 관리자 비밀번호>  # 미설정 시 docker compose up 실패
 GRAFANA_PORT=3001
 GRAFANA_ROOT_URL=http://<HOST>:3001
+METRICS_TOKEN=<openssl rand -hex 32>        # nginx /metrics 엔드포인트 토큰 인증
 ```
 
 ### 시크릿 생성 명령어 모음
@@ -429,6 +430,9 @@ openssl rand -hex 20
 
 # GRAFANA_PASSWORD (읽기 쉬운 형태)
 openssl rand -base64 12
+
+# METRICS_TOKEN (nginx /metrics 엔드포인트 보호)
+openssl rand -hex 32
 ```
 
 ---
@@ -789,7 +793,7 @@ docker compose exec itsm-api alembic upgrade head
 
 ```
 GitLab OAuth 2.0 → JWT Access Token (2시간)
-                 → Refresh Token (30일, Token Rotation)
+                 → Refresh Token (7일, Token Rotation)  ← 기존 30일에서 단축
                  → JTI 블랙리스트 (로그아웃 시 즉시 무효화)
                  → 세션 최대 5개 제한
 ```
@@ -798,8 +802,17 @@ GitLab OAuth 2.0 → JWT Access Token (2시간)
 
 - 최대 **10 MB**
 - MIME 타입 + **Magic Bytes** 이중 검증
-- 이미지 **EXIF 메타데이터 자동 제거** (Pillow) — GPS·기기정보 포함
+- 이미지 **EXIF 메타데이터 자동 제거** (JPEG/PNG/WebP, Pillow) — GPS·기기정보 포함 (GIF는 애니메이션 구조 특성상 제외)
 - **ClamAV 바이러스 스캔** (fail-open: ClamAV 장애 시 통과)
+
+### 입력 검증 & XSS 방어
+
+- 티켓 상세 HTML 렌더링에 **DOMPurify** (`isomorphic-dompurify`) 적용 — 커스텀 정규식 대비 `<details ontoggle>` 등 우회 벡터 완전 차단
+- 고객 포털 확인 이메일 본문에 `html.escape()` 적용 — 이름·URL 필드 XSS 방어
+- KB 검색 LIKE 폴백에서 `%`, `_`, `\` **메타문자 이스케이프** — LIKE Wildcard Injection 방지
+- 티켓 CSV 다운로드 시 **Formula Injection 방어** — `=`, `+`, `-`, `@` 접두 필드에 `'` 자동 삽입
+- GitLab 웹훅 페이로드 외부 문자열에서 **CR/LF·제어문자 제거** — 로그 인젝션 방지
+- 인앱 알림 `link` 필드는 `/` 시작 내부 상대 경로만 허용 — Open Redirect 방지
 
 ### 입력 검증 & PII 보호
 
@@ -810,10 +823,24 @@ GitLab OAuth 2.0 → JWT Access Token (2시간)
 - SQLAlchemy ORM (SQL Injection 방지)
 - **SSRF 방지**: 외부 URL 등록 시 내부망 IP 차단
 
+### 설정 보안
+
+- `SECRET_KEY` 기본값 (`change_me_to_random_32char_string` 등) 사용 시 **서버 시작 거부** — 공개 레포 노출 기본값 차단
+- `CORS_ORIGINS=*` 를 프로덕션(`ENVIRONMENT=production`)에서 사용 시 **서버 시작 거부**
+- `TOKEN_ENCRYPTION_KEY` 미설정 시 프로덕션 환경에서 시작 로그에 경고 기록
+- `GITLAB_WEBHOOK_SECRET` 미설정 시 시작 로그에 경고 + 모든 웹훅 요청 거부 (fail-closed)
+- Rate Limiting 비활성화 상태로 프로덕션 시작 시 `CRITICAL` 수준 로그 기록
+
 ### 감사 로그
 
 - 모든 주요 이벤트 기록 (수행자·역할·IP·타임스탬프)
 - **PostgreSQL 트리거로 수정·삭제 원천 차단** (Immutable 테이블)
+- 감사 로그 검색 필터(`resource_type`, `action`)에 서버 측 **allowlist 검증** — 정보 수집 공격 방지
+
+### 관리자 작업 보안
+
+- **Sudo 재인증**: 서비스 유형 삭제·에스컬레이션 정책 삭제·아웃바운드 웹훅 삭제·API 키 취소 등 파괴적 작업에 `verify_sudo_token` 적용
+- **XFF 신뢰 프록시 처리**: Sudo 토큰 발급·검증 시 `X-Forwarded-For`는 `TRUSTED_PROXIES` 설정 프록시 또는 사설 IP에서만 신뢰 — IP 스푸핑 우회 차단
 
 ### 네트워크 보안
 
@@ -826,6 +853,8 @@ GitLab OAuth 2.0 → JWT Access Token (2시간)
 | `Content-Security-Policy` | 인라인 스크립트만 허용 |
 | `Strict-Transport-Security` | `max-age=31536000` |
 | `Permissions-Policy` | 카메라·마이크·위치 차단 |
+
+> **참고**: HSTS 헤더는 HTTPS 응답에서만 브라우저가 처리합니다. TLS 종단이 nginx 앞단(로드밸런서 등)에 있다면 해당 계층에도 HSTS를 설정하세요.
 
 ### API 키 인증 (외부 연동)
 
@@ -841,12 +870,16 @@ curl http://localhost:8111/api/tickets/ \
   -H "Authorization: Bearer itsm_live_<키>"
 ```
 
+API 키는 `developer` 역할로 고정됩니다. 실제 리소스 접근은 `scopes` 배열로 제어되며, 관리자 전용 엔드포인트는 별도 `require_role("admin")` 또는 `verify_sudo_token()`으로 보호됩니다.
+
 ### Rate Limiting
 
 | 엔드포인트 | 제한 |
 |-----------|------|
 | 티켓 생성 | 10회 / 분 |
 | 파일 업로드 | 5회 / 분 |
+| 고객 포털 제출 | 5회 / 분 |
+| 로그인 시도 | 10회 / 분 (IP) · 5회 / 분 (계정) |
 
 ---
 
@@ -856,8 +889,10 @@ curl http://localhost:8111/api/tickets/ \
 
 | 서비스 | URL | 계정 |
 |--------|-----|------|
-| Prometheus | `http://<HOST>:9090` | — |
-| Grafana | `http://<HOST>:3001` | `admin` / `GRAFANA_PASSWORD` |
+| Prometheus | `http://127.0.0.1:9090` | — |
+| Grafana | `http://127.0.0.1:3001` | `admin` / `GRAFANA_PASSWORD` |
+
+> **보안**: Prometheus와 Grafana는 `127.0.0.1`에만 바인딩되어 외부에서 직접 접근이 불가능합니다. 외부 접근이 필요하다면 SSH 터널 또는 VPN을 통해 접속하세요.
 
 ### Prometheus 설정
 
@@ -1462,7 +1497,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ## 20. 버전 이력
 
-### 현재 버전 (2026-03-16)
+### 현재 버전 (2026-03-18)
 
 - **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22
 - **DB 마이그레이션**: 47단계 (0001~0047)
@@ -1518,6 +1553,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **병목 개선** | 티켓 목록 초기 로드: 272ms → 176ms (35% 단축) |
 | **네트워크** | nginx gzip 압축 (JSON 응답 90% 압축, 53 KB → 5 KB) |
 | **모니터링** | 비즈니스 KPI 27개 Prometheus 커스텀 메트릭 + Grafana 대시보드 4개 |
+| **보안 (4차 감사)** | XFF 신뢰 프록시 처리 · DOMPurify 적용 · SECRET_KEY 기본값 차단 · Sudo 재인증 범위 확대 · CSV Formula Injection 방어 · 감사로그 필터 allowlist · 이메일 XSS 이스케이프 · Webhook 제어문자 제거 · KB LIKE 메타문자 이스케이프 · 인앱 알림 링크 검증 · Prometheus/Grafana localhost 전용 · CORS 와일드카드 프로덕션 차단 · Refresh Token 30일→7일 · nginx Metrics Token envsubst |
 | **보안** | itsm-api 컨테이너 non-root 실행 (`appuser`) |
 | **CI/CD** | 3-환경 파이프라인 (개발기·테스트기·운영기) — 태그 기반 자동/수동 배포 |
 

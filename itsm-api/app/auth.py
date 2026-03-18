@@ -210,7 +210,11 @@ def _verify_api_key(api_key: str) -> dict | None:
                 "sub": f"apikey:{rec.id}",
                 "username": f"api:{rec.name}",
                 "name": rec.name,
-                "role": "developer",  # API 키는 developer 권한
+                # MED-05: API 키 역할은 developer로 고정.
+                # 리소스별 접근은 scopes 배열로 제어 (require_scope() 참조).
+                # admin 전용 엔드포인트는 별도 require_role("admin") 또는
+                # verify_sudo_token()으로 보호되므로 API 키로 우회 불가.
+                "role": "developer",
                 "scopes": rec.scopes,
                 "is_api_key": True,
             }
@@ -245,7 +249,30 @@ def get_current_user(request: Request) -> dict:
 
     # VULN-01: JWT payload에서 제거된 gitlab_token을 Redis에서 복원
     if jti:
-        payload["gitlab_token"] = get_gitlab_token(jti)
+        gitlab_token = get_gitlab_token(jti)
+        payload["gitlab_token"] = gitlab_token
+        # S-12: Redis에서 복원한 GitLab 토큰 만료 여부 검증
+        # Redis TTL이 남아있으면 토큰이 유효한 것으로 간주 (Redis가 만료 관리)
+        # Redis 키가 없으면 (TTL 0) 토큰이 만료된 것으로 처리
+        if not gitlab_token and jti:
+            try:
+                from .redis_client import get_redis
+                r = get_redis()
+                if r is not None:
+                    gl_ttl = r.ttl(f"gl_token:{jti}")
+                    if gl_ttl == -2:  # 키가 존재하지 않음 → 만료됨
+                        logger.warning(
+                            "GitLab token expired or missing for jti=%s — user may need to re-login",
+                            jti[:8] + "...",
+                        )
+                        raise HTTPException(
+                            status_code=401,
+                            detail="GitLab 세션이 만료됐습니다. 다시 로그인하세요.",
+                        )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning("GitLab token TTL check failed (fail-open): %s", e)
 
     # S-1: Check GitLab account is still active
     user_id = payload.get("sub", "")
@@ -323,3 +350,28 @@ def get_current_user(request: Request) -> dict:
                 )
 
     return payload
+
+
+def require_scope(scope: str):
+    """API 키 scope 검증 의존성 팩토리.
+
+    API 키 인증 시 scopes 필드에 지정된 scope가 포함된 경우에만 접근 허용.
+    일반 사용자(쿠키 인증)는 scope 검사를 건너뜀.
+
+    사용 예::
+        @router.get("/tickets")
+        def list_tickets(user=Depends(require_scope("tickets:read"))):
+            ...
+    """
+    def _check(user: dict = Depends(get_current_user)) -> dict:
+        if user.get("is_api_key"):
+            scopes = user.get("scopes") or []
+            if isinstance(scopes, str):
+                scopes = [s.strip() for s in scopes.split(",") if s.strip()]
+            if scope not in scopes:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"API 키에 필요한 scope가 없습니다: {scope}",
+                )
+        return user
+    return _check
