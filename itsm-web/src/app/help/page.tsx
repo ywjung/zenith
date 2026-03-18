@@ -153,6 +153,8 @@ const SECURITY_FEATURES: { emoji: string; title: string; desc: string; isNew?: b
   { emoji: '🔗', title: '인앱 알림 링크 내부 경로 검증',           desc: '인앱 알림의 link 필드는 /로 시작하는 내부 상대 경로만 허용합니다. ://, //로 시작하는 외부 URL 또는 CRLF를 포함한 값은 자동 거부됩니다. 알림 링크를 통한 Open Redirect 공격을 방어합니다.', isNew: true },
   { emoji: '📡', title: 'Prometheus / Grafana localhost 전용',     desc: 'Prometheus(:9090)와 Grafana(:3001)는 127.0.0.1에만 바인딩되어 외부에서 직접 접근이 불가능합니다. Grafana 관리자 비밀번호(GRAFANA_PASSWORD)는 .env 미설정 시 docker compose up 자체가 실패하여 기본 비밀번호 노출을 원천 차단합니다.', isNew: true },
   { emoji: '🌍', title: 'CORS 와일드카드 프로덕션 차단',            desc: 'CORS_ORIGINS에 *(전체 허용)를 설정한 채로 ENVIRONMENT=production으로 시작하면 서버 시작 실패로 처리됩니다. 개발 환경에서는 경고만 출력하고, 프로덕션에서는 명시적 출처 설정을 강제합니다.', isNew: true },
+  { emoji: '🔬', title: '의존성 취약점 자동 스캔 (pip-audit / npm audit)', desc: 'GitHub Actions CI에서 pip-audit(Python 패키지)과 npm audit(Node.js 패키지)를 자동 실행합니다. push/PR 시마다 known CVE를 탐지하고, Trivy로 Docker 이미지 취약점도 스캔합니다. Dependabot 설정으로 pip·npm·docker·GitHub Actions 의존성 업데이트 PR이 매주 자동 생성됩니다.', isNew: true },
+  { emoji: '🧪', title: '통합 테스트 스위트 (pytest + FastAPI TestClient)', desc: 'itsm-api/tests/ 하위에 65개 통합 테스트를 구성했습니다. SQLite 인메모리 DB(StaticPool)와 Redis 목(Mock)으로 외부 의존성 없이 로컬·CI에서 실행 가능합니다. RBAC 권한 검증, CRUD 흐름, 보안 입력 검증(LIKE 메타문자, CRLF 주입 등) 항목을 포함합니다. GitHub Actions tests.yml에서 PR마다 자동 실행됩니다.', isNew: true },
 ]
 
 /* ─── 워크플로우 & SLA 데이터 ────────────────────────────────────────── */

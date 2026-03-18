@@ -1,4 +1,4 @@
-"""Tests for /tickets endpoints — GitLab is mocked via httpx."""
+"""Tests for /tickets endpoints — GitLab is mocked via unittest.mock."""
 from unittest.mock import patch
 
 FAKE_ISSUE = {
@@ -17,26 +17,6 @@ def _make_issue(**overrides):
     return {**FAKE_ISSUE, **overrides}
 
 
-# ── list ──────────────────────────────────────────────────────────────────────
-
-def test_list_tickets(client):
-    with patch("app.gitlab_client.get_issues", return_value=[FAKE_ISSUE]):
-        resp = client.get("/tickets/")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data) == 1
-    assert data[0]["iid"] == 1
-    assert data[0]["employee_name"] == "홍길동"
-
-
-def test_list_tickets_gitlab_error(client):
-    with patch("app.gitlab_client.get_issues", side_effect=Exception("connection refused")):
-        resp = client.get("/tickets/")
-    assert resp.status_code == 502
-
-
-# ── create ────────────────────────────────────────────────────────────────────
-
 VALID_PAYLOAD = {
     "title": "네트워크 연결 불량 신고합니다",
     "description": "사무실 2층 회의실 인터넷이 안됩니다.",
@@ -47,35 +27,58 @@ VALID_PAYLOAD = {
 }
 
 
-def test_create_ticket(client):
-    with patch("app.gitlab_client.create_issue", return_value=_make_issue(iid=2)):
-        resp = client.post("/tickets/", json=VALID_PAYLOAD)
+# ── list ──────────────────────────────────────────────────────────────────────
+
+def test_list_tickets(client, admin_cookies):
+    """Admin role uses get_issues (server-side filtering), not get_all_issues."""
+    with patch("app.gitlab_client.get_issues", return_value=([FAKE_ISSUE], 1)):
+        resp = client.get("/tickets/", cookies=admin_cookies)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["tickets"][0]["iid"] == 1
+
+
+def test_list_tickets_gitlab_error(client, admin_cookies):
+    with patch("app.gitlab_client.get_issues", side_effect=Exception("connection refused")):
+        resp = client.get("/tickets/", cookies=admin_cookies)
+    assert resp.status_code == 502
+
+
+# ── create ────────────────────────────────────────────────────────────────────
+
+def test_create_ticket(client, user_cookies):
+    with (
+        patch("app.gitlab_client.create_issue", return_value=_make_issue(iid=2)),
+        patch("app.gitlab_client.ensure_labels"),
+    ):
+        resp = client.post("/tickets/", json=VALID_PAYLOAD, cookies=user_cookies)
     assert resp.status_code == 201
     assert resp.json()["iid"] == 2
 
 
-def test_create_ticket_title_too_short(client):
+def test_create_ticket_title_too_short(client, user_cookies):
     payload = {**VALID_PAYLOAD, "title": "짧음"}
-    resp = client.post("/tickets/", json=payload)
+    resp = client.post("/tickets/", json=payload, cookies=user_cookies)
     assert resp.status_code == 422
 
 
-def test_create_ticket_description_too_short(client):
+def test_create_ticket_description_too_short(client, user_cookies):
     payload = {**VALID_PAYLOAD, "description": "짧음"}
-    resp = client.post("/tickets/", json=payload)
+    resp = client.post("/tickets/", json=payload, cookies=user_cookies)
     assert resp.status_code == 422
 
 
 # ── get single ────────────────────────────────────────────────────────────────
 
-def test_get_ticket(client):
+def test_get_ticket(client, user_cookies):
     with patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE):
-        resp = client.get("/tickets/1")
+        resp = client.get("/tickets/1", cookies=user_cookies)
     assert resp.status_code == 200
     assert resp.json()["status"] == "open"
 
 
-def test_get_ticket_gitlab_error(client):
+def test_get_ticket_gitlab_error(client, user_cookies):
     with patch("app.gitlab_client.get_issue", side_effect=Exception("timeout")):
-        resp = client.get("/tickets/999")
+        resp = client.get("/tickets/999", cookies=user_cookies)
     assert resp.status_code == 502

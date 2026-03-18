@@ -12,7 +12,7 @@ CLOSED_ISSUE = {
     "web_url": "http://gitlab/issues/1",
 }
 
-OPENED_ISSUE = {**CLOSED_ISSUE, "state": "opened"}
+OPENED_ISSUE = {**CLOSED_ISSUE, "state": "opened", "labels": ["cat::software", "prio::low", "status::open"]}
 
 RATING_PAYLOAD = {
     "employee_name": "홍길동",
@@ -22,53 +22,53 @@ RATING_PAYLOAD = {
 }
 
 
-def test_create_rating(client):
+def test_create_rating(client, user_cookies):
     with (
         patch("app.gitlab_client.get_issue", return_value=CLOSED_ISSUE),
         patch("app.gitlab_client.add_note", return_value={}),
     ):
-        resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD)
+        resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=user_cookies)
     assert resp.status_code == 201
     data = resp.json()
     assert data["score"] == 5
     assert data["gitlab_issue_iid"] == 1
 
 
-def test_create_rating_duplicate(client):
+def test_create_rating_duplicate(client, user_cookies):
     with (
         patch("app.gitlab_client.get_issue", return_value=CLOSED_ISSUE),
         patch("app.gitlab_client.add_note", return_value={}),
     ):
-        client.post("/tickets/1/ratings", json=RATING_PAYLOAD)
-        resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD)
+        client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=user_cookies)
+        resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=user_cookies)
     assert resp.status_code == 409
 
 
-def test_create_rating_open_ticket(client):
+def test_create_rating_open_ticket(client, user_cookies):
     with patch("app.gitlab_client.get_issue", return_value=OPENED_ISSUE):
-        resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD)
+        resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=user_cookies)
     assert resp.status_code == 400
-    assert "완료된 티켓" in resp.json()["detail"]
+    assert "처리완료 또는 종료된" in resp.json()["detail"]
 
 
-def test_create_rating_invalid_score(client):
+def test_create_rating_invalid_score(client, user_cookies):
     payload = {**RATING_PAYLOAD, "score": 6}
-    resp = client.post("/tickets/1/ratings", json=payload)
+    resp = client.post("/tickets/1/ratings", json=payload, cookies=user_cookies)
     assert resp.status_code == 422
 
 
-def test_get_rating_not_found(client):
-    resp = client.get("/tickets/999/ratings")
+def test_get_rating_not_found(client, user_cookies):
+    resp = client.get("/tickets/999/ratings", cookies=user_cookies)
     assert resp.status_code == 200
     assert resp.json() is None
 
 
-def test_get_rating_exists(client):
+def test_get_rating_exists(client, user_cookies):
     with (
         patch("app.gitlab_client.get_issue", return_value=CLOSED_ISSUE),
         patch("app.gitlab_client.add_note", return_value={}),
     ):
-        client.post("/tickets/1/ratings", json=RATING_PAYLOAD)
-    resp = client.get("/tickets/1/ratings")
+        client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=user_cookies)
+    resp = client.get("/tickets/1/ratings", cookies=user_cookies)
     assert resp.status_code == 200
     assert resp.json()["score"] == 5

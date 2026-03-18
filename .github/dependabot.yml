@@ -1,0 +1,52 @@
+version: 2
+updates:
+  # Python 의존성 (pip)
+  - package-ecosystem: "pip"
+    directory: "/itsm-api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "python"
+    # 보안 패치는 즉시 PR 생성
+    open-pull-requests-limit: 10
+
+  # Node.js 의존성 (npm)
+  - package-ecosystem: "npm"
+    directory: "/itsm-web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "javascript"
+    open-pull-requests-limit: 10
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/itsm-api"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/itsm-web"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"

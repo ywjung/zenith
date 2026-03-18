@@ -1,0 +1,92 @@
+name: Security Dependency Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 매주 월요일 오전 9시 (UTC 기준)
+    - cron: '0 0 * * 1'
+
+jobs:
+  python-audit:
+    name: Python pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        working-directory: itsm-api
+        run: |
+          pip-audit -r requirements.txt \
+            --output-format json \
+            --output pip-audit-results.json \
+            || (cat pip-audit-results.json && exit 1)
+
+      - name: Upload pip-audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-results
+          path: itsm-api/pip-audit-results.json
+
+  node-audit:
+    name: Node npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: itsm-web
+        run: npm ci --ignore-scripts
+
+      - name: Run npm audit
+        working-directory: itsm-web
+        # moderate 이상 심각도에서 실패 처리
+        run: npm audit --audit-level=moderate
+
+  trivy-scan:
+    name: Trivy container scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image
+        run: docker build -t itsm-api:scan ./itsm-api
+
+      - name: Build Web image
+        run: docker build -t itsm-web:scan ./itsm-web
+
+      - name: Trivy scan — API
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'itsm-api:scan'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Trivy scan — Web
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'itsm-web:scan'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'

@@ -1,0 +1,50 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  api-tests:
+    name: API Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        working-directory: itsm-api
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov httpx
+
+      - name: Run tests
+        working-directory: itsm-api
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          GITLAB_API_URL: http://fake-gitlab
+          GITLAB_ADMIN_TOKEN: test-token
+          GITLAB_PROJECT_ID: "1"
+          ENVIRONMENT: development
+          CORS_ORIGINS: http://localhost
+          SECRET_KEY: test-secret-key-at-least-32-chars-long
+          REDIS_URL: redis://localhost:6379
+        run: |
+          pytest tests/ -v \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --tb=short
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: itsm-api/coverage.xml

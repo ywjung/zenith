@@ -881,6 +881,33 @@ API 키는 `developer` 역할로 고정됩니다. 실제 리소스 접근은 `sc
 | 고객 포털 제출 | 5회 / 분 |
 | 로그인 시도 | 10회 / 분 (IP) · 5회 / 분 (계정) |
 
+### 의존성 취약점 스캔 (GitHub Actions)
+
+GitHub Actions CI에서 세 가지 스캔이 자동 실행됩니다.
+
+| 도구 | 대상 | 실행 시점 |
+|------|------|---------|
+| **pip-audit** | Python 패키지 (requirements.txt) | push/PR/주간 cron |
+| **npm audit** | Node.js 패키지 (package-lock.json) | push/PR/주간 cron |
+| **Trivy** | Docker 이미지 (API·Web) | push/PR/주간 cron |
+
+```bash
+# 로컬에서 스캔 실행
+pip install pip-audit
+pip-audit -r itsm-api/requirements.txt
+
+cd itsm-web && npm audit
+```
+
+**Dependabot** (`.github/dependabot.yml`) 설정으로 매주 자동 PR이 생성됩니다.
+
+| 패키지 매니저 | 업데이트 주기 |
+|-------------|------------|
+| `pip` (itsm-api) | 매주 월요일 |
+| `npm` (itsm-web) | 매주 월요일 |
+| Docker 베이스 이미지 | 매주 월요일 |
+| GitHub Actions | 매주 월요일 |
+
 ---
 
 ## 13. 모니터링 (Prometheus + Grafana)
@@ -1278,8 +1305,11 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev
 ### 테스트
 
 ```bash
-# 백엔드 테스트
+# 백엔드 통합 테스트 (65개, SQLite 인메모리 + Redis Mock)
 cd itsm-api && pytest tests/ -v
+
+# 커버리지 포함 실행
+cd itsm-api && pytest tests/ --cov=app --cov-report=term-missing
 
 # 프론트엔드 테스트
 cd itsm-web && npm test
@@ -1288,6 +1318,23 @@ cd itsm-web && npm test
 make lint
 # ruff (Python) + eslint (TypeScript) 동시 실행
 ```
+
+#### 테스트 구성
+
+| 파일 | 테스트 항목 |
+|------|------------|
+| `test_tickets.py` | 티켓 CRUD, GitLab 목(Mock), 권한 검증 |
+| `test_admin.py` | 관리자 RBAC, 서비스 유형/SLA/배정 규칙 CRUD |
+| `test_kb.py` | KB 문서 CRUD, 검색, LIKE 메타문자 안전성 |
+| `test_ratings.py` | 만족도 평가 생성/중복 방지/열린 티켓 차단 |
+| `test_auth.py` | JWT 토큰 검증, 만료/변조 처리, 세션 조회 |
+| `test_notifications.py` | 알림 링크 검증 (Open Redirect 방어, CRLF 차단) |
+| `test_webhooks.py` | 웹훅 문자열 안전화 (로그 인젝션 방어) |
+| `test_health.py` | 헬스체크 엔드포인트 응답 |
+
+**SQLite 호환 레이어**: PostgreSQL 전용 타입(JSONB, ARRAY, INET)과 pool 인수를 자동 변환하여 Docker 없이 로컬에서도 테스트 실행이 가능합니다.
+
+GitHub Actions (`.github/workflows/tests.yml`)에서 PR마다 자동 실행되며 커버리지 리포트를 생성합니다.
 
 ### 신규 마이그레이션 추가
 
@@ -1555,6 +1602,8 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **모니터링** | 비즈니스 KPI 27개 Prometheus 커스텀 메트릭 + Grafana 대시보드 4개 |
 | **보안 (4차 감사)** | XFF 신뢰 프록시 처리 · DOMPurify 적용 · SECRET_KEY 기본값 차단 · Sudo 재인증 범위 확대 · CSV Formula Injection 방어 · 감사로그 필터 allowlist · 이메일 XSS 이스케이프 · Webhook 제어문자 제거 · KB LIKE 메타문자 이스케이프 · 인앱 알림 링크 검증 · Prometheus/Grafana localhost 전용 · CORS 와일드카드 프로덕션 차단 · Refresh Token 30일→7일 · nginx Metrics Token envsubst |
 | **보안** | itsm-api 컨테이너 non-root 실행 (`appuser`) |
+| **의존성 취약점 스캔** | GitHub Actions CI에서 pip-audit(Python) + npm audit(Node.js) + Trivy(Docker) 자동 스캔 — push/PR/주간 cron 실행. Dependabot으로 pip·npm·docker·Actions 의존성 주간 자동 PR 생성 |
+| **통합 테스트 스위트** | pytest + FastAPI TestClient 기반 65개 통합 테스트 구축 — SQLite 인메모리 DB(StaticPool) + Redis Mock으로 외부 의존성 없이 실행 가능. RBAC 권한, CRUD 흐름, 보안 입력 검증 포함. GitHub Actions tests.yml에서 PR마다 자동 실행 |
 | **CI/CD** | 3-환경 파이프라인 (개발기·테스트기·운영기) — 태그 기반 자동/수동 배포 |
 
 ### 주요 버그 수정 이력
