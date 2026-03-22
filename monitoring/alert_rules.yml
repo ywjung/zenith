@@ -1,0 +1,233 @@
+groups:
+  - name: itsm_api_alerts
+    interval: 60s
+    rules:
+      # ─── 가용성 ────────────────────────────────────────────────────────────────
+      - alert: ITSMApiDown
+        expr: up{job="itsm-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ITSM API 서비스 다운"
+          description: "{{ $labels.instance }} 가 2분 이상 응답하지 않습니다."
+
+      # ─── HTTP 오류율 ───────────────────────────────────────────────────────────
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 5xx 오류율 5% 초과"
+          description: "최근 5분간 오류율: {{ $value | humanizePercentage }}"
+
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.20
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HTTP 5xx 오류율 20% 초과 — 즉시 조치 필요"
+          description: "최근 5분간 오류율: {{ $value | humanizePercentage }}"
+
+      # ─── 응답 지연 ─────────────────────────────────────────────────────────────
+      - alert: SlowResponseTime
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API P95 응답 시간 2초 초과"
+          description: "P95 응답 시간: {{ $value | humanizeDuration }}"
+
+      - alert: VerySlowResponseTime
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 5.0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API P99 응답 시간 5초 초과"
+          description: "P99 응답 시간: {{ $value | humanizeDuration }}"
+
+      # ─── 요청량 이상 ───────────────────────────────────────────────────────────
+      - alert: HighRequestRate
+        expr: sum(rate(http_requests_total[1m])) > 500
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "비정상적으로 높은 요청량 (>500 req/s)"
+          description: "현재 요청률: {{ $value | humanize }} req/s"
+
+  - name: itsm_database_alerts
+    interval: 60s
+    rules:
+      # ─── DB 연결 풀 ────────────────────────────────────────────────────────────
+      - alert: DatabaseConnectionPoolExhausted
+        expr: db_pool_overflow_total > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB 연결 풀 오버플로우 발생"
+          description: "연결 풀이 최대치를 초과하고 있습니다. 현재 overflow: {{ $value }}"
+
+      - alert: DatabaseConnectionPoolHighUsage
+        expr: |
+          (db_pool_checkedout / db_pool_size) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB 연결 풀 사용률 85% 초과"
+          description: "사용률: {{ $value | humanizePercentage }}"
+
+      # ─── 쿼리 지연 ─────────────────────────────────────────────────────────────
+      - alert: SlowDatabaseQuery
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(db_query_duration_seconds_bucket[5m])) by (le)
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB P95 쿼리 응답 1초 초과"
+          description: "P95 쿼리 시간: {{ $value | humanizeDuration }}"
+
+  - name: itsm_celery_alerts
+    interval: 60s
+    rules:
+      # ─── Celery 큐 적체 ────────────────────────────────────────────────────────
+      - alert: CeleryQueueBacklog
+        expr: celery_queue_length > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery 큐 적체 — 대기 태스크 {{ $value }}개"
+          description: "큐 이름: {{ $labels.queue_name }}, 대기: {{ $value }}개"
+
+      - alert: CeleryQueueCriticalBacklog
+        expr: celery_queue_length > 500
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Celery 큐 심각한 적체 — 즉시 확인 필요"
+          description: "대기 태스크 {{ $value }}개 — 워커 증설 또는 태스크 검토 필요"
+
+      # ─── Celery 태스크 실패율 ───────────────────────────────────────────────────
+      - alert: HighCeleryTaskFailureRate
+        expr: |
+          (
+            rate(celery_tasks_total{state="FAILURE"}[5m])
+            /
+            rate(celery_tasks_total[5m])
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery 태스크 실패율 10% 초과"
+          description: "실패율: {{ $value | humanizePercentage }}"
+
+  - name: itsm_sla_alerts
+    interval: 60s
+    rules:
+      # ─── SLA 위반율 ────────────────────────────────────────────────────────────
+      - alert: HighSLABreachRate
+        expr: |
+          (
+            itsm_sla_breached_tickets_total
+            /
+            itsm_active_tickets_total
+          ) > 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SLA 위반 티켓 비율 15% 초과"
+          description: "전체 활성 티켓 중 SLA 위반: {{ $value | humanizePercentage }}"
+
+      - alert: SLABreachCountHigh
+        expr: itsm_sla_breached_tickets_total > 50
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SLA 위반 티켓 50개 초과"
+          description: "현재 SLA 위반 티켓 수: {{ $value }}"
+
+  - name: itsm_system_alerts
+    interval: 30s
+    rules:
+      # ─── 메모리 사용률 ──────────────────────────────────────────────────────────
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "메모리 사용률 85% 초과"
+          description: "사용률: {{ $value | humanizePercentage }}"
+
+      - alert: CriticalMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "메모리 사용률 95% 초과 — OOM 위험"
+          description: "사용률: {{ $value | humanizePercentage }}"
+
+      # ─── CPU 사용률 ─────────────────────────────────────────────────────────────
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU 사용률 80% 초과 (10분 지속)"
+          description: "CPU 사용률: {{ $value | humanize }}%"
+
+      # ─── 디스크 사용률 ──────────────────────────────────────────────────────────
+      - alert: HighDiskUsage
+        expr: |
+          (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) > 0.80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "디스크 사용률 80% 초과"
+          description: "마운트: {{ $labels.mountpoint }}, 사용률: {{ $value | humanizePercentage }}"
+
+      - alert: CriticalDiskUsage
+        expr: |
+          (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) > 0.95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "디스크 사용률 95% 초과 — 즉시 정리 필요"
+          description: "마운트: {{ $labels.mountpoint }}, 잔여 공간: {{ $value | humanize }}"

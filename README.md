@@ -1400,20 +1400,21 @@ make lint
 
 **SQLite 호환 레이어**: PostgreSQL 전용 타입(JSONB, ARRAY, INET)과 pool 인수를 자동 변환하여 Docker 없이 로컬에서도 테스트 실행이 가능합니다.
 
-#### E2E 테스트 구성 (Playwright · 65개)
+#### E2E 테스트 구성 (Playwright · 11 spec 파일)
 
 | 파일 | 테스트 항목 |
 |------|------------|
 | `auth.setup.ts` | 관리자 JWT 쿠키 주입 및 storageState 저장 |
 | `tickets.spec.ts` | 티켓 목록·생성 폼·필터·검색 E2E |
 | `ticket-flow.spec.ts` | 티켓 전체 플로우 (생성→목록→상세→댓글·네비게이션) |
+| `comment-flow.spec.ts` | 댓글 입력·제출·내부메모·접근성 플로우 |
 | `mobile.spec.ts` | 모바일 뷰포트 반응형 UI 검증 (Pixel 7, 412px) |
+| `a11y.spec.ts` | WCAG 2.1 AA 접근성 자동 감사 (axe-playwright, 주요 8개 페이지) |
 | `admin.spec.ts` | 관리자 패널·사용자관리·SLA·접근성 |
 | `portal.spec.ts` | 고객 포털 티켓 제출·이메일 유효성 |
 | `automation.spec.ts` | 자동화 규칙 페이지·탭·API |
 | `kb.spec.ts` | 지식베이스 목록·상세·작성 페이지 |
 | `notifications.spec.ts` | 알림 목록·전체읽음·SSE 스트림 |
-| `approvals.spec.ts` | 승인 대기 목록·상세·E2E 플로우 |
 
 **인증 방식**: JWT 토큰을 `create_token()` + `store_gitlab_token()` 로 생성·Redis 등록 후 `E2E_ADMIN_TOKEN` 환경변수로 주입합니다. CI (`e2e.yml`)에서는 토큰 생성과 Redis 등록이 자동으로 실행됩니다.
 

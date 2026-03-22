@@ -324,6 +324,7 @@ services:
       - "127.0.0.1:9090:9090"  # HIGH-02: localhost만 바인딩 — 외부 노출 방지
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - itsm_prometheus:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'

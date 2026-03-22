@@ -2645,7 +2645,7 @@ function TabPerf() {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {[
-                { item: 'pytest 전체 테스트', result: '✅ 1,582 passed', note: '0 failed · 848 warnings' },
+                { item: 'pytest 전체 테스트', result: '✅ 1,634 passed', note: '0 failed · 848 warnings' },
                 { item: '코드 커버리지', result: '✅ 93%', note: '10,043 statements (전체), 726 missed' },
                 { item: 'celery_app.py 임포트', result: '✅ 정상', note: 'Redis 브로커 연결 설정 포함' },
                 { item: '_dispatch_notification 래퍼', result: '✅ 정상', note: 'delay() 실패 시 BackgroundTasks fallback' },
@@ -2831,7 +2831,7 @@ function TabPerf() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
-            { title: '테스트 파일 구조 (65개 통과)', color: 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20', items: ['auth.setup.ts — 관리자 로그인·쿠키 저장', 'tickets.spec.ts — 티켓 목록·생성·검색 E2E', 'ticket-flow.spec.ts — 티켓 전체 플로우 (생성→목록→상세→댓글)', 'mobile.spec.ts — 모바일 뷰포트 반응형 UI 검증 (Pixel 7)', 'admin.spec.ts — 관리자 패널·접근성 검사', 'portal.spec.ts — 고객 포털 티켓 제출 플로우', 'automation.spec.ts — 자동화 규칙 관리·API', 'kb.spec.ts — 지식베이스 목록·상세·작성', 'notifications.spec.ts — 알림·SSE 스트림·배지', 'approvals.spec.ts — 승인 대기·E2E 플로우'] },
+            { title: '테스트 파일 구조 (11개 스펙)', color: 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20', items: ['auth.setup.ts — 관리자 로그인·쿠키 저장', 'tickets.spec.ts — 티켓 목록·생성·검색 E2E', 'ticket-flow.spec.ts — 티켓 전체 플로우 (생성→목록→상세→댓글)', 'comment-flow.spec.ts — 댓글 입력·제출·내부메모 플로우', 'mobile.spec.ts — 모바일 뷰포트 반응형 UI 검증 (Pixel 7)', 'a11y.spec.ts — WCAG 2.1 AA 접근성 자동 감사 (axe-playwright)', 'admin.spec.ts — 관리자 패널·접근성 검사', 'portal.spec.ts — 고객 포털 티켓 제출 플로우', 'automation.spec.ts — 자동화 규칙 관리·API', 'kb.spec.ts — 지식베이스 목록·상세·작성', 'notifications.spec.ts — 알림·SSE 스트림·배지'] },
             { title: '인증 전략 (JWT + Redis)', color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20', items: ['토큰 생성: create_token() + store_gitlab_token(jti)', 'E2E_ADMIN_TOKEN 환경변수 → 쿠키 직접 주입 (CI)', 'GitLab OAuth 버튼 클릭 → 인터랙티브 로그인 (로컬)', 'storageState: e2e/.auth/admin.json 재사용', '포털 테스트: 인증 없이 독립 실행 (portal 프로젝트)'] },
             { title: 'CI 통합 (.github/workflows/e2e.yml)', color: 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20', items: ['E2E_BASE_URL: http://localhost:3000 (CI 내부)', 'JWT 토큰 자동 생성 + Redis JTI 등록 (CI 단계)', 'Next.js 서버 준비 대기 (curl 헬스체크 루프)', 'retries: 2 (CI 환경 flaky 대응)', 'screenshot/video: 실패 시 Artifact 14일 저장'] },
           ].map((card) => (
@@ -2864,7 +2864,7 @@ function TabPerf() {
             { emoji: '✅', label: '보안 헤더 7종', desc: 'CSP·HSTS·X-Frame 등' },
             { emoji: '✅', label: 'npm 취약점', desc: 'high/critical 없음 (low 4건)' },
             { emoji: '✅', label: '비즈니스 메트릭', desc: '27개 샘플 수집 중' },
-            { emoji: '✅', label: '테스트 커버리지', desc: '93% (pytest 1,582 + E2E 65 passed)' },
+            { emoji: '✅', label: '테스트 커버리지', desc: '93%+ (pytest 1,634 + E2E 11 스펙 파일)' },
             { emoji: '⚠️', label: 'SECRET_KEY', desc: '운영 배포 전 반드시 교체 필요' },
           ].map((item) => (
             <div key={item.label} className={`flex items-start gap-3 rounded-lg border p-3 ${item.emoji === '⚠️' ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
