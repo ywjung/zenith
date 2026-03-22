@@ -111,7 +111,8 @@ def _get_headers(gitlab_token: Optional[str] = None) -> dict:
     return _headers()
 
 
-_USER_CACHE_TTL = 3600  # 1 hour
+_USER_CACHE_TTL = 3600   # 1 hour
+_ISSUES_CACHE_TTL = 30   # 30초 — GitLab API rate-limit 방어용 (검색·필터 쿼리 공유)
 
 def _redis_client():
     """공유 ConnectionPool 기반 Redis 클라이언트 반환. 연결 실패 시 None."""
@@ -370,6 +371,23 @@ def get_issues(
     if assignee_username:
         params["assignee_username"] = assignee_username
 
+    # 검색어·업데이트 필터가 있으면 캐시 건너뜀 (실시간성 필요)
+    _use_cache = not (search or updated_after or updated_before)
+    _cache_key: Optional[str] = None
+    if _use_cache:
+        import hashlib as _hl, json as _js
+        _raw = _js.dumps(params, sort_keys=True) + str(project_id)
+        _cache_key = "gl:issues:" + _hl.md5(_raw.encode()).hexdigest()
+        _r = _redis_client()
+        if _r:
+            try:
+                _cached = _r.get(_cache_key)
+                if _cached:
+                    _data = _js.loads(_cached)
+                    return _data["issues"], _data["total"]
+            except Exception:
+                pass
+
     _check_circuit()
     try:
         with _http_ctx() as client:
@@ -381,6 +399,14 @@ def get_issues(
                 total = int(resp.headers.get("X-Total", len(_json)))
             except (ValueError, TypeError):
                 total = len(_json)
+            if _cache_key:
+                _r = _redis_client()
+                if _r:
+                    try:
+                        import json as _js2
+                        _r.setex(_cache_key, _ISSUES_CACHE_TTL, _js2.dumps({"issues": _json, "total": total}))
+                    except Exception:
+                        pass
             return _json, total
     except Exception:
         _record_failure()
@@ -477,6 +503,42 @@ def add_note(
         )
         resp.raise_for_status()
         return resp.json()
+
+
+def update_note(
+    iid: int,
+    note_id: int,
+    body: str,
+    project_id: Optional[str] = None,
+    gitlab_token: Optional[str] = None,
+) -> dict:
+    """이슈 노트(댓글)를 수정한다. gitlab_token은 작성자 본인 토큰이어야 한다."""
+    headers = _get_headers(gitlab_token)
+    with _http_ctx() as client:
+        resp = client.put(
+            f"{_base(project_id)}/issues/{iid}/notes/{note_id}",
+            headers=headers,
+            json={"body": body},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+def delete_note(
+    iid: int,
+    note_id: int,
+    project_id: Optional[str] = None,
+    gitlab_token: Optional[str] = None,
+) -> None:
+    """이슈 노트(댓글)를 삭제한다."""
+    headers = _get_headers(gitlab_token)
+    with _http_ctx() as client:
+        resp = client.delete(
+            f"{_base(project_id)}/issues/{iid}/notes/{note_id}",
+            headers=headers,
+        )
+        if resp.status_code not in (200, 204):
+            resp.raise_for_status()
 
 
 def delete_issue(iid: int, project_id: Optional[str] = None, gitlab_token: Optional[str] = None) -> None:
@@ -854,6 +916,61 @@ def get_issue_linked_mrs(iid: int, project_id: Optional[str] = None) -> list[dic
     return []
 
 
+def get_issue_links(iid: int, project_id: Optional[str] = None) -> list[dict]:
+    """이슈 관계(Linked Issues) 목록 반환 — link_type: relates_to | blocks | is_blocked_by."""
+    try:
+        with _http_ctx() as client:
+            resp = client.get(
+                f"{_base(project_id)}/issues/{iid}/links",
+                headers=_headers(),
+                params={"per_page": 50},
+            )
+            if resp.is_success:
+                return resp.json()
+    except Exception as e:
+        logger.warning("Failed to fetch issue links for #%s: %s", iid, e)
+    return []
+
+
+def create_issue_link(
+    iid: int,
+    target_iid: int,
+    link_type: str = "relates_to",
+    project_id: Optional[str] = None,
+    target_project_id: Optional[str] = None,
+) -> dict | None:
+    """두 이슈 사이에 관계를 생성한다. link_type: relates_to | blocks | is_blocked_by."""
+    s = get_settings()
+    target_pid = target_project_id or project_id or str(s.GITLAB_PROJECT_ID)
+    try:
+        with _http_ctx() as client:
+            resp = client.post(
+                f"{_base(project_id)}/issues/{iid}/links",
+                headers=_headers(),
+                json={"target_project_id": int(target_pid), "target_issue_iid": target_iid, "link_type": link_type},
+            )
+            if resp.is_success:
+                return resp.json()
+            logger.warning("create_issue_link failed: %s %s", resp.status_code, resp.text[:200])
+    except Exception as e:
+        logger.warning("Failed to create issue link #%s→#%s: %s", iid, target_iid, e)
+    return None
+
+
+def delete_issue_link(iid: int, link_id: int, project_id: Optional[str] = None) -> bool:
+    """이슈 관계 삭제."""
+    try:
+        with _http_ctx() as client:
+            resp = client.delete(
+                f"{_base(project_id)}/issues/{iid}/links/{link_id}",
+                headers=_headers(),
+            )
+            return resp.is_success
+    except Exception as e:
+        logger.warning("Failed to delete issue link %s for #%s: %s", link_id, iid, e)
+    return False
+
+
 def search_issues(
     query: str,
     project_id: Optional[str] = None,
@@ -1078,6 +1195,23 @@ def trigger_pipeline(
         )
         resp.raise_for_status()
         return resp.json()
+
+
+def get_user_email(user_id: int) -> Optional[str]:
+    """GitLab 사용자 이메일 조회.
+
+    관리자 토큰이 있을 때만 email 필드가 반환된다.
+    접근 불가 시 None 반환.
+    """
+    try:
+        s = get_settings()
+        with _http_ctx() as client:
+            resp = client.get(f"{s.GITLAB_API_URL}/api/v4/users/{user_id}", headers=_headers())
+            if resp.is_success:
+                return resp.json().get("email") or None
+    except Exception:
+        pass
+    return None
 
 
 def list_pipelines(

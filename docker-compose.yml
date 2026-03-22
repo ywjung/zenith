@@ -79,6 +79,8 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-30}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
       GITLAB_API_URL: ${GITLAB_API_URL:-http://gitlab:8929}
       GITLAB_EXTERNAL_URL: ${GITLAB_EXTERNAL_URL:-http://localhost:8929}
       GITLAB_PROJECT_ID: ${GITLAB_PROJECT_ID}
@@ -117,6 +119,14 @@ services:
       ADMIN_ALLOWED_CIDRS: ${ADMIN_ALLOWED_CIDRS:-}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       CLAMAV_STRICT: ${CLAMAV_STRICT:-true}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-itsm-api}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minio_admin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret_change_me}
+      MINIO_BUCKET: ${MINIO_BUCKET:-itsm-attachments}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
     volumes:
       - gitlab_data:/gitlab_data:ro
     depends_on:
@@ -132,6 +142,120 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+
+  # ---------------------------------------------------------------------
+  # celery-worker
+  # 이메일·Telegram·웹훅 알림을 비동기로 처리하는 Celery worker
+  # ---------------------------------------------------------------------
+  celery-worker:
+    image: ${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}
+    restart: unless-stopped
+    command: celery -A app.celery_app:celery_app worker --loglevel=info --concurrency=4
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      GITLAB_API_URL: ${GITLAB_API_URL:-http://gitlab:8929}
+      GITLAB_EXTERNAL_URL: ${GITLAB_EXTERNAL_URL:-http://localhost:8929}
+      GITLAB_PROJECT_ID: ${GITLAB_PROJECT_ID}
+      GITLAB_PROJECT_TOKEN: ${GITLAB_PROJECT_TOKEN}
+      GITLAB_GROUP_ID: ${GITLAB_GROUP_ID:-}
+      GITLAB_GROUP_TOKEN: ${GITLAB_GROUP_TOKEN:-}
+      GITLAB_OAUTH_CLIENT_ID: ${GITLAB_OAUTH_CLIENT_ID}
+      GITLAB_OAUTH_CLIENT_SECRET: ${GITLAB_OAUTH_CLIENT_SECRET}
+      GITLAB_OAUTH_REDIRECT_URI: ${GITLAB_OAUTH_REDIRECT_URI}
+      SECRET_KEY: ${SECRET_KEY}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-ITSM Portal <noreply@company.com>}
+      SMTP_TLS: ${SMTP_TLS:-true}
+      NOTIFICATION_ENABLED: ${NOTIFICATION_ENABLED:-false}
+      IT_TEAM_EMAIL: ${IT_TEAM_EMAIL:-}
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8111}
+    volumes:
+      - gitlab_data:/gitlab_data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.celery_app:celery_app", "inspect", "ping", "--timeout", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------
+  # celery-beat
+  # Celery Beat 스케줄러 — 주기 태스크(SLA 체크·스냅샷·유저 동기화) 발행
+  # ---------------------------------------------------------------------
+  celery-beat:
+    image: ${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}
+    restart: unless-stopped
+    command: celery -A app.celery_app:celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      GITLAB_API_URL: ${GITLAB_API_URL:-http://gitlab:8929}
+      GITLAB_EXTERNAL_URL: ${GITLAB_EXTERNAL_URL:-http://localhost:8929}
+      GITLAB_PROJECT_ID: ${GITLAB_PROJECT_ID}
+      GITLAB_PROJECT_TOKEN: ${GITLAB_PROJECT_TOKEN}
+      GITLAB_GROUP_ID: ${GITLAB_GROUP_ID:-}
+      GITLAB_GROUP_TOKEN: ${GITLAB_GROUP_TOKEN:-}
+      GITLAB_OAUTH_CLIENT_ID: ${GITLAB_OAUTH_CLIENT_ID}
+      GITLAB_OAUTH_CLIENT_SECRET: ${GITLAB_OAUTH_CLIENT_SECRET}
+      GITLAB_OAUTH_REDIRECT_URI: ${GITLAB_OAUTH_REDIRECT_URI}
+      SECRET_KEY: ${SECRET_KEY}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-ITSM Portal <noreply@company.com>}
+      SMTP_TLS: ${SMTP_TLS:-true}
+      NOTIFICATION_ENABLED: ${NOTIFICATION_ENABLED:-false}
+      IT_TEAM_EMAIL: ${IT_TEAM_EMAIL:-}
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8111}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      celery-worker:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------
+  # flower
+  # Celery 태스크 모니터링 UI (기본 포트 5555)
+  # ---------------------------------------------------------------------
+  flower:
+    image: mher/flower:2.0
+    restart: unless-stopped
+    command: celery --broker=redis://:${REDIS_PASSWORD}@redis:6379 flower --port=5555 --url_prefix=flower
+    ports:
+      - "127.0.0.1:${FLOWER_PORT:-5555}:5555"
+    environment:
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      celery-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5555/flower/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # ---------------------------------------------------------------------
   # itsm-web
@@ -175,6 +299,24 @@ services:
       timeout: 5s
       retries: 3
 
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"   # S3 API
+      - "127.0.0.1:9001:9001"   # MinIO Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minio_secret_change_me}
+    volumes:
+      - itsm_minio:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
@@ -186,6 +328,8 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.retention.time=30d'
+      - '--web.external-url=/prometheus'
+      - '--web.route-prefix=/'
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
       interval: 30s
@@ -203,7 +347,8 @@ services:
       # 운영 시 반드시 .env에 GRAFANA_PASSWORD=<strong_password> 설정 필요
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
       GF_AUTH_DISABLE_SIGNUP: "true"
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-%(protocol)s://%(domain)s/grafana}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_AUTH_BASIC_ENABLED: "true"
       GF_AUTH_DISABLE_LOGIN_FORM: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/01-itsm-operations.json
@@ -220,6 +365,26 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+
+  # -----------------------------------------------------------------------
+  # OpenTelemetry Collector (profiles: ["tracing"] — 선택적 활성화)
+  # -----------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.104.0
+    profiles: ["tracing"]
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"   # OTLP gRPC
+      - "127.0.0.1:4318:4318"   # OTLP HTTP
+      - "127.0.0.1:8888:8888"   # Prometheus metrics (self)
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:13133/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   pg-backup:
     image: postgres:17
@@ -255,3 +420,4 @@ volumes:
   itsm_prometheus:
   itsm_grafana:
   itsm_clamav:
+  itsm_minio:

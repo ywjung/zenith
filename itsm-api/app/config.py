@@ -40,6 +40,16 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://redis:6379"
+    # Celery broker (없으면 REDIS_URL을 그대로 사용)
+    CELERY_BROKER_URL: str = ""
+
+    # OpenTelemetry
+    OTEL_ENABLED: bool = False
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://otel-collector:4317"
+    OTEL_SERVICE_NAME: str = "itsm-api"
+
+    # DB 프로파일러
+    SLOW_QUERY_THRESHOLD_MS: float = 200.0
 
     # SMTP / Notifications
     SMTP_HOST: str = ""
@@ -55,6 +65,11 @@ class Settings(BaseSettings):
     TELEGRAM_ENABLED: bool = False
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""  # IT팀 그룹 채팅 ID
+
+    # Slack
+    SLACK_ENABLED: bool = False
+    SLACK_WEBHOOK_URL: str = ""   # Incoming Webhook URL
+    SLACK_CHANNEL: str = ""       # 기본 채널 (예: #itsm-alerts), 웹훅에서 설정된 채널 오버라이드용
 
     # IMAP email ingest
     IMAP_ENABLED: bool = False
@@ -87,6 +102,14 @@ class Settings(BaseSettings):
     # CLAMAV_STRICT=true (기본): ClamAV 연결 실패 시 업로드 거부 (fail-closed)
     # CLAMAV_STRICT=false: 개발 환경에서 ClamAV 없이도 업로드 허용 (fail-open)
     CLAMAV_STRICT: bool = True
+
+    # MinIO / S3 호환 오브젝트 스토리지 — 설정 시 GitLab 업로드 대체
+    # MINIO_ENDPOINT 미설정 시 기존 GitLab 업로드 방식 사용
+    MINIO_ENDPOINT: str = ""          # 예: minio:9000
+    MINIO_ACCESS_KEY: str = ""
+    MINIO_SECRET_KEY: str = ""
+    MINIO_BUCKET: str = "itsm-attachments"
+    MINIO_SECURE: bool = False        # True = HTTPS
 
     # 세션 최대 개수 (동일 계정 동시 로그인 제한, 0=무제한)
     MAX_ACTIVE_SESSIONS: int = 5

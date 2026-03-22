@@ -144,7 +144,7 @@ function TopPodium({ rows }: { rows: UserWorkload[] }) {
   ]
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       {ranked.map((r, i) => {
         const m = medals[i]
         const { grade, gradeClass, score } = r.perf

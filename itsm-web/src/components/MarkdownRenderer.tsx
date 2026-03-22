@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
@@ -40,6 +41,24 @@ function isAttachmentUrl(href: string): boolean {
   return href.includes('/uploads/proxy') || href.includes('/-/project/')
 }
 
+/** GitLab 업로드 경로를 내부 프록시 URL로 변환
+ *  - /uploads/{32hex}/{file}              → proxy (GitLab 기본 markdown 형식)
+ *  - /-/project/{id}/uploads/{hash}/{file} → proxy
+ *  - 이미 proxy URL이거나 외부 URL        → 그대로 반환
+ */
+function toProxyUrl(src: string): string {
+  if (!src) return src
+  if (src.includes('/uploads/proxy')) return src
+  if (/^\/-\/project\/\d+\/uploads\/[0-9a-f]+\//.test(src)) {
+    return `/api/tickets/uploads/proxy?path=${encodeURIComponent(src)}`
+  }
+  // GitLab 기본 markdown: /uploads/{32hex}/{filename}
+  if (/^\/uploads\/[0-9a-f]{32}\//.test(src)) {
+    return `/api/tickets/uploads/proxy?path=${encodeURIComponent('/-/project/1' + src)}`
+  }
+  return src
+}
+
 /** URL 또는 링크 텍스트에서 파일명 추출 */
 function extractFilename(href: string, linkText: string): string {
   // 링크 텍스트에서 📎 이모지 접두사 제거
@@ -55,8 +74,27 @@ function extractFilename(href: string, linkText: string): string {
   }
 }
 
-/** ReactMarkdown 커스텀 링크 렌더러 */
+/** ReactMarkdown 커스텀 컴포넌트 */
 const markdownComponents: Components = {
+  // 인라인 이미지 — GitLab 업로드 경로를 프록시로 변환 후 FilePreview로 렌더링
+  img({ src, alt }) {
+    if (!src) return null
+
+    // 외부 이미지(https://)는 그대로 렌더링
+    if (/^https?:\/\//.test(src)) {
+      // eslint-disable-next-line @next/next/no-img-element
+      return <img src={src} alt={alt ?? ''} className="max-w-full rounded" loading="lazy" />
+    }
+
+    const proxyUrl = toProxyUrl(src)
+    const name = alt || src.split('/').pop() || 'image'
+    return (
+      <span className="block my-2">
+        <FilePreview url={proxyUrl} name={name} />
+      </span>
+    )
+  },
+
   a({ href, children }) {
     if (!href) return <a href={href}>{children}</a>
 
@@ -87,18 +125,49 @@ const markdownComponents: Components = {
   },
 }
 
+/** HTML 콘텐츠에서 첨부파일 링크 클릭을 인터셉트해 FilePreview 모달 표시 */
+function HtmlContent({ html, className }: { html: string; className: string }) {
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
+
+  function handleClick(e: React.MouseEvent<HTMLDivElement>) {
+    const target = (e.target as HTMLElement).closest('a')
+    if (!target) return
+    const href = target.getAttribute('href') ?? ''
+    if (!isAttachmentUrl(href)) return
+    e.preventDefault()
+    const name = extractFilename(href, target.textContent ?? '')
+    setPreview({ url: href, name })
+  }
+
+  return (
+    <>
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+      <div
+        className={className}
+        dangerouslySetInnerHTML={{ __html: html }}
+        onClick={handleClick}
+      />
+      {/* FilePreview 모달 — 첨부파일 링크 클릭 시 표시 */}
+      {preview && (
+        <div className="mt-2">
+          <FilePreview url={preview.url} name={preview.name} />
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function MarkdownRenderer({ content, className = '' }: Props) {
+  const proseClass = `prose prose-sm max-w-none text-gray-800 dark:text-gray-200 dark:prose-invert ${className}`
+
   if (isHtml(content)) {
     return (
-      <div
-        className={`prose prose-sm max-w-none text-gray-800 dark:text-gray-200 dark:prose-invert ${className}`}
-        dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
-      />
+      <HtmlContent html={sanitizeHtml(content)} className={proseClass} />
     )
   }
 
   return (
-    <div className={`prose prose-sm max-w-none text-gray-800 dark:text-gray-200 dark:prose-invert ${className}`}>
+    <div className={proseClass}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
         {content}
       </ReactMarkdown>

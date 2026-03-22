@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { fetchTicket, fetchComments, getMyRating, updateTicket, addComment, deleteTicket, fetchProjectMembers, fetchMilestones, fetchTicketCustomFields, setTicketCustomFields, uploadFile, fetchTicketLinks, createTicketLink, deleteTicketLink, fetchTimeEntries, logTime, fetchDevProjects, fetchForwards, createForward, deleteForward, fetchTicketSLA, updateTicketSLA, fetchLinkedMRs, subscribeTicketEvents, fetchWatchers, watchTicket, unwatchTicket, fetchQuickReplies } from '@/lib/api'
+import { fetchTicket, fetchComments, getMyRating, updateTicket, addComment, updateComment, deleteComment, deleteTicket, fetchProjectMembers, fetchMilestones, fetchTicketCustomFields, setTicketCustomFields, uploadFile, fetchTicketLinks, createTicketLink, deleteTicketLink, fetchTimeEntries, logTime, fetchDevProjects, fetchForwards, createForward, deleteForward, fetchTicketSLA, updateTicketSLA, fetchLinkedMRs, subscribeTicketEvents, fetchWatchers, watchTicket, unwatchTicket, fetchQuickReplies, suggestKBArticles } from '@/lib/api'
 import type { QuickReply } from '@/lib/api'
 import type { Ticket, Comment, Rating, ProjectMember, Milestone, TicketCustomFieldValue, TicketLink, TimeEntry, DevProject, ProjectForward, ForwardsResponse, SLARecord, LinkedMR } from '@/types'
 import { StatusBadge, PriorityBadge, CategoryBadge, SlaBadge } from '@/components/StatusBadge'
@@ -858,6 +858,9 @@ function TicketDetailContent() {
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [cloning, setCloning] = useState(false)
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
+  const [editingCommentBody, setEditingCommentBody] = useState('')
+  const [savingComment, setSavingComment] = useState(false)
   const [cloneError, setCloneError] = useState<string | null>(null)
   const [mergeTargetIid, setMergeTargetIid] = useState('')
   const [merging, setMerging] = useState(false)
@@ -930,6 +933,7 @@ function TicketDetailContent() {
   } | null>(null)
   const [convertingToKb, setConvertingToKb] = useState(false)
   const [kbConvertError, setKbConvertError] = useState<string | null>(null)
+  const [kbSuggestions, setKbSuggestions] = useState<import('@/types').KBArticle[]>([])
 
   const isRequester = !!user && !!ticket?.created_by_username && user.username === ticket.created_by_username
   const canDelete = isAdmin || (ticket?.status === 'open' && isRequester)
@@ -950,6 +954,10 @@ function TicketDetailContent() {
             setCustomFields(fields)
             setCustomFieldEdits(Object.fromEntries(fields.map(f => [String(f.id), f.value ?? ''])))
           }).catch(() => {})
+          // KB 관련 문서 추천 (에이전트 이상)
+          if (t.title) {
+            suggestKBArticles(t.title, 3).then(setKbSuggestions).catch(() => {})
+          }
           if (isDeveloper) {
             fetchTicketLinks(iid, t.project_id).then(setLinks).catch(() => {})
             fetchTimeEntries(iid, t.project_id).then(({ total_minutes, entries }) => {
@@ -1408,6 +1416,30 @@ function TicketDetailContent() {
     }
   }
 
+  async function handleSaveCommentEdit(noteId: number) {
+    if (!editingCommentBody.trim()) return
+    setSavingComment(true)
+    try {
+      const updated = await updateComment(iid, noteId, editingCommentBody.trim(), ticket?.project_id || undefined)
+      setComments((prev) => prev.map((c) => c.id === noteId ? { ...c, body: updated.body } : c))
+      setEditingCommentId(null)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '수정 실패')
+    } finally {
+      setSavingComment(false)
+    }
+  }
+
+  async function handleDeleteCommentConfirm(noteId: number) {
+    if (!confirm('이 댓글을 삭제하시겠습니까?')) return
+    try {
+      await deleteComment(iid, noteId, ticket?.project_id || undefined)
+      setComments((prev) => prev.filter((c) => c.id !== noteId))
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '삭제 실패')
+    }
+  }
+
   async function handleAddLink(e: React.FormEvent) {
     e.preventDefault()
     if (!ticket?.project_id || !linkTargetIid) return
@@ -1589,10 +1621,10 @@ function TicketDetailContent() {
         onCancel={() => setResolutionModal(null)}
       />
     )}
-    <div className="w-full px-4 py-5 flex gap-5 items-start">
+    <div className="w-full px-4 py-5 flex flex-col lg:flex-row gap-5 items-start">
 
       {/* ========== LEFT COLUMN ========== */}
-      <div className="flex-1 min-w-0 space-y-4">
+      <div className="flex-1 min-w-0 space-y-4 w-full lg:w-auto">
 
         {/* Header: breadcrumb + title + badges */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-5">
@@ -1914,8 +1946,45 @@ function TicketDetailContent() {
                       </span>
                     )}
                     <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(c.created_at, 'full')}</span>
+                    {/* 수정/삭제 버튼 — 작성자 본인 또는 관리자 */}
+                    {(c.author_name === user?.name || ['admin', 'manager', 'agent'].includes(user?.role || '')) && editingCommentId !== c.id && (
+                      <span className="ml-auto flex gap-1">
+                        <button
+                          onClick={() => { setEditingCommentId(c.id); setEditingCommentBody(c.body) }}
+                          className="text-xs text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors px-1"
+                          title="댓글 수정"
+                        >수정</button>
+                        <button
+                          onClick={() => handleDeleteCommentConfirm(c.id)}
+                          className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors px-1"
+                          title="댓글 삭제"
+                        >삭제</button>
+                      </span>
+                    )}
                   </div>
-                  <DescriptionWithAttachments description={c.body} projectPath={ticket?.project_path} onImageClick={(url, name) => setLightbox({ url, name })} />
+                  {editingCommentId === c.id ? (
+                    <div className="space-y-2">
+                      <textarea
+                        className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        rows={4}
+                        value={editingCommentBody}
+                        onChange={(e) => setEditingCommentBody(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSaveCommentEdit(c.id)}
+                          disabled={savingComment || !editingCommentBody.trim()}
+                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg disabled:opacity-50 transition-colors"
+                        >{savingComment ? '저장 중…' : '저장'}</button>
+                        <button
+                          onClick={() => setEditingCommentId(null)}
+                          className="px-3 py-1 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        >취소</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <DescriptionWithAttachments description={c.body} projectPath={ticket?.project_path} onImageClick={(url, name) => setLightbox({ url, name })} />
+                  )}
                 </div>
               </div>
             ))}
@@ -2077,6 +2146,27 @@ function TicketDetailContent() {
           </div>
         )}
 
+        {/* 관련 KB 문서 추천 */}
+        {isAgent && kbSuggestions.length > 0 && (
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">📚 관련 KB 문서</h2>
+            <div className="space-y-2">
+              {kbSuggestions.map(kb => (
+                <Link
+                  key={kb.id}
+                  href={`/kb/${kb.id}`}
+                  className="block p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                >
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-300 line-clamp-2">{kb.title}</p>
+                  {kb.category && (
+                    <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5">{kb.category}</p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 만족도 평가 */}
         {(isClosed || isResolved) && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-5">
@@ -2113,7 +2203,7 @@ function TicketDetailContent() {
       {/* END LEFT COLUMN */}
 
       {/* ========== RIGHT SIDEBAR ========== */}
-      <div className="w-72 shrink-0 sticky top-4 space-y-3 pb-6">
+      <div className="w-full lg:w-72 lg:shrink-0 lg:sticky lg:top-4 space-y-3 pb-6">
 
         {/* 워크플로우 + 상태 액션 — IT 개발자 이상 */}
         {isDeveloper && (
@@ -2316,6 +2406,51 @@ function TicketDetailContent() {
         {isDeveloper && slaRecord && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
             <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">SLA 처리 기한</h3>
+
+            {/* SLA 진행 바 */}
+            {slaRecord.sla_deadline && ticket && (() => {
+              const start = new Date(ticket.created_at).getTime()
+              const deadline = new Date(slaRecord.sla_deadline).getTime()
+              const now = slaRecord.resolved_at ? new Date(slaRecord.resolved_at).getTime() : Date.now()
+              const total = deadline - start
+              const elapsed = Math.min(now - start, total > 0 ? total * 1.5 : 1)
+              const pct = total > 0 ? Math.min(Math.round((elapsed / total) * 100), 150) : 0
+              const displayPct = Math.min(pct, 100)
+              const isOver = pct >= 100
+              const isWarning = pct >= 80 && !isOver
+              const barColor = isOver
+                ? 'bg-red-500'
+                : isWarning
+                ? 'bg-amber-400'
+                : 'bg-emerald-500'
+              const msLeft = deadline - Date.now()
+              const hoursLeft = Math.round(msLeft / 3600000)
+              const daysLeft = Math.floor(msLeft / 86400000)
+              const timeLabel = slaRecord.resolved_at
+                ? '해결됨'
+                : msLeft < 0
+                ? `${Math.abs(daysLeft) > 0 ? Math.abs(daysLeft) + '일 ' : ''}${Math.abs(hoursLeft % 24)}시간 초과`
+                : daysLeft > 0
+                ? `${daysLeft}일 ${hoursLeft % 24}시간 남음`
+                : `${hoursLeft}시간 남음`
+              return (
+                <div className="mb-3">
+                  <div className="flex justify-between text-[10px] mb-1">
+                    <span className={isOver ? 'text-red-500 font-semibold' : isWarning ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-gray-400 dark:text-gray-500'}>
+                      {timeLabel}
+                    </span>
+                    <span className="text-gray-400 dark:text-gray-500">{displayPct}%</span>
+                  </div>
+                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-2 rounded-full transition-all ${barColor}`}
+                      style={{ width: `${displayPct}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })()}
+
             <div className="space-y-2 text-xs mb-3">
               <div className="flex justify-between items-start">
                 <span className="text-gray-500 dark:text-gray-400">처리 기한</span>
@@ -2724,6 +2859,18 @@ function TicketDetailContent() {
             {watchLoading ? '...' : isWatching ? '🔔 구독 중 (클릭하여 취소)' : '🔕 이 티켓 구독'}
           </button>
         </div>
+
+        {/* 인쇄 / PDF 출력 */}
+        {ticket && (
+          <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4 print-hidden">
+            <button
+              onClick={() => window.print()}
+              className="w-full text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors font-medium"
+            >
+              🖨️ 인쇄 / PDF 저장
+            </button>
+          </div>
+        )}
 
         {/* 티켓 복제 — IT 개발자 이상 */}
         {isDeveloper && ticket && (

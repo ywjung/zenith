@@ -181,7 +181,16 @@ export default function KBFileUpload({ onInsert, files, onFilesChange, projectId
               {/* 에디터에 다시 삽입 */}
               <button
                 type="button"
-                onClick={() => onInsert(f.markdown)}
+                onClick={() => {
+                  const proxyPath = f.proxy_path || f.url
+                  const proxyUrl = proxyPath
+                    ? `/api/tickets/uploads/proxy?path=${encodeURIComponent(proxyPath)}`
+                    : f.url
+                  const insertMarkdown = f.mime.startsWith('image/')
+                    ? `![${f.name}](${proxyUrl})`
+                    : `[📎 ${f.name}](${proxyUrl})`
+                  onInsert(insertMarkdown)
+                }}
                 title="에디터에 삽입"
                 className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 shrink-0"
               >

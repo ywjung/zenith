@@ -1,4 +1,5 @@
 fastapi>=0.115.0
+celery[redis]>=5.4.0
 uvicorn[standard]>=0.32.0
 sqlalchemy>=2.0.36
 psycopg[binary]>=3.2.0
@@ -17,3 +18,9 @@ prometheus-fastapi-instrumentator>=7.0
 python-magic>=0.4.27
 jinja2>=3.1.0
 Pillow>=10.0.0
+opentelemetry-sdk>=1.24.0
+opentelemetry-instrumentation-fastapi>=0.45b0
+opentelemetry-instrumentation-sqlalchemy>=0.45b0
+opentelemetry-exporter-otlp-proto-grpc>=1.24.0
+openpyxl>=3.1.0
+minio>=7.2.0

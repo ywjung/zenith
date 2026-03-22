@@ -52,7 +52,7 @@ function RuleFormPanel({
   return (
     <form onSubmit={onSubmit} className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-xl p-5 mb-2 shadow-sm">
       <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">{title}</h3>
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
           <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">규칙 이름 *</label>
           <input
@@ -76,7 +76,7 @@ function RuleFormPanel({
 
       <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-4">
         <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3">조건 (비워두면 전체 티켓에 적용)</div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">카테고리</label>
             <select
@@ -111,7 +111,7 @@ function RuleFormPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         <div>
           <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">담당자 GitLab ID *</label>
           <input

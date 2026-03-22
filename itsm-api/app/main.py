@@ -4,7 +4,7 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +27,7 @@ from .routers.service_catalog import router as service_catalog_router
 from .routers.dashboard import router as dashboard_router
 from .routers.ip_allowlist import router as ip_allowlist_router
 from .routers.faq import router as faq_router
+from .routers.custom_fields import admin_router as custom_fields_admin_router, ticket_router as custom_fields_ticket_router
 from . import gitlab_client
 from . import sla as sla_module
 from .routers.reports import take_snapshot
@@ -127,6 +128,18 @@ def _run_daily_snapshots(reason: str = "scheduled"):
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(project_ids), 4)) as pool:
             pool.map(_snap, project_ids)
 
+    # 만료된 SudoToken 정리 (매일 자정)
+    try:
+        from .models import SudoToken
+        with SessionLocal() as db:
+            cutoff = datetime.now(timezone.utc).replace(tzinfo=None)
+            deleted = db.query(SudoToken).filter(SudoToken.expires_at <= cutoff).delete()
+            db.commit()
+            if deleted:
+                logger.info("Cleaned up %d expired sudo tokens", deleted)
+    except Exception as e:
+        logger.warning("SudoToken cleanup failed: %s", e)
+
 
 def _user_sync_loop():
     """Background thread: 매 시간 GitLab 그룹 멤버와 ITSM 사용자 역할 동기화.
@@ -148,40 +161,54 @@ def _user_sync_loop():
 def _run_user_sync():
     """GitLab 그룹/프로젝트 멤버 목록과 user_roles 테이블을 비교해 비활성 처리.
 
-    그룹 멤버 OR ITSM 프로젝트 멤버 중 하나라도 해당하면 활성으로 유지한다.
-    둘 다 아닌 경우에만 is_active=False 처리한다.
+    USER_SYNC_REQUIRE_GROUP=true (기본값): 그룹 멤버에서 제거되면 비활성 처리.
+      프로젝트에만 남아있어도 그룹에 없으면 is_active=False.
+    USER_SYNC_REQUIRE_GROUP=false: 그룹 OR 프로젝트 멤버 중 하나라도 해당하면 활성 유지.
     """
     from .models import UserRole
     from datetime import datetime, timezone
 
     settings = get_settings()
+    require_group = getattr(settings, "USER_SYNC_REQUIRE_GROUP", True)
 
-    active_ids: set[int] = set()
+    group_ids: set[int] = set()
+    project_ids_set: set[int] = set()
 
     # 1. 그룹 멤버 수집 (설정된 경우)
     if settings.GITLAB_GROUP_ID:
         try:
             group_members = gitlab_client.get_group_members(settings.GITLAB_GROUP_ID)
             group_ids = {int(m["id"]) for m in group_members}
-            active_ids.update(group_ids)
             logger.info("User sync: GitLab group has %d members", len(group_ids))
         except Exception as e:
             logger.warning("User sync: failed to fetch GitLab group members: %s", e)
 
-    # 2. ITSM 메인 프로젝트 멤버 수집 (그룹 멤버가 아닌 프로젝트 직접 멤버 포함)
+    # 2. ITSM 메인 프로젝트 멤버 수집
     try:
         project_members = gitlab_client.get_project_members(str(settings.GITLAB_PROJECT_ID))
-        proj_ids = {int(m["id"]) for m in project_members}
-        active_ids.update(proj_ids)
-        logger.info("User sync: ITSM project has %d members", len(proj_ids))
+        project_ids_set = {int(m["id"]) for m in project_members}
+        logger.info("User sync: ITSM project has %d members", len(project_ids_set))
     except Exception as e:
         logger.warning("User sync: failed to fetch project members: %s", e)
+
+    # 활성 멤버 결정 기준
+    if require_group and settings.GITLAB_GROUP_ID:
+        # 그룹 멤버십 필수: 그룹에 없으면 프로젝트 멤버여도 비활성
+        if not group_ids:
+            logger.warning("User sync: group member fetch returned empty (require_group=true) — skipping to avoid mass deactivation")
+            return
+        active_ids = group_ids
+        logger.info("User sync: require_group=true, using group membership only (%d members)", len(active_ids))
+    else:
+        # 그룹 OR 프로젝트 멤버 중 하나라도 해당하면 활성
+        active_ids = group_ids | project_ids_set
+        logger.info("User sync: require_group=false, group+project union (%d members)", len(active_ids))
 
     if not active_ids:
         logger.warning("User sync: no active members found — skipping to avoid mass deactivation")
         return
 
-    logger.info("User sync: total %d active GitLab members (group + project)", len(active_ids))
+    logger.info("User sync: total %d active GitLab members", len(active_ids))
 
     with SessionLocal() as db:
         all_users = db.query(UserRole).all()
@@ -267,25 +294,17 @@ async def lifespan(app: FastAPI):
     user_sync_thread.start()
     logger.info("User sync thread started")
 
-    # Start email ingest if enabled
-    email_thread = None
-    if settings.IMAP_ENABLED:
-        email_thread = threading.Thread(target=_email_ingest_loop, daemon=True, name="email-ingest")
-        email_thread.start()
-        logger.info("Email ingest thread started (poll interval=%ds)", settings.IMAP_POLL_INTERVAL)
+    # Email ingest는 Celery Beat(periodic_email_ingest)로 처리 — 스레드 방식 제거
 
     yield
 
     _sla_thread_stop.set()
     _snapshot_thread_stop.set()
-    _email_ingest_stop.set()
     _user_sync_stop.set()
     logger.info("Shutting down — waiting for background threads")
     sla_thread.join(timeout=10)
     snap_thread.join(timeout=10)
     user_sync_thread.join(timeout=10)
-    if email_thread:
-        email_thread.join(timeout=10)
     logger.info("Background threads stopped")
 
 
@@ -305,6 +324,14 @@ app = FastAPI(
 )
 
 settings = get_settings()
+
+# OpenTelemetry 분산 추적
+from .telemetry import setup_telemetry
+setup_telemetry(app)
+
+# DB 쿼리 프로파일러 (개발 환경에서 per-request 추적 활성화)
+from .db_profiler import setup_db_profiler
+setup_db_profiler(app, enabled=not _is_production())
 
 # Rate limiting — limiter already configured with Redis in rate_limit.py
 try:
@@ -346,7 +373,7 @@ _LOOPBACK_NETS = [
     _ipmod.ip_network("::1/128"),
 ]
 _ip_cache: dict = {"nets": [], "loaded_at": 0.0}
-_IP_CACHE_TTL = 5.0  # seconds
+_IP_CACHE_TTL = 1.0  # seconds — 긴급 차단 응답성 개선 (5초 → 1초)
 _ip_cache_lock: asyncio.Lock | None = None
 
 
@@ -431,13 +458,28 @@ async def ip_allowlist_middleware(request: Request, call_next):
     if not should_check:
         return await call_next(request)
 
-    # VULN-05: trusted proxy 환경(사설 IP)에서만 X-Forwarded-For 신뢰
+    # VULN-05: TRUSTED_PROXIES에 명시된 프록시에서만 X-Forwarded-For 신뢰
+    # TRUSTED_PROXIES 미설정 시 사설 IP 전체 신뢰 (하위 호환)
     forwarded = request.headers.get("X-Forwarded-For", "")
     client_ip_str = request.client.host if request.client else "0.0.0.0"
     if forwarded and request.client:
         try:
             proxy_addr = _ipmod.ip_address(request.client.host)
-            if proxy_addr.is_private:
+            _trusted_proxies_str = getattr(get_settings(), "TRUSTED_PROXIES", "")
+            if _trusted_proxies_str:
+                # 명시적 TRUSTED_PROXIES CIDR 목록과 비교
+                _trusted_nets = []
+                for _cidr in _trusted_proxies_str.split(","):
+                    _cidr = _cidr.strip()
+                    if _cidr:
+                        try:
+                            _trusted_nets.append(_ipmod.ip_network(_cidr, strict=False))
+                        except ValueError:
+                            pass
+                if any(proxy_addr in net for net in _trusted_nets):
+                    client_ip_str = forwarded.split(",")[0].strip()
+            elif proxy_addr.is_private:
+                # TRUSTED_PROXIES 미설정: 사설 IP 전체 신뢰 (하위 호환)
                 client_ip_str = forwarded.split(",")[0].strip()
         except ValueError:
             pass
@@ -526,35 +568,74 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+# ── API 라우터 등록 ───────────────────────────────────────────────────────────
+# 모든 라우터를 APIRouter v1에 집약한 뒤 두 경로로 마운트:
+#   /api/v1/...  — 버전 명시 (신규 클라이언트 권장)
+#   /...         — 레거시 경로 (하위 호환, 추후 deprecated 예정)
+from fastapi import APIRouter as _APIRouter
+
+_v1 = _APIRouter()
+
 # Core routers
-app.include_router(auth.router)
-app.include_router(tickets.router)
-app.include_router(ratings.router)
-app.include_router(projects.router)
+_v1.include_router(auth.router)
+_v1.include_router(tickets.router)
+_v1.include_router(ratings.router)
+_v1.include_router(projects.router)
 
 # Enterprise routers
-app.include_router(admin.router)
-app.include_router(webhooks.router)
-app.include_router(kb.router)
-app.include_router(reports.router)
-app.include_router(notifications_router)
-app.include_router(templates_router)
-app.include_router(link_router)
-app.include_router(time_router)
-app.include_router(forwards_router)
-app.include_router(forwards_admin_router)
-app.include_router(filters_router)
-app.include_router(portal_router)
-app.include_router(quick_replies_router)
-app.include_router(watchers_router)
-app.include_router(watchers_my_router)
-app.include_router(automation_router)
-app.include_router(approvals_router)
-app.include_router(ticket_types_router)
-app.include_router(service_catalog_router)
-app.include_router(dashboard_router)
-app.include_router(ip_allowlist_router)
-app.include_router(faq_router)
+_v1.include_router(admin.router)
+_v1.include_router(webhooks.router)
+_v1.include_router(kb.router)
+_v1.include_router(reports.router)
+_v1.include_router(notifications_router)
+_v1.include_router(templates_router)
+_v1.include_router(link_router)
+_v1.include_router(time_router)
+_v1.include_router(forwards_router)
+_v1.include_router(forwards_admin_router)
+_v1.include_router(filters_router)
+_v1.include_router(portal_router)
+_v1.include_router(quick_replies_router)
+_v1.include_router(watchers_router)
+_v1.include_router(watchers_my_router)
+_v1.include_router(automation_router)
+_v1.include_router(approvals_router)
+_v1.include_router(ticket_types_router)
+_v1.include_router(service_catalog_router)
+_v1.include_router(dashboard_router)
+_v1.include_router(ip_allowlist_router)
+_v1.include_router(faq_router)
+_v1.include_router(custom_fields_admin_router)
+_v1.include_router(custom_fields_ticket_router)
+
+# MinIO 오브젝트 스토리지 프록시 (인증 필요)
+from fastapi import Depends as _Depends
+from fastapi.responses import Response as _Response
+from .auth import get_current_user as _get_current_user
+from . import storage as _storage_mod
+from fastapi import APIRouter as _APIRouter
+
+_storage_router = _APIRouter(prefix="/storage", tags=["storage"])
+
+@_storage_router.get("/{bucket}/{object_name:path}")
+def serve_storage_object(
+    bucket: str,
+    object_name: str,
+    _user: dict = _Depends(_get_current_user),
+):
+    """MinIO에 저장된 첨부파일을 인증된 사용자에게 스트리밍."""
+    data, content_type = _storage_mod.stream_object(object_name)
+    if data is None:
+        from fastapi import HTTPException as _HTTPException
+        raise _HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+    return _Response(content=data, media_type=content_type)
+
+_v1.include_router(_storage_router)
+
+# /api/v1/... (버전 명시 경로)
+app.include_router(_v1, prefix="/api/v1")
+# /...         (레거시 경로 — 하위 호환)
+app.include_router(_v1)
 
 # I-2: Prometheus metrics
 try:

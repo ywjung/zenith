@@ -74,6 +74,13 @@ def create_approval_request(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    # 티켓 존재 여부 검증 (GitLab)
+    from .. import gitlab_client as _gl
+    try:
+        _gl.get_issue(body.ticket_iid, body.project_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+
     # 이미 대기 중인 요청이 있으면 중복 생성 방지 — FOR UPDATE로 동시 요청 직렬화
     existing = (
         db.query(ApprovalRequest)
@@ -116,6 +123,18 @@ def create_approval_request(
                 body=f"{req.requester_name or req.requester_username}님이 승인을 요청했습니다.",
                 link=f"/tickets/{body.ticket_iid}",
             )
+            # 이메일 알림 (NOTIFICATION_ENABLED 시)
+            if getattr(approver, 'email', None):
+                from ..notifications import notify_approval_requested
+                try:
+                    notify_approval_requested(
+                        approver_email=getattr(approver, 'email', None),
+                        approver_name=approver.name or approver.username,
+                        ticket_iid=body.ticket_iid,
+                        requester_name=req.requester_name or req.requester_username,
+                    )
+                except Exception:
+                    pass
     return _approval_to_dict(req)
 
 
@@ -161,6 +180,19 @@ def approve_request(
             body=f"{req.approver_name}님이 승인했습니다." + (f" ({body.reason})" if body.reason else ""),
             link=f"/tickets/{req.ticket_iid}",
         )
+        if getattr(requester, 'email', None):
+            from ..notifications import notify_approval_decided
+            try:
+                notify_approval_decided(
+                    requester_email=getattr(requester, 'email', None),
+                    requester_name=requester.name or requester.username,
+                    ticket_iid=req.ticket_iid,
+                    decision="approved",
+                    decider_name=req.approver_name or req.approver_username,
+                    reason=body.reason,
+                )
+            except Exception:
+                pass
     return _approval_to_dict(req)
 
 
@@ -207,4 +239,17 @@ def reject_request(
             body=f"{req.approver_name}님이 거절했습니다." + (f" 사유: {body.reason}" if body.reason else ""),
             link=f"/tickets/{req.ticket_iid}",
         )
+        if getattr(requester, 'email', None):
+            from ..notifications import notify_approval_decided
+            try:
+                notify_approval_decided(
+                    requester_email=getattr(requester, 'email', None),
+                    requester_name=requester.name or requester.username,
+                    ticket_iid=req.ticket_iid,
+                    decision="rejected",
+                    decider_name=req.approver_name or req.approver_username,
+                    reason=body.reason,
+                )
+            except Exception:
+                pass
     return _approval_to_dict(req)

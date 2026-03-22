@@ -39,6 +39,7 @@ class PortalSubmitRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=10000)
     category: Optional[str] = None
     priority: Optional[str] = "medium"
+    catalog_item_id: Optional[int] = None  # 서비스 카탈로그 항목 ID
 
 
 class PortalSubmitResponse(BaseModel):
@@ -47,12 +48,25 @@ class PortalSubmitResponse(BaseModel):
     track_url: str
 
 
+class PortalComment(BaseModel):
+    id: int
+    body: str
+    author_name: str
+    created_at: str
+
+
 class PortalTicketStatus(BaseModel):
     ticket_iid: int
     title: str
     status: str
+    priority: Optional[str] = None
+    category: Optional[str] = None
     created_at: str
     updated_at: Optional[str] = None
+    sla_deadline: Optional[str] = None
+    sla_breached: bool = False
+    comments: list[PortalComment] = []
+    expires_at: Optional[str] = None  # 게스트 토큰 만료 시각
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +106,20 @@ def portal_submit(request: Request, req: PortalSubmitRequest, db: Session = Depe
         f"prio::{priority}",
     ]
 
-    description = _build_description(req.name, req.email, req.content)
+    # 서비스 카탈로그 항목이 선택된 경우 설명 앞에 카탈로그 레이블 추가
+    content_with_catalog = req.content
+    if req.catalog_item_id:
+        try:
+            from ..models import ServiceCatalogItem
+            catalog_item = db.query(ServiceCatalogItem).filter_by(id=req.catalog_item_id, is_active=True).first()
+            if catalog_item:
+                catalog_header = f"**서비스 카탈로그:** {catalog_item.icon or ''} {catalog_item.name}\n\n"
+                content_with_catalog = catalog_header + req.content
+                labels.append(f"catalog::{catalog_item.id}")
+        except Exception as e:
+            logger.warning("portal_submit: catalog lookup failed: %s", e)
+
+    description = _build_description(req.name, req.email, content_with_catalog)
 
     # Auto-assign
     assignee_id: Optional[int] = evaluate_rules(db, category=category, priority=priority, title=req.title)
@@ -194,10 +221,77 @@ def portal_track(request: Request, token: str, db: Session = Depends(get_db)):
     labels = issue.get("labels", [])
     status = _parse_status(labels)
 
+    # 우선순위·카테고리 파싱
+    priority = next((lbl.split("::")[1] for lbl in labels if lbl.startswith("prio::")), None)
+    category = next((lbl.split("::")[1] for lbl in labels if lbl.startswith("cat::")), None)
+
+    # SLA 조회
+    from ..models import SLARecord
+    sla_rec = db.query(SLARecord).filter_by(
+        gitlab_issue_iid=guest.ticket_iid,
+        project_id=guest.project_id or "",
+    ).first()
+    sla_deadline = sla_rec.sla_deadline.isoformat() if sla_rec and sla_rec.sla_deadline else None
+    sla_breached = bool(sla_rec and sla_rec.breached)
+
+    # 공개 댓글 조회 (internal 댓글 제외)
+    public_comments: list[PortalComment] = []
+    try:
+        notes = gitlab_client.get_notes(guest.ticket_iid, project_id=guest.project_id)
+        for note in notes:
+            if note.get("internal") or note.get("system"):
+                continue
+            body = note.get("body", "").strip()
+            if not body:
+                continue
+            author = note.get("author") or {}
+            public_comments.append(PortalComment(
+                id=note["id"],
+                body=body,
+                author_name=author.get("name") or author.get("username") or "담당자",
+                created_at=note.get("created_at", ""),
+            ))
+    except Exception as e:
+        logger.warning("portal_track: get_notes failed: %s", e)
+
     return PortalTicketStatus(
         ticket_iid=guest.ticket_iid,
         title=issue.get("title", ""),
         status=status,
+        priority=priority,
+        category=category,
         created_at=issue.get("created_at", ""),
         updated_at=issue.get("updated_at"),
+        sla_deadline=sla_deadline,
+        sla_breached=sla_breached,
+        comments=public_comments,
+        expires_at=guest.expires_at.isoformat() if guest.expires_at else None,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /portal/extend/{token}  — 게스트 토큰 유효기간 연장 (최대 7일 추가)
+# ---------------------------------------------------------------------------
+
+@router.post("/extend/{token}")
+@(limiter.limit("3/hour") if limiter else lambda f: f)
+def portal_extend_token(request: Request, token: str, db: Session = Depends(get_db)):
+    """게스트 추적 링크 유효기간을 7일 연장한다. 시간당 3회 제한."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    guest = db.query(GuestToken).filter(GuestToken.token == token_hash).first()
+    if not guest:
+        raise HTTPException(status_code=404, detail="유효하지 않은 링크입니다.")
+
+    # 이미 만료된 경우도 연장 허용 (최대 now + 7일)
+    base = max(guest.expires_at, now)
+    new_expiry = base + timedelta(days=7)
+    guest.expires_at = new_expiry
+    db.commit()
+
+    return {
+        "ticket_iid": guest.ticket_iid,
+        "expires_at": new_expiry.isoformat(),
+        "message": "링크 유효기간이 7일 연장되었습니다.",
+    }

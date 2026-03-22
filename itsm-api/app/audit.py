@@ -9,6 +9,27 @@ from .models import AuditLog
 
 logger = logging.getLogger(__name__)
 
+# 감사 로그에서 마스킹할 민감 필드 키 목록 (소문자 부분 매칭)
+_SENSITIVE_FIELD_PATTERNS = frozenset({
+    "password", "passwd", "token", "secret", "key", "credential",
+    "private_key", "api_key", "access_token", "refresh_token",
+    "client_secret", "oauth_secret",
+})
+
+_REDACTED = "[REDACTED]"
+
+
+def _mask_sensitive(value: Any) -> Any:
+    """dict의 민감 키 값을 재귀적으로 [REDACTED]로 마스킹한다."""
+    if isinstance(value, dict):
+        return {
+            k: _REDACTED if any(pat in k.lower() for pat in _SENSITIVE_FIELD_PATTERNS) else _mask_sensitive(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask_sensitive(item) for item in value]
+    return value
+
 
 def write_audit_log(
     db: Session,
@@ -35,8 +56,8 @@ def write_audit_log(
             action=action,
             resource_type=resource_type,
             resource_id=str(resource_id),
-            old_value=old_value,
-            new_value=new_value,
+            old_value=_mask_sensitive(old_value),
+            new_value=_mask_sensitive(new_value),
             ip_address=ip,
         )
         db.add(log)

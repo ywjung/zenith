@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { fetchTrends, exportReport, fetchRatingStats, fetchCurrentStats, fetchBreakdown, fetchAgentPerformance, fetchDoraMetrics } from '@/lib/api'
+import { fetchTrends, exportReport, exportReportXlsx, fetchRatingStats, fetchCurrentStats, fetchBreakdown, fetchAgentPerformance, fetchDoraMetrics, fetchSLAHeatmap } from '@/lib/api'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
 import { useRoleLabels } from '@/context/RoleLabelsContext'
@@ -318,25 +318,45 @@ function BreakdownSection({ from, to }: { from: string; to: string }) {
   )
 }
 
-function TrendTable({ from, to }: { from: string; to: string }) {
+function toDateStr(d: Date) {
+  return d.toISOString().slice(0, 10)
+}
+
+const TREND_PRESETS = [
+  { label: '2주', days: 14 },
+  { label: '1개월', days: 30 },
+  { label: '3개월', days: 90 },
+  { label: '6개월', days: 180 },
+]
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function TrendTable({ from: _from, to: _to }: { from: string; to: string }) {
+  const [preset, setPreset] = useState(14)
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo]   = useState('')
+  const [useCustom, setUseCustom] = useState(false)
+
+  const effectiveFrom = useCustom && customFrom ? customFrom : daysAgo(preset)
+  const effectiveTo   = useCustom && customTo   ? customTo   : toDateStr(new Date())
+
   const [rows, setRows] = useState<TrendRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
-    fetchTrends({ from, to })
+    setError(null)
+    fetchTrends({ from: effectiveFrom, to: effectiveTo })
       .then((data) => {
-        // 날짜별로 합산 (여러 프로젝트 행을 하나로)
         const map = new Map<string, TrendRow>()
         for (const row of data as TrendRow[]) {
           const existing = map.get(row.snapshot_date)
           if (existing) {
-            existing.total_new        += row.total_new
-            existing.total_open       += row.total_open
+            existing.total_new         += row.total_new
+            existing.total_open        += row.total_open
             existing.total_in_progress += row.total_in_progress
-            existing.total_closed     += row.total_closed
-            existing.total_breached   += row.total_breached
+            existing.total_closed      += row.total_closed
+            existing.total_breached    += row.total_breached
           } else {
             map.set(row.snapshot_date, { ...row })
           }
@@ -345,51 +365,164 @@ function TrendTable({ from, to }: { from: string; to: string }) {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false))
-  }, [from, to])
+  }, [effectiveFrom, effectiveTo])
+
+  const maxNew = Math.max(...rows.map(r => r.total_new), 1)
 
   return (
     <>
       <hr className="my-8 border-gray-200 dark:border-gray-700" />
-      <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">일별 스냅샷 추이</h2>
+
+      {/* 헤더 + 필터 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 className="text-base font-bold text-gray-800 dark:text-gray-100">📊 일별 스냅샷 추이</h2>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 프리셋 버튼 */}
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+            {TREND_PRESETS.map(p => (
+              <button
+                key={p.days}
+                onClick={() => { setPreset(p.days); setUseCustom(false) }}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  !useCustom && preset === p.days
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 직접 입력 토글 */}
+          <button
+            onClick={() => setUseCustom(v => !v)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              useCustom
+                ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400'
+                : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
+          >
+            직접 입력
+          </button>
+        </div>
+      </div>
+
+      {/* 직접 입력 패널 */}
+      {useCustom && (
+        <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex-wrap">
+          <label className="text-xs text-blue-700 dark:text-blue-400 font-medium">기간</label>
+          <input
+            type="date" value={customFrom}
+            onChange={e => setCustomFrom(e.target.value)}
+            className="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <span className="text-gray-400 text-xs">~</span>
+          <input
+            type="date" value={customTo}
+            onChange={e => setCustomTo(e.target.value)}
+            className="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <span className="text-xs text-blue-600 dark:text-blue-400">
+            {effectiveFrom} ~ {effectiveTo}
+          </span>
+        </div>
+      )}
+
+      {/* 현재 기간 표시 (프리셋일 때) */}
+      {!useCustom && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+          {effectiveFrom} ~ {effectiveTo} ({rows.length}일)
+        </p>
+      )}
+
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg p-4 mb-4 text-sm">⚠️ {error}</div>
       )}
+
       {loading ? (
-        <div className="text-center py-12 text-gray-400 dark:text-gray-500">불러오는 중...</div>
+        <div className="text-center py-12 text-gray-400 dark:text-gray-500 animate-pulse">불러오는 중...</div>
       ) : rows.length === 0 ? (
         <div className="text-center py-12 text-gray-400 dark:text-gray-500">
           <p>해당 기간에 스냅샷 데이터가 없습니다.</p>
           <p className="text-xs mt-1 text-gray-300 dark:text-gray-600">스냅샷은 매일 자정에 자동 생성됩니다.</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-300">날짜</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-300 w-32">날짜</th>
                 <th className="px-4 py-3 text-right font-semibold text-blue-600">당일 신규</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600 dark:text-gray-300">접수됨</th>
-                <th className="px-4 py-3 text-right font-semibold text-orange-600">처리 중<span className="font-normal text-xs text-gray-400 dark:text-gray-500 ml-1">(대기·완료 포함)</span></th>
-                <th className="px-4 py-3 text-right font-semibold text-green-600">누적 종료</th>
-                <th className="px-4 py-3 text-right font-semibold text-red-600">누적 SLA 위반</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-600 dark:text-gray-300 hidden sm:table-cell">접수됨</th>
+                <th className="px-4 py-3 text-right font-semibold text-orange-600 hidden md:table-cell">
+                  처리 중<span className="font-normal text-xs text-gray-400 ml-1">(대기·완료 포함)</span>
+                </th>
+                <th className="px-4 py-3 text-right font-semibold text-green-600 hidden sm:table-cell">누적 종료</th>
+                <th className="px-4 py-3 text-right font-semibold text-red-600">SLA 위반</th>
               </tr>
             </thead>
-            <tbody className="divide-y dark:divide-gray-700">
-              {rows.map((row) => (
-                <tr key={row.snapshot_date} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                  <td className="px-4 py-2 font-mono text-gray-700 dark:text-gray-300">{row.snapshot_date}</td>
-                  <td className="px-4 py-2 text-right text-blue-600 font-medium">{row.total_new}</td>
-                  <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{row.total_open}</td>
-                  <td className="px-4 py-2 text-right text-orange-600">{row.total_in_progress}</td>
-                  <td className="px-4 py-2 text-right text-green-600">{row.total_closed}</td>
-                  <td className="px-4 py-2 text-right">
-                    {row.total_breached > 0
-                      ? <span className="text-red-600 font-medium">{row.total_breached}</span>
-                      : <span className="text-gray-300 dark:text-gray-600">0</span>}
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
+              {rows.map((row) => {
+                const barWidth = maxNew > 0 ? Math.round((row.total_new / maxNew) * 100) : 0
+                return (
+                  <tr key={row.snapshot_date} className="hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors">
+                    <td className="px-4 py-2.5 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                      {row.snapshot_date}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {/* 미니 바 차트 */}
+                        <div className="w-16 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden hidden lg:block">
+                          <div
+                            className="h-full bg-blue-400 dark:bg-blue-500 rounded-full"
+                            style={{ width: `${barWidth}%` }}
+                          />
+                        </div>
+                        <span className="text-blue-600 dark:text-blue-400 font-semibold tabular-nums w-8 text-right">
+                          {row.total_new}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400 tabular-nums hidden sm:table-cell">{row.total_open}</td>
+                    <td className="px-4 py-2.5 text-right text-orange-600 dark:text-orange-400 tabular-nums hidden md:table-cell">{row.total_in_progress}</td>
+                    <td className="px-4 py-2.5 text-right text-green-600 dark:text-green-400 tabular-nums hidden sm:table-cell">{row.total_closed}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      {row.total_breached > 0
+                        ? <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400 font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                            {row.total_breached}
+                          </span>
+                        : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
+            {/* 합계 행 */}
+            <tfoot className="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+              <tr>
+                <td className="px-4 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400">합계 / 평균</td>
+                <td className="px-4 py-2.5 text-right text-blue-600 dark:text-blue-400 font-bold tabular-nums">
+                  {rows.reduce((s, r) => s + r.total_new, 0)}
+                </td>
+                <td className="px-4 py-2.5 text-right text-gray-500 dark:text-gray-400 tabular-nums hidden sm:table-cell">
+                  {Math.round(rows.reduce((s, r) => s + r.total_open, 0) / rows.length)}
+                  <span className="text-xs text-gray-300 dark:text-gray-600 ml-0.5">avg</span>
+                </td>
+                <td className="px-4 py-2.5 text-right text-orange-500 tabular-nums hidden md:table-cell">
+                  {Math.round(rows.reduce((s, r) => s + r.total_in_progress, 0) / rows.length)}
+                  <span className="text-xs text-gray-300 dark:text-gray-600 ml-0.5">avg</span>
+                </td>
+                <td className="px-4 py-2.5 hidden sm:table-cell" />
+                <td className="px-4 py-2.5 text-right font-bold tabular-nums">
+                  {rows.reduce((s, r) => s + r.total_breached, 0) > 0
+                    ? <span className="text-red-600 dark:text-red-400">{rows.reduce((s, r) => s + r.total_breached, 0)}</span>
+                    : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
@@ -487,6 +620,206 @@ function DoraCard({ title, metric, icon }: { title: string; metric: DoraMetricIt
   )
 }
 
+type HeatCell = { date: string; breached: number; total: number }
+
+const HEAT_LEVELS = [
+  { bg: 'bg-gray-100 dark:bg-gray-800',       border: 'border-gray-200 dark:border-gray-700', label: '0건' },
+  { bg: 'bg-red-100 dark:bg-red-950',         border: 'border-red-200 dark:border-red-900',   label: '1건' },
+  { bg: 'bg-red-300 dark:bg-red-800',         border: 'border-red-300 dark:border-red-700',   label: '2~3건' },
+  { bg: 'bg-red-500 dark:bg-red-600',         border: 'border-red-400 dark:border-red-500',   label: '4~7건' },
+  { bg: 'bg-red-700 dark:bg-red-500',         border: 'border-red-600 dark:border-red-400',   label: '8건+' },
+]
+
+function heatLevel(breached: number): number {
+  if (breached === 0) return 0
+  if (breached === 1) return 1
+  if (breached <= 3) return 2
+  if (breached <= 7) return 3
+  return 4
+}
+
+const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
+const MONTH_KO   = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월']
+
+function SLAHeatmap({ weeks }: { weeks: number }) {
+  const [data, setData] = useState<HeatCell[]>([])
+  const [loading, setLoading] = useState(true)
+  const [tooltip, setTooltip] = useState<{ cell: HeatCell; x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetchSLAHeatmap({ weeks })
+      .then(setData)
+      .catch(() => setData([]))
+      .finally(() => setLoading(false))
+  }, [weeks])
+
+  if (loading) {
+    return (
+      <div className="mt-8 animate-pulse">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-36" />
+          <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-24" />
+        </div>
+        <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl p-5 shadow-sm">
+          <div className="h-32 bg-gray-100 dark:bg-gray-800 rounded-lg" />
+        </div>
+      </div>
+    )
+  }
+
+  if (data.length === 0) return null
+
+  // 날짜 → 주 그루핑
+  const weekMap = new Map<string, (HeatCell | null)[]>()
+  for (const cell of data) {
+    const d = new Date(cell.date + 'T00:00:00')
+    const dow = (d.getDay() + 6) % 7   // 월=0 … 일=6
+    const mon = new Date(d)
+    mon.setDate(d.getDate() - dow)
+    const key = mon.toISOString().slice(0, 10)
+    if (!weekMap.has(key)) weekMap.set(key, Array(7).fill(null))
+    weekMap.get(key)![dow] = cell
+  }
+
+  const weekKeys   = Array.from(weekMap.keys()).sort()
+  const totalBreached = data.reduce((s, d) => s + d.breached, 0)
+  const totalTickets  = data.reduce((s, d) => s + d.total,    0)
+  const maxBreached   = Math.max(...data.map(d => d.breached), 0)
+  const worstDay      = data.find(d => d.breached === maxBreached)
+  const activeDays    = data.filter(d => d.total > 0).length
+  const violationRate = totalTickets > 0 ? Math.round((totalBreached / totalTickets) * 100) : 0
+
+  // 월 레이블 — 각 주의 첫 번째 날이 이전 주와 다른 달이면 레이블 표시
+  const monthLabels: (string | null)[] = weekKeys.map((wk, i) => {
+    const month = new Date(wk + 'T00:00:00').getMonth()
+    if (i === 0) return MONTH_KO[month]
+    const prevMonth = new Date(weekKeys[i - 1] + 'T00:00:00').getMonth()
+    return month !== prevMonth ? MONTH_KO[month] : null
+  })
+
+  return (
+    <>
+      <hr className="my-8 border-gray-200 dark:border-gray-700" />
+
+      {/* 헤더 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-base font-bold text-gray-800 dark:text-gray-100">🗓️ SLA 위반 히트맵</h2>
+          <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full">
+            최근 {weeks}주
+          </span>
+        </div>
+      </div>
+
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        {[
+          { label: '총 위반 건수',  value: `${totalBreached}건`,       sub: `전체 ${totalTickets}건 중`,      color: totalBreached > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-200' },
+          { label: '위반율',        value: `${violationRate}%`,         sub: '티켓 대비',                      color: violationRate > 20 ? 'text-red-600 dark:text-red-400' : violationRate > 10 ? 'text-orange-500' : 'text-gray-800 dark:text-gray-200' },
+          { label: '최고 위반일',   value: maxBreached > 0 ? `${maxBreached}건` : '—', sub: worstDay?.date ?? '',  color: maxBreached > 5 ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-200' },
+          { label: '위반 발생일수', value: `${activeDays > 0 ? data.filter(d => d.breached > 0).length : 0}일`, sub: `${activeDays}일 운영 중`, color: 'text-gray-800 dark:text-gray-200' },
+        ].map(s => (
+          <div key={s.label} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 shadow-sm">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{s.label}</p>
+            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* 히트맵 본체 */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-sm overflow-x-auto relative"
+        onMouseLeave={() => setTooltip(null)}>
+
+        <div className="flex gap-[3px] min-w-max">
+          {/* 요일 레이블 */}
+          <div className="flex flex-col gap-[3px] mr-2 justify-start" style={{ paddingTop: '22px' }}>
+            {DAY_LABELS.map((d, i) => (
+              <div key={d}
+                className={`w-[14px] h-[14px] text-[10px] leading-none flex items-center justify-end pr-0.5 select-none ${
+                  i % 2 === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-transparent'
+                }`}>
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* 주 컬럼 */}
+          {weekKeys.map((wk, wi) => {
+            const cells = weekMap.get(wk)!
+            return (
+              <div key={wk} className="flex flex-col gap-[3px]">
+                {/* 월 레이블 */}
+                <div className="h-[18px] text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap leading-tight select-none">
+                  {monthLabels[wi] ?? ''}
+                </div>
+                {cells.map((cell, dow) => {
+                  if (!cell) {
+                    return <div key={dow} className="w-[14px] h-[14px] rounded-sm" />
+                  }
+                  const lv = heatLevel(cell.breached)
+                  const { bg } = HEAT_LEVELS[lv]
+                  return (
+                    <div
+                      key={dow}
+                      className={`w-[14px] h-[14px] rounded-sm ${bg} cursor-pointer transition-all hover:ring-1 hover:ring-gray-400 dark:hover:ring-gray-400 hover:scale-125`}
+                      onMouseEnter={(e) => {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                        const parent = (e.currentTarget as HTMLElement).closest('.relative')!.getBoundingClientRect()
+                        setTooltip({ cell, x: rect.left - parent.left + 8, y: rect.top - parent.top + 20 })
+                      }}
+                    />
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* 툴팁 */}
+        {tooltip && (
+          <div
+            className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap"
+            style={{ left: tooltip.x, top: tooltip.y }}>
+            <p className="font-semibold mb-0.5">{tooltip.cell.date}</p>
+            <p className="text-gray-300">
+              SLA 위반 <span className={`font-bold ${tooltip.cell.breached > 0 ? 'text-red-300' : 'text-green-300'}`}>
+                {tooltip.cell.breached}건
+              </span>
+              {tooltip.cell.total > 0 && (
+                <> / 전체 {tooltip.cell.total}건
+                  {' '}({Math.round((tooltip.cell.breached / tooltip.cell.total) * 100)}%)
+                </>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* 범례 */}
+        <div className="flex items-center gap-3 mt-4 flex-wrap">
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">위반 없음</span>
+          <div className="flex items-center gap-1">
+            {HEAT_LEVELS.map((lv, i) => (
+              <div key={i} title={lv.label}
+                className={`w-[14px] h-[14px] rounded-sm ${lv.bg} border ${lv.border}`} />
+            ))}
+          </div>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">많음</span>
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            {HEAT_LEVELS.slice(1).map((lv, i) => (
+              <span key={i} className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500">
+                <span className={`inline-block w-2.5 h-2.5 rounded-sm ${lv.bg}`} />
+                {lv.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 function DoraSection({ days }: { days: number }) {
   const [data, setData] = useState<DoraMetrics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -542,6 +875,7 @@ function ReportsContent() {
   }
 
   const csvUrl = exportReport({ from, to })
+  const xlsxUrl = exportReportXlsx({ from, to })
   const agentLabel = roleLabels.agent ?? 'IT 담당자'
 
   return (
@@ -561,9 +895,14 @@ function ReportsContent() {
               📈 업무 현황
             </Link>
           )}
-          <a href={csvUrl} className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700 transition-colors">
-            ⬇️ CSV 다운로드
-          </a>
+          <div className="flex items-center gap-2">
+            <a href={csvUrl} className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700 transition-colors">
+              ⬇️ CSV
+            </a>
+            <a href={xlsxUrl} className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm hover:bg-emerald-700 transition-colors">
+              📊 Excel
+            </a>
+          </div>
         </div>
       </div>
 
@@ -629,6 +968,7 @@ function ReportsContent() {
         <>
           <SummarySection from={from} to={to} />
           <BreakdownSection from={from} to={to} />
+          <SLAHeatmap weeks={12} />
           <RatingDetail from={from} to={to} />
           <TrendTable from={from} to={to} />
         </>

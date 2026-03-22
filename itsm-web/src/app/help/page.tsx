@@ -24,12 +24,12 @@ type TabId = typeof TABS[number]['id']
 /* ─── 공통 데이터 ─────────────────────────────────────────────────────── */
 
 const QUICK_LINKS = [
-  { href: '/tickets/new', emoji: '🎫', label: '티켓 등록',    desc: '새 IT 지원 요청',      color: 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 text-blue-700' },
-  { href: '/portal',      emoji: '🌐', label: '고객 포털',    desc: '비로그인 접수',         color: 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 text-teal-700' },
-  { href: '/kanban',      emoji: '🗂️', label: '칸반 보드',    desc: '드래그앤드롭 관리',     color: 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 text-purple-700' },
-  { href: '/kb',          emoji: '📚', label: '지식베이스',   desc: '자가 해결 검색',        color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 text-green-700' },
-  { href: '/reports',     emoji: '📊', label: '리포트',       desc: '현황·성과 분석',        color: 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 text-orange-700' },
-  { href: 'http://localhost:8111/docs', emoji: '📖', label: 'Swagger UI', desc: 'API 명세 확인', color: 'border-pink-200 bg-pink-50 dark:bg-pink-900/20 hover:bg-pink-100 text-pink-700' },
+  { href: '/tickets/new', emoji: '🎫', label: '티켓 등록',    desc: '새 IT 지원 요청',      color: 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 text-blue-700 dark:text-blue-300' },
+  { href: '/portal',      emoji: '🌐', label: '고객 포털',    desc: '비로그인 접수',         color: 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 text-teal-700 dark:text-teal-300' },
+  { href: '/kanban',      emoji: '🗂️', label: '칸반 보드',    desc: '드래그앤드롭 관리',     color: 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 text-purple-700 dark:text-purple-300' },
+  { href: '/kb',          emoji: '📚', label: '지식베이스',   desc: '자가 해결 검색',        color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 text-green-700 dark:text-green-300' },
+  { href: '/reports',     emoji: '📊', label: '리포트',       desc: '현황·성과 분석',        color: 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 text-orange-700 dark:text-orange-300' },
+  { href: 'http://localhost:8111/docs', emoji: '📖', label: 'Swagger UI', desc: 'API 명세 확인', color: 'border-pink-200 dark:border-pink-800 bg-pink-50 dark:bg-pink-900/20 hover:bg-pink-100 text-pink-700' },
 ]
 
 const REGISTRATION_STEPS = [
@@ -59,6 +59,7 @@ const ALL_FEATURES: { emoji: string; title: string; note: string; desc: string; 
   { emoji: '🗂️', title: '칸반 보드',                          note: 'IT 개발자 이상 · /kanban',                             desc: '9개 상태 컬럼(접수됨·승인완료·처리중·대기중·처리완료·테스트중·운영배포전·운영반영완료·종료)을 드래그앤드롭으로 티켓 상태를 직접 변경합니다. 우선순위·담당자 필터로 원하는 카드만 표시하고, SLA 초과 카드는 빨간색(⚠️), 여유 카드는 초록색으로 구분합니다.' },
   { emoji: '📁', title: '칸반 종료됨 컬럼 접기/펼치기',        note: 'IT 개발자 이상 · /kanban',                             desc: '종료됨 컬럼은 기본으로 최근 10건만 표시합니다. "▾ +N건 더 보기" 버튼으로 전체를 펼치고 "▴ 최근 10건만 보기" 버튼으로 다시 접을 수 있습니다. 컬럼 헤더 우측 "◀" 버튼을 클릭하면 컬럼 전체가 좁은 세로 띠로 축소되어 다른 컬럼 작업에 방해받지 않습니다. "▶" 버튼을 클릭하면 다시 펼칩니다. 업무 처리량이 많고 오래된 환경에서도 칸반 보드를 쾌적하게 사용할 수 있습니다.', isNew: true },
   { emoji: '🚫', title: '칸반 드래그 전환 규칙 강제',         note: 'IT 개발자 이상 · /kanban',                             desc: '카드 드래그 시작 순간, 현재 상태에서 이동이 허용되지 않는 컬럼이 자동으로 흐리게(opacity 40%) 비활성화되고 🚫 아이콘이 표시됩니다. 허용된 컬럼만 파란 하이라이트로 강조됩니다. 백엔드 VALID_TRANSITIONS와 동일한 규칙을 프론트에서 사전 적용하여 API 실패 후 카드가 원위치로 돌아오는 불필요한 UX를 방지합니다.', isNew: true },
+  { emoji: '🗓️', title: '칸반 기간 필터',                     note: 'IT 개발자 이상 · /kanban',                             desc: '칸반 보드 상단에 기간 필터 드롭다운(전체 기간 · 오늘 · 이번 주 · 이번 달)이 추가되었습니다. 선택한 기간에 해당하는 티켓만 필터링하여 표시하며, 우선순위·담당자 필터와 조합하여 사용할 수 있습니다. 현재 기간 조건에서 표시 중인 전체 티켓 수가 헤더에 실시간으로 업데이트됩니다.', isNew: true },
   { emoji: '🔍', title: '고급 검색 & URL 동기화',             note: '현업 사용자 이상',                                     desc: '상태·카테고리·우선순위·SLA·신청자·기간 등 복합 필터를 URL로 동기화하여 브라우저 뒤로가기·북마크가 가능합니다.' },
   { emoji: '⭐', title: '즐겨찾기 필터 저장',                  note: 'IT 개발자 이상',                                        desc: '자주 쓰는 필터 조합을 이름 붙여 저장하고 한 번에 적용합니다.' },
   { emoji: '☑️', title: '일괄 작업',                           note: 'IT 관리자 이상',                                       desc: '여러 티켓을 체크박스로 선택하여 종료·담당자 배정·우선순위 변경을 한 번에 처리합니다.' },
@@ -74,16 +75,18 @@ const ALL_FEATURES: { emoji: string; title: string; note: string; desc: string; 
   { emoji: '📚', title: '지식베이스 (KB)',                      note: 'PL 이상 작성 · 전체 열람',                       desc: 'PostgreSQL FTS 전문 검색·태그 필터·카테고리 분류를 지원하는 지식베이스입니다. Markdown 형식으로 작성합니다. 작성·편집은 PL(pl) 이상, 삭제는 관리자(admin)만 가능합니다.' },
   { emoji: '💡', title: 'KB 자동 추천',                        note: '티켓 등록 시 전체 사용자',                              desc: '티켓 제목을 6자 이상 입력하면 300ms 디바운스로 관련 KB 아티클을 자동 추천합니다. /kb/suggest API와 PostgreSQL FTS를 기반으로 동작합니다.', isNew: true },
   { emoji: '📊', title: '리포트 & 에이전트 성과',              note: 'IT 관리자 이상',                                        desc: '전체 현황(신규·종료·SLA 위반·만족도)과 담당자별 성과(처리 건수·SLA 달성률·평균 평점)를 확인합니다.' },
-  { emoji: '📥', title: '티켓 CSV 내보내기',                   note: 'IT 에이전트 이상 · /tickets/export/csv',               desc: '현재 필터 조건이 그대로 적용된 티켓 목록을 CSV 파일로 다운로드합니다. UTF-8 BOM으로 엑셀에서 즉시 열 수 있습니다.', isNew: true },
+  { emoji: '📥', title: '티켓 CSV · Excel 내보내기',             note: 'IT 에이전트 이상 · /tickets/export/csv · /tickets/export/xlsx', desc: '현재 필터 조건이 그대로 적용된 티켓 목록을 CSV 또는 Excel(xlsx)로 다운로드합니다. CSV는 UTF-8 BOM으로 엑셀에서 즉시 열 수 있으며, XLSX는 헤더 강조(파란 배경·굵은 글씨)·열 너비 자동 조정이 적용된 서식 있는 파일로 저장됩니다. CSV 수식 인젝션(Formula Injection) 방어가 양쪽 포맷에 모두 적용됩니다.', isNew: true },
+  { emoji: '📊', title: '리포트 CSV · Excel 내보내기',           note: 'IT 에이전트 이상 · /reports (리포트 내보내기 버튼)',    desc: '리포트 페이지에서 현재 기간 조건의 에이전트 성과 리포트를 CSV 또는 Excel(xlsx)로 내보낼 수 있습니다. 내보내기 버튼 클릭 시 포맷 선택(CSV/Excel) 드롭다운이 표시되며, GET /reports/export?format=csv&period=… API를 호출합니다. 담당자·처리 건수·SLA 달성률·평균 평점 컬럼이 포함되며, XLSX 포맷은 헤더 강조와 열 너비 자동 조정이 적용됩니다.', isNew: true },
   { emoji: '🧬', title: '티켓 복제(Clone)',                    note: 'IT 개발자 이상',                                        desc: 'POST /tickets/{iid}/clone 으로 티켓의 제목·카테고리·우선순위·본문을 복사하여 새 티켓을 생성합니다. 원본 티켓과 related 링크가 자동 연결되고, 복제 알림 댓글이 자동 추가됩니다.', isNew: true },
   { emoji: '🔐', title: 'GitLab Confidential Issue',           note: '티켓 등록 시 전체 사용자',                              desc: '티켓 등록 시 "기밀 티켓" 체크박스를 선택하면 GitLab에 confidential=true로 이슈가 생성됩니다. IT 에이전트 이상 역할만 해당 티켓을 조회할 수 있습니다.', isNew: true },
   { emoji: '🤖', title: '자동 담당자 배정',                    note: '시스템관리자 설정',                                    desc: '카테고리·우선순위·키워드 조건 규칙을 설정하면 신규 티켓 접수 시 담당자가 자동 배정됩니다.' },
   { emoji: '🚨', title: 'SLA 에스컬레이션 자동 정책',          note: 'IT 시스템관리자 설정 · /admin/escalation-policies',   desc: 'SLA 위반/임박 시 자동으로 실행할 정책을 설정합니다. 알림 발송·담당자 변경·우선순위 자동 상향 3가지 액션과 우선순위·트리거·지연 시간 조건을 조합합니다. SLA 체커 스레드(5분 주기)에서 실행되며 중복 실행을 방지합니다.' },
   { emoji: '⏰', title: 'SLA 정책 관리 (DB화)',                 note: '시스템관리자',                                         desc: '우선순위별 응답·해결 목표 시간을 UI에서 직접 수정합니다. 변경 즉시 신규 티켓부터 적용됩니다.' },
+  { emoji: '🕘', title: '업무 시간 기반 SLA 계산',              note: '시스템관리자 설정 · /admin/business-hours',             desc: '요일별 업무 시작·종료 시각(기본 09:00~18:00)과 공휴일을 설정하면 SLA 경과 시간이 실제 업무 시간만 계산됩니다. 비업무 시간(야간·주말·공휴일)에 접수된 티켓은 다음 업무 시간 시작 시점부터 SLA 타이머가 카운트됩니다. 연도별 공휴일 자동 등록과 개별 날짜 추가·삭제를 지원합니다.', isNew: true },
   { emoji: '📧', title: '이메일 템플릿 관리',                   note: 'IT 시스템관리자 · /admin/email-templates',            desc: '이벤트별 이메일 알림 내용을 Jinja2 템플릿 문법으로 커스터마이즈합니다. 미리보기로 샘플 데이터 렌더링을 확인한 후 저장합니다. DB 템플릿 우선 적용, 없으면 하드코딩 폴백.' },
   { emoji: '🏷️', title: '서비스 유형 동적 관리',               note: '시스템관리자 · /admin/service-types',                  desc: '카테고리(서비스 유형)를 DB에서 관리합니다. 관리자 UI에서 이모지·색상·이름·하위 선택지를 추가·수정·삭제할 수 있으며 즉시 티켓 등록 폼에 반영됩니다. 추가·수정 시 GitLab에 cat::{id} 라벨이 자동 동기화됩니다. 사용 중인 티켓이 있는 서비스 유형은 삭제가 차단되며, 뱃지로 사용 현황이 표시됩니다.' },
   { emoji: '🗒️', title: '감사 로그',                            note: 'IT 관리자 이상',                                        desc: '티켓 생성·수정·삭제·역할 변경·일괄 작업 등 주요 이벤트의 수행자 이름·역할(배지)·IP 주소·타임스탬프를 추적합니다. 기간·액션·행위자 검색 필터와 CSV 다운로드, 페이지네이션을 지원합니다.' },
-  { emoji: '📣', title: 'Telegram·이메일 알림',                 note: '시스템관리자 설정',                                    desc: '티켓 생성·상태 변경·SLA 위반 시 Telegram 채널과 이메일로 자동 알림이 발송됩니다. SLA 해결 기한 1시간 전에도 담당자에게 사전 경고 알림이 전송됩니다.' },
+  { emoji: '📣', title: 'Telegram·이메일·Slack 알림',            note: '시스템관리자 설정',                                    desc: '티켓 생성·상태 변경·SLA 위반 시 Telegram 채널·이메일·Slack Incoming Webhook으로 자동 알림이 발송됩니다. SLA 해결 기한 1시간 전에도 담당자에게 사전 경고 알림이 전송됩니다. 알림 전송은 Celery 비동기 태스크로 처리되어 API 응답 지연 없이 즉시 반환됩니다.', isNew: true },
   { emoji: '🔗', title: '아웃바운드 웹훅',                      note: 'IT 시스템관리자 · /admin/outbound-webhooks',          desc: 'Slack Incoming Webhook, Teams Power Automate 등 외부 서비스와 즉시 연동합니다. HMAC-SHA256 서명, 3회 지수 백오프 재시도를 지원합니다.', isNew: true },
   { emoji: '🔑', title: 'API 키 인증',                          note: 'Admin 발급 · /admin/api-keys',                         desc: 'Authorization: Bearer itsm_live_xxxx 헤더로 외부 시스템에서 ITSM API를 호출할 수 있습니다. 스코프: tickets:read, tickets:write, kb:read, kb:write, webhooks:write. API 키는 SHA-256 해시로 저장(평문 미보관)됩니다.', isNew: true },
   { emoji: '🌐', title: '고객 셀프서비스 포털',                 note: '비로그인 공개 · /portal',                               desc: 'GitLab 계정 없이도 이름·이메일·제목·내용만으로 IT 지원을 요청할 수 있습니다. 접수 후 발급된 토큰 링크(/portal/track/{token})로 티켓 진행 상황을 실시간 확인합니다. 포털 제출은 분당 5건 Rate Limit이 적용됩니다.' },
@@ -119,6 +122,12 @@ const ALL_FEATURES: { emoji: string; title: string; note: string; desc: string; 
   { emoji: '🔗', title: '문제 관리 (Problem Management)',          note: 'IT 개발자 이상 · 티켓 유형 "문제" 선택 시',              desc: '티켓 유형을 "문제(problem)"로 설정하면 사이드바에 문제 관리 패널이 나타납니다. 인시던트 티켓 번호를 입력하여 "problem_of" 링크로 연결하면 해당 문제와 관련된 모든 인시던트를 한 곳에서 추적할 수 있습니다. 연결된 인시던트는 목록으로 표시되며 개별 제거도 가능합니다. 기존 티켓 링크(TicketLink) 인프라를 재사용하여 link_type=problem_of 방식으로 저장됩니다.', isNew: true },
   { emoji: '🎛️', title: '대시보드 위젯 커스터마이징',              note: '전체 · 홈 화면',                                         desc: '홈 화면 상단의 위젯 바에서 ⚙️ 버튼을 클릭하면 위젯 표시 여부를 개인별로 설정할 수 있습니다. 위젯 종류: ① 상태 현황 탭(stats_bar — 전체 티켓 현황 탭), ② 내 담당 티켓(my_tickets — 배정된 티켓 수 및 목록), ③ SLA 현황(sla_status — 위반·임박 건수), ④ 최근 활동(recent_activity — 최신 티켓 목록). 설정은 서버(/dashboard/config)에 저장되어 다른 기기에서도 동일하게 적용됩니다.', isNew: true },
   { emoji: '⚙️', title: '자동화 규칙 엔진 (Automation Rules)',     note: 'Admin 설정 · /admin/automation-rules',                   desc: '티켓 이벤트 발생 시 조건에 따라 자동으로 액션을 실행하는 규칙을 정의합니다. 트리거 이벤트(ticket.created / ticket.updated / ticket.closed 등)·조건(필드·연산자·값 조합)·액션(상태 변경·우선순위 설정·알림 발송 등)을 자유롭게 조합합니다. 규칙은 우선순위(order) 순서대로 평가되며 is_active 토글로 개별 활성/비활성화가 가능합니다. 조건과 액션은 JSONB 배열로 저장되어 유연한 확장이 가능합니다.', isNew: true },
+  { emoji: '🗓️', title: 'SLA 위반 히트맵',                       note: 'IT 에이전트 이상 · /reports (전체 현황 탭)',             desc: '리포트 페이지 전체 현황 탭에서 최근 12주간의 SLA 위반 건수를 GitHub 잔디 스타일 히트맵으로 시각화합니다. 요일(월~일) × 주 단위 격자로 표시되며 위반 건수에 따라 5단계 색상 강도로 표현됩니다. 셀 위에 마우스를 올리면 날짜·위반 건수·전체 건수가 툴팁으로 표시됩니다. 일별 스냅샷 데이터 기반으로 동작합니다.', isNew: true },
+  { emoji: '📖', title: 'KB 문서 버전 이력',                     note: 'IT 개발자 이상 · KB 수정 시 자동 저장',                 desc: 'KB 아티클을 수정할 때마다 이전 버전이 자동으로 저장됩니다(최대 10개, 이후 오래된 순 자동 삭제). KB 상세 페이지 우측 상단 "버전 이력" 버튼을 클릭하면 사이드바가 열려 버전 목록(버전 번호·수정 시각·수정자)과 선택한 버전의 제목·본문 미리보기를 바로 확인할 수 있습니다. API로도 조회 가능: GET /kb/articles/{id}/revisions (목록), GET /kb/articles/{id}/revisions/{rev_id} (상세).', isNew: true },
+  { emoji: '📤', title: 'CSV 일괄 티켓 생성',                    note: 'IT PL 이상 · POST /tickets/import/csv',                 desc: 'CSV 파일로 티켓을 일괄 생성합니다. 필수 컬럼: title, description, category, priority, employee_name, employee_email. 선택 컬럼: department, location. UTF-8 BOM 및 CP949 인코딩을 자동 감지하며 최대 500행, dry_run=true 파라미터로 파싱 결과만 확인 후 실제 생성 여부를 결정할 수 있습니다.', isNew: true },
+  { emoji: '📬', title: '승인 요청 이메일 알림',                  note: '자동 · 승인 요청/결정 시',                              desc: '승인 요청 생성 시 지정된 승인자에게, 승인·거절 결정 시 요청자에게 이메일이 자동 발송됩니다. NOTIFICATION_ENABLED=true 환경변수가 설정된 경우 동작하며, 이메일 발송 실패 시에도 인앱 알림은 정상 전달됩니다(fail-soft).', isNew: true },
+  { emoji: '🤖', title: '자동화 규칙 실행 이력',                  note: 'Admin · /admin/automation-rules → 이력 버튼',           desc: '자동화 규칙이 평가될 때마다 실행 이력이 자동으로 기록됩니다. 규칙 카드의 "이력" 버튼을 클릭하면 최근 50건의 실행 이력(티켓 번호·트리거 이벤트·매칭 여부·실행된 액션 목록·시각)을 모달로 확인할 수 있습니다. GET /automation-rules/{id}/logs, GET /automation-rules/logs/recent API로도 조회 가능합니다.', isNew: true },
+  { emoji: '📥', title: '이메일 수신 모니터링',                   note: 'Admin · /admin/email-ingest',                           desc: 'IMAP 이메일 수신 설정 상태(서버·계정·스케줄)를 확인하고 Celery Beat가 처리하는 이메일 인제스트를 수동으로 즉시 실행할 수 있습니다. 비활성화 시 필요한 환경변수 안내를 함께 표시합니다.', isNew: true },
   { emoji: '🌑', title: '다크모드 FOUC 수정',                   note: '전체 · 페이지 로드',                                     desc: '페이지 최초 로드 시 라이트 모드가 잠깐 깜빡이다가 다크 모드로 전환되는 FOUC(Flash of Unstyled Content) 현상을 수정했습니다. HTML <head>에 동기 인라인 스크립트를 삽입하여 React hydration 이전에 localStorage와 시스템 설정을 읽어 즉시 dark 클래스를 적용합니다.', isNew: true },
   { emoji: '📐', title: '처리완료 모달 높이 제한',              note: '전체 · 처리완료·종료 상태 전환 시',                        desc: '처리완료(resolved)/종료(closed) 전환 시 표시되는 해결 노트 모달이 화면 높이를 초과하던 문제를 수정했습니다. max-h-[90vh] + overflow-y-auto 적용으로 내용이 많아도 스크롤 처리되며, 헤더·푸터는 항상 화면에 고정됩니다. 다크모드 스타일도 함께 적용되었습니다.', isNew: true },
   { emoji: '🔗', title: '마크다운 첨부파일 인라인 렌더링 개선', note: '전체 · KB · 티켓 댓글',                                   desc: 'KB 아티클과 티켓 댓글에서 첨부파일 링크가 마크다운 원문(`[📎 파일명.pdf](URL)`)으로 노출되던 문제를 수정했습니다. MarkdownRenderer가 /uploads/proxy 및 /-/project/ 경로를 감지하여 FilePreview 컴포넌트로 자동 렌더링합니다. 이미지는 썸네일+라이트박스, PDF는 인라인 미리보기, 기타 파일은 다운로드 버튼으로 표시됩니다.', isNew: true },
@@ -160,9 +169,9 @@ const SECURITY_FEATURES: { emoji: string; title: string; desc: string; isNew?: b
 /* ─── 워크플로우 & SLA 데이터 ────────────────────────────────────────── */
 
 const SLA_ROWS = [
-  { priority: '긴급', emoji: '🔴', response: 4,  resolve: 8,   desc: '업무 불가 / 즉시 조치 필요',  color: 'text-red-600 bg-red-50 dark:bg-red-900/20',     example: '서버 다운, 전체 인터넷 불통' },
-  { priority: '높음', emoji: '🟠', response: 8,  resolve: 24,  desc: '업무에 지장 있음',              color: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20', example: '주요 업무시스템 오류' },
-  { priority: '보통', emoji: '🟡', response: 24, resolve: 72,  desc: '불편하지만 업무 가능',          color: 'text-yellow-700 bg-yellow-50 dark:bg-yellow-900/20', example: '업무 속도 저하, 일부 기능 이상' },
+  { priority: '긴급', emoji: '🔴', response: 4,  resolve: 8,   desc: '업무 불가 / 즉시 조치 필요',  color: 'text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-900/20',     example: '서버 다운, 전체 인터넷 불통' },
+  { priority: '높음', emoji: '🟠', response: 8,  resolve: 24,  desc: '업무에 지장 있음',              color: 'text-orange-600 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/20', example: '주요 업무시스템 오류' },
+  { priority: '보통', emoji: '🟡', response: 24, resolve: 72,  desc: '불편하지만 업무 가능',          color: 'text-yellow-700 dark:text-yellow-300 bg-yellow-50 dark:bg-yellow-900/20', example: '업무 속도 저하, 일부 기능 이상' },
   { priority: '낮음', emoji: '⚪', response: 48, resolve: 168, desc: '일상 업무에 영향 없음',         color: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50',    example: '장비 교체 요청, 비업무 시간 대응' },
 ]
 
@@ -414,7 +423,7 @@ const COMPARISON_SECTIONS: { category: string; rows: { feature: string; itsm: st
       { feature: 'ClamAV 바이러스 스캔 (상시)',            itsm: '✅', zammad: '❌', glpi: '⚠️', jira: '❌', sn: '✅', isNew: true },
       { feature: 'PostgreSQL 자동 백업',                   itsm: '✅', zammad: '⚠️', glpi: '⚠️', jira: '✅', sn: '✅' },
       { feature: 'GitLab CI/CD 파이프라인',                itsm: '✅', zammad: '⚠️', glpi: '❌', jira: '✅', sn: '✅' },
-      { feature: 'Alembic 마이그레이션 (50단계)',          itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '✅', isNew: true },
+      { feature: 'Alembic 마이그레이션 (52단계)',          itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '✅', isNew: true },
     ],
   },
 ]
@@ -430,7 +439,7 @@ const API_GROUPS: {
 }[] = [
   {
     id: 'auth', emoji: '🔐', name: '인증 (Auth)', baseUrl: '/auth',
-    color: 'text-blue-700', border: 'border-blue-200 dark:border-blue-800', bg: 'bg-blue-50 dark:bg-blue-900/20',
+    color: 'text-blue-700 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800', bg: 'bg-blue-50 dark:bg-blue-900/20',
     endpoints: [
       { method: 'GET',  path: '/auth/me',      desc: '현재 로그인 사용자 정보 조회' },
       { method: 'GET',  path: '/auth/login',   desc: 'GitLab OAuth 인증 시작' },
@@ -441,7 +450,7 @@ const API_GROUPS: {
   },
   {
     id: 'tickets', emoji: '🎫', name: '티켓 (Tickets)', baseUrl: '/tickets',
-    color: 'text-green-700', border: 'border-green-200 dark:border-green-800', bg: 'bg-green-50 dark:bg-green-900/20',
+    color: 'text-green-700 dark:text-green-400', border: 'border-green-200 dark:border-green-800', bg: 'bg-green-50 dark:bg-green-900/20',
     endpoints: [
       { method: 'GET',    path: '/tickets',                   desc: '목록 조회 (필터·페이지네이션)' },
       { method: 'POST',   path: '/tickets',                   desc: '티켓 생성 (confidential 체크박스 포함)' },
@@ -468,7 +477,7 @@ const API_GROUPS: {
   },
   {
     id: 'kb', emoji: '📚', name: '지식베이스 (KB)', baseUrl: '/kb',
-    color: 'text-purple-700', border: 'border-purple-200 dark:border-purple-800', bg: 'bg-purple-50 dark:bg-purple-900/20',
+    color: 'text-purple-700 dark:text-purple-400', border: 'border-purple-200 dark:border-purple-800', bg: 'bg-purple-50 dark:bg-purple-900/20',
     endpoints: [
       { method: 'GET',    path: '/kb/articles',        desc: '목록 (FTS 전문 검색·태그 필터)' },
       { method: 'POST',   path: '/kb/articles',        desc: '아티클 생성 (developer 이상)' },
@@ -480,7 +489,7 @@ const API_GROUPS: {
   },
   {
     id: 'admin', emoji: '⚙️', name: '관리 (Admin)', baseUrl: '/admin',
-    color: 'text-red-700', border: 'border-red-200 dark:border-red-800', bg: 'bg-red-50 dark:bg-red-900/20',
+    color: 'text-red-700 dark:text-red-400', border: 'border-red-200 dark:border-red-800', bg: 'bg-red-50 dark:bg-red-900/20',
     endpoints: [
       { method: 'GET',    path: '/admin/users',                      desc: '사용자 목록 조회' },
       { method: 'PATCH',  path: '/admin/users/{id}/role',            desc: '사용자 역할 변경' },
@@ -526,7 +535,7 @@ const API_GROUPS: {
   },
   {
     id: 'reports', emoji: '📊', name: '보고서 (Reports)', baseUrl: '/reports',
-    color: 'text-orange-700', border: 'border-orange-200 dark:border-orange-800', bg: 'bg-orange-50 dark:bg-orange-900/20',
+    color: 'text-orange-700 dark:text-orange-400', border: 'border-orange-200 dark:border-orange-800', bg: 'bg-orange-50 dark:bg-orange-900/20',
     endpoints: [
       { method: 'GET', path: '/reports/current-stats',     desc: '실시간 통계 (신규·처리중·완료·SLA 위반)' },
       { method: 'GET', path: '/reports/trends',            desc: '일별 스냅샷 추이 (DailyStatsSnapshot)' },
@@ -539,7 +548,7 @@ const API_GROUPS: {
   },
   {
     id: 'filters', emoji: '🔖', name: '필터 (Filters)', baseUrl: '/filters',
-    color: 'text-teal-700', border: 'border-teal-200 dark:border-teal-800', bg: 'bg-teal-50 dark:bg-teal-900/20',
+    color: 'text-teal-700 dark:text-teal-400', border: 'border-teal-200 dark:border-teal-800', bg: 'bg-teal-50 dark:bg-teal-900/20',
     endpoints: [
       { method: 'GET',    path: '/filters',      desc: '저장된 즐겨찾기 필터 목록' },
       { method: 'POST',   path: '/filters',      desc: '필터 저장' },
@@ -548,7 +557,7 @@ const API_GROUPS: {
   },
   {
     id: 'notifications', emoji: '🔔', name: '알림 (Notifications)', baseUrl: '/notifications',
-    color: 'text-yellow-700', border: 'border-yellow-200 dark:border-yellow-800', bg: 'bg-yellow-50 dark:bg-yellow-900/20',
+    color: 'text-yellow-700 dark:text-yellow-400', border: 'border-yellow-200 dark:border-yellow-800', bg: 'bg-yellow-50 dark:bg-yellow-900/20',
     endpoints: [
       { method: 'GET',   path: '/notifications',              desc: '알림 목록 조회' },
       { method: 'PATCH', path: '/notifications/{id}/read',    desc: '알림 읽음 처리' },
@@ -562,7 +571,7 @@ const API_GROUPS: {
   },
   {
     id: 'quick-replies', emoji: '💬', name: '빠른 답변 (Quick Replies)', baseUrl: '/quick-replies',
-    color: 'text-pink-700', border: 'border-pink-200', bg: 'bg-pink-50 dark:bg-pink-900/20',
+    color: 'text-pink-700 dark:text-pink-400', border: 'border-pink-200 dark:border-pink-800', bg: 'bg-pink-50 dark:bg-pink-900/20',
     endpoints: [
       { method: 'GET',    path: '/quick-replies',      desc: '목록 조회 (developer 이상)' },
       { method: 'POST',   path: '/quick-replies',      desc: '생성 (agent 이상)' },
@@ -572,14 +581,14 @@ const API_GROUPS: {
   },
   {
     id: 'projects', emoji: '📁', name: '프로젝트 (Projects)', baseUrl: '/projects',
-    color: 'text-indigo-700', border: 'border-indigo-200 dark:border-indigo-800', bg: 'bg-indigo-50 dark:bg-indigo-900/20',
+    color: 'text-indigo-700 dark:text-indigo-400', border: 'border-indigo-200 dark:border-indigo-800', bg: 'bg-indigo-50 dark:bg-indigo-900/20',
     endpoints: [
       { method: 'GET', path: '/projects/{project_id}/milestones', desc: '활성 GitLab 마일스톤 목록 조회 (id·iid·title·description·due_date, state 파라미터로 active/closed 필터)', isNew: true },
     ],
   },
   {
     id: 'ticket-types', emoji: '🏷️', name: '티켓 유형 (Ticket Types)', baseUrl: '/ticket-types',
-    color: 'text-violet-700', border: 'border-violet-200 dark:border-violet-800', bg: 'bg-violet-50 dark:bg-violet-900/20',
+    color: 'text-violet-700 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', bg: 'bg-violet-50 dark:bg-violet-900/20',
     endpoints: [
       { method: 'GET',  path: '/ticket-types/{iid}',      desc: '티켓 유형 메타 조회 (ticket_type·problem_ticket_iids)', isNew: true },
       { method: 'PUT',  path: '/ticket-types/{iid}',      desc: '티켓 유형 설정 (developer 이상, ticket_type 변경)', isNew: true },
@@ -588,7 +597,7 @@ const API_GROUPS: {
   },
   {
     id: 'service-catalog', emoji: '📦', name: '서비스 카탈로그 (Service Catalog)', baseUrl: '/service-catalog',
-    color: 'text-teal-700', border: 'border-teal-200 dark:border-teal-800', bg: 'bg-teal-50 dark:bg-teal-900/20',
+    color: 'text-teal-700 dark:text-teal-400', border: 'border-teal-200 dark:border-teal-800', bg: 'bg-teal-50 dark:bg-teal-900/20',
     endpoints: [
       { method: 'GET',    path: '/service-catalog/public',  desc: '활성 카탈로그 목록 (비로그인 공개 — 포털용)', isNew: true },
       { method: 'GET',    path: '/service-catalog',         desc: '전체 카탈로그 목록 (인증 필요)', isNew: true },
@@ -599,7 +608,7 @@ const API_GROUPS: {
   },
   {
     id: 'dashboard', emoji: '🎛️', name: '대시보드 (Dashboard)', baseUrl: '/dashboard',
-    color: 'text-amber-700', border: 'border-amber-200 dark:border-amber-800', bg: 'bg-amber-50 dark:bg-amber-900/20',
+    color: 'text-amber-700 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800', bg: 'bg-amber-50 dark:bg-amber-900/20',
     endpoints: [
       { method: 'GET', path: '/dashboard/config', desc: '사용자별 위젯 설정 조회 (없으면 기본값 반환)', isNew: true },
       { method: 'PUT', path: '/dashboard/config', desc: '사용자별 위젯 설정 저장 (widgets JSONB 배열)', isNew: true },
@@ -607,7 +616,7 @@ const API_GROUPS: {
   },
   {
     id: 'automation-rules', emoji: '⚙️', name: '자동화 규칙 (Automation Rules)', baseUrl: '/automation-rules',
-    color: 'text-rose-700', border: 'border-rose-200 dark:border-rose-800', bg: 'bg-rose-50 dark:bg-rose-900/20',
+    color: 'text-rose-700 dark:text-rose-400', border: 'border-rose-200 dark:border-rose-800', bg: 'bg-rose-50 dark:bg-rose-900/20',
     endpoints: [
       { method: 'GET',    path: '/automation-rules',          desc: '자동화 규칙 목록 (admin, order 순 정렬)', isNew: true },
       { method: 'POST',   path: '/automation-rules',          desc: '자동화 규칙 생성 (admin, trigger_event·conditions·actions JSONB)', isNew: true },
@@ -618,7 +627,7 @@ const API_GROUPS: {
   },
   {
     id: 'portal', emoji: '🌐', name: '고객 포털 (Portal)', baseUrl: '/portal',
-    color: 'text-teal-700', border: 'border-teal-200 dark:border-teal-800', bg: 'bg-teal-50 dark:bg-teal-900/20',
+    color: 'text-teal-700 dark:text-teal-400', border: 'border-teal-200 dark:border-teal-800', bg: 'bg-teal-50 dark:bg-teal-900/20',
     endpoints: [
       { method: 'POST', path: '/portal/submit',        desc: '비로그인 티켓 제출 (이름·이메일·제목·내용·카테고리·긴급도) — Rate Limit 5/분' },
       { method: 'GET',  path: '/portal/track/{token}', desc: '게스트 토큰으로 티켓 상태 조회 (인증 불필요)' },
@@ -626,7 +635,7 @@ const API_GROUPS: {
   },
   {
     id: 'approvals', emoji: '✅', name: '승인 (Approvals)', baseUrl: '/approvals',
-    color: 'text-green-700', border: 'border-green-200 dark:border-green-800', bg: 'bg-green-50 dark:bg-green-900/20',
+    color: 'text-green-700 dark:text-green-400', border: 'border-green-200 dark:border-green-800', bg: 'bg-green-50 dark:bg-green-900/20',
     endpoints: [
       { method: 'GET',  path: '/approvals',                 desc: '승인 요청 목록 조회 (?ticket_iid=N&status=pending 필터, agent 이상)', isNew: true },
       { method: 'POST', path: '/approvals',                 desc: '승인 요청 생성 (티켓 IID·프로젝트 ID·승인자 username)', isNew: true },
@@ -636,7 +645,7 @@ const API_GROUPS: {
   },
   {
     id: 'ip-allowlist', emoji: '🛡️', name: 'IP 허용목록 (IP Allowlist)', baseUrl: '/ip-allowlist',
-    color: 'text-red-700', border: 'border-red-200 dark:border-red-800', bg: 'bg-red-50 dark:bg-red-900/20',
+    color: 'text-red-700 dark:text-red-400', border: 'border-red-200 dark:border-red-800', bg: 'bg-red-50 dark:bg-red-900/20',
     endpoints: [
       { method: 'GET',    path: '/ip-allowlist',          desc: 'IP 허용목록 조회 (admin)', isNew: true },
       { method: 'POST',   path: '/ip-allowlist',          desc: 'IP/CIDR 추가 (admin)', isNew: true },
@@ -647,11 +656,11 @@ const API_GROUPS: {
 ]
 
 const METHOD_BADGE: Record<HttpMethod, string> = {
-  GET:    'bg-green-100 dark:bg-green-900/30 text-green-800 border border-green-300 dark:border-green-700',
-  POST:   'bg-blue-100 dark:bg-blue-900/30 text-blue-800 border border-blue-300 dark:border-blue-700',
-  PATCH:  'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 border border-yellow-300 dark:border-yellow-700',
-  PUT:    'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 border border-yellow-300 dark:border-yellow-700',
-  DELETE: 'bg-red-100 dark:bg-red-900/30 text-red-800 border border-red-300 dark:border-red-700',
+  GET:    'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 border border-green-300 dark:border-green-700',
+  POST:   'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border border-blue-300 dark:border-blue-700',
+  PATCH:  'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 border border-yellow-300 dark:border-yellow-700',
+  PUT:    'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 border border-yellow-300 dark:border-yellow-700',
+  DELETE: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-700',
 }
 
 /* ─── 아키텍처 데이터 ─────────────────────────────────────────────────── */
@@ -659,8 +668,8 @@ const METHOD_BADGE: Record<HttpMethod, string> = {
 const SW_COMPONENTS = [
   {
     emoji: '🔀', name: 'Nginx', version: '1.27',
-    category: '네트워크', badge: 'bg-green-100 dark:bg-green-900/30 text-green-800',
-    border: 'border-green-300', bg: 'bg-green-50 dark:bg-green-900/20',
+    category: '네트워크', badge: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200',
+    border: 'border-green-300 dark:border-green-700', bg: 'bg-green-50 dark:bg-green-900/20',
     role: '리버스 프록시 · 단일 진입점',
     desc: '외부의 모든 요청을 포트 8111 하나로 받아 Next.js(웹)와 FastAPI(API)로 분기합니다. SSE 알림 스트림 경로에 proxy_buffering off를 적용하여 실시간 이벤트가 끊기지 않게 합니다.',
     details: [
@@ -676,7 +685,7 @@ const SW_COMPONENTS = [
   },
   {
     emoji: '⚛️', name: 'Next.js 15', version: 'App Router · React 18 · TypeScript · Node.js 22',
-    category: '프론트엔드', badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800',
+    category: '프론트엔드', badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200',
     border: 'border-blue-300 dark:border-blue-700', bg: 'bg-blue-50 dark:bg-blue-900/20',
     role: '웹 프론트엔드 클라이언트',
     desc: 'App Router 기반의 React 18 웹 클라이언트로, Tailwind CSS로 스타일링합니다. standalone 빌드로 Docker 이미지 크기를 최소화하고, EventSource API로 SSE 알림을 실시간 수신합니다.',
@@ -695,12 +704,12 @@ const SW_COMPONENTS = [
   },
   {
     emoji: '⚡', name: 'FastAPI', version: 'Python 3.13 · Uvicorn ASGI',
-    category: '백엔드 API', badge: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800',
-    border: 'border-yellow-300', bg: 'bg-yellow-50 dark:bg-yellow-900/20',
+    category: '백엔드 API', badge: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200',
+    border: 'border-yellow-300 dark:border-yellow-700', bg: 'bg-yellow-50 dark:bg-yellow-900/20',
     role: 'REST API 서버 · 비즈니스 로직',
     desc: 'ITSM의 핵심 비즈니스 로직을 처리하는 비동기 API 서버입니다. SLA 체커·스냅샷 스케줄러·사용자 동기화가 백그라운드 스레드로 동작하고, slowapi로 Rate Limiting, prometheus-fastapi-instrumentator로 메트릭을 제공합니다.',
     details: [
-      'SQLAlchemy 2.0 ORM + Alembic 마이그레이션 (0001~0047, 47단계)',
+      'SQLAlchemy 2.0 ORM + Alembic 마이그레이션 (0001~0052, 52단계)',
       'slowapi Rate Limiting (포털 5/분·티켓 생성 10/분 등 엔드포인트별 세분화)',
       'prometheus-fastapi-instrumentator → /metrics 노출',
       '비즈니스 KPI 메트릭 27종 (5분 주기 DB 집계, 별도 스레드)',
@@ -721,12 +730,12 @@ const SW_COMPONENTS = [
   },
   {
     emoji: '🐘', name: 'PostgreSQL 17', version: '17',
-    category: '데이터베이스', badge: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800',
-    border: 'border-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-900/20',
+    category: '데이터베이스', badge: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200',
+    border: 'border-indigo-300 dark:border-indigo-700', bg: 'bg-indigo-50 dark:bg-indigo-900/20',
     role: '주 관계형 데이터베이스',
     desc: '티켓·사용자·SLA·KB·감사로그 등 모든 데이터를 저장합니다. KB 전문 검색에 GIN 인덱스(tsvector), 태그 필터에 ARRAY+GIN, 즐겨찾기 필터에 JSONB를 활용하여 고성능 검색을 구현합니다.',
     details: [
-      'Alembic 마이그레이션 47단계 (0001~0047)',
+      'Alembic 마이그레이션 52단계 (0001~0052)',
       'GIN 인덱스: KB FTS (tsvector), 태그 (TEXT[] ARRAY)',
       'JSONB: saved_filters.filters 컬럼',
       'UserRole.is_active 컬럼: 퇴사자 계정 비활성화 플래그',
@@ -748,7 +757,7 @@ const SW_COMPONENTS = [
   },
   {
     emoji: '🔴', name: 'Redis 7.4', version: '7.4',
-    category: '캐시 · Pub/Sub', badge: 'bg-red-100 dark:bg-red-900/30 text-red-800',
+    category: '캐시 · Pub/Sub', badge: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200',
     border: 'border-red-300 dark:border-red-700', bg: 'bg-red-50 dark:bg-red-900/20',
     role: 'SSE 알림 Pub/Sub · 웹훅 중복 방지',
     desc: '인앱 실시간 알림의 발행-구독 브로커입니다. API 서버 여러 인스턴스가 동일 Redis 채널을 통해 알림 이벤트를 공유하고, 웹훅 UUID를 5분 TTL로 저장하여 재전송 공격을 방지합니다.',
@@ -764,8 +773,8 @@ const SW_COMPONENTS = [
   },
   {
     emoji: '🦊', name: 'GitLab CE', version: 'CE latest',
-    category: '인증 · VCS', badge: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800',
-    border: 'border-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/20',
+    category: '인증 · VCS', badge: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200',
+    border: 'border-orange-300 dark:border-orange-700', bg: 'bg-orange-50 dark:bg-orange-900/20',
     role: 'OAuth 2.0 SSO · 이슈·MR 관리',
     desc: 'ITSM의 유일한 인증 제공자입니다. Authorization Code Flow로 로그인하고, GitLab API로 이슈 생성·MR 조회·사용자 상태 확인을 수행합니다. 그룹 멤버십은 1시간 주기로 동기화되어 퇴사자 계정을 자동 차단합니다.',
     details: [
@@ -783,7 +792,7 @@ const SW_COMPONENTS = [
   },
   {
     emoji: '📊', name: 'Prometheus', version: 'latest',
-    category: '모니터링 (상시)', badge: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700',
+    category: '모니터링 (상시)', badge: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-200',
     border: 'border-orange-200 dark:border-orange-800', bg: 'bg-orange-50 dark:bg-orange-900/20',
     role: '메트릭 수집 · 시계열 저장',
     desc: 'FastAPI /metrics 엔드포인트를 60초 간격으로 스크래핑하여 API 응답 시간·요청 수·에러율을 수집합니다. 30일 데이터를 보관하며, 별도 profile 없이 항상 기동됩니다.',
@@ -797,8 +806,8 @@ const SW_COMPONENTS = [
   },
   {
     emoji: '📈', name: 'Grafana', version: 'latest',
-    category: '모니터링 (상시)', badge: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800',
-    border: 'border-purple-300', bg: 'bg-purple-50 dark:bg-purple-900/20',
+    category: '모니터링 (상시)', badge: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200',
+    border: 'border-purple-300 dark:border-purple-700', bg: 'bg-purple-50 dark:bg-purple-900/20',
     role: '메트릭 시각화 대시보드',
     desc: 'Prometheus를 데이터소스로 연결하여 API 성능·SLA 현황·비즈니스 KPI를 대시보드로 시각화합니다. 4개의 전용 대시보드가 자동 프로비저닝되며, 포트 3001로 접근합니다.',
     details: [
@@ -814,7 +823,7 @@ const SW_COMPONENTS = [
   },
   {
     emoji: '🦠', name: 'ClamAV', version: 'latest',
-    category: '보안 스캔 (상시)', badge: 'bg-red-100 dark:bg-red-900/30 text-red-700',
+    category: '보안 스캔 (상시)', badge: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200',
     border: 'border-red-200 dark:border-red-800', bg: 'bg-red-50 dark:bg-red-900/20',
     role: '바이러스·악성코드 실시간 스캔',
     desc: '파일 업로드 시 ClamAV 엔진으로 바이러스 및 악성코드를 실시간 스캔합니다. ARM64 환경에서는 linux/amd64 에뮬레이션으로 동작합니다. 항상 기동됩니다.',
@@ -1401,8 +1410,8 @@ function TabStart() {
                   <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{s.desc}</p>
                   {s.tip && (
                     <div className="mt-2 flex items-start gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
-                      <span className="text-blue-500 text-xs shrink-0 mt-0.5">💡 TIP</span>
-                      <p className="text-xs text-blue-700 leading-relaxed">{s.tip}</p>
+                      <span className="text-blue-500 dark:text-blue-400 text-xs shrink-0 mt-0.5">💡 TIP</span>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">{s.tip}</p>
                     </div>
                   )}
                 </div>
@@ -1622,7 +1631,7 @@ function TabFeatures() {
                     <span className="font-semibold text-gray-800 dark:text-gray-100 text-sm">{f.title}</span>
                     {f.isNew && <NewBadge />}
                   </div>
-                  <div className="text-xs text-blue-600 font-medium mb-1">{f.note}</div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">{f.note}</div>
                   <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{f.desc}</p>
                 </div>
               </div>
@@ -1749,7 +1758,7 @@ function TabFeatures() {
         <div className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm p-6 space-y-5">
 
           {/* 개요 */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-800 leading-relaxed">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-800 dark:text-blue-200 leading-relaxed">
             담당자나 신청자가 아니어도 <strong>관심 있는 티켓의 진행 상황을 이메일로 추적</strong>할 수 있는 기능입니다.
             티켓 상세 화면 우측 사이드바 하단의 <strong>🔕 이 티켓 구독</strong> 버튼으로 등록·취소합니다.
           </div>
@@ -1835,8 +1844,8 @@ function TabFeatures() {
 
           {/* 제한 사항 */}
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-yellow-800 mb-2">⚠️ 현재 제한 사항</h3>
-            <ul className="text-xs text-yellow-700 space-y-1.5 leading-relaxed">
+            <h3 className="text-sm font-semibold text-yellow-800 dark:text-yellow-200 mb-2">⚠️ 현재 제한 사항</h3>
+            <ul className="text-xs text-yellow-700 dark:text-yellow-300 space-y-1.5 leading-relaxed">
               <li>• <strong>이메일 전용</strong> — 인앱 벨(🔔) 알림은 지원되지 않습니다. 이메일로만 수신됩니다.</li>
               <li>• <strong>GitLab 이메일 필수</strong> — GitLab 계정에 이메일이 등록되지 않으면 알림을 받을 수 없습니다.</li>
               <li>• <strong>구독자 수 비표시</strong> — 현재 티켓에 몇 명이 구독 중인지 화면에 표시되지 않습니다.</li>
@@ -1852,7 +1861,7 @@ function TabFeatures() {
         <div className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm p-6 space-y-5">
 
           {/* 개요 */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-800 leading-relaxed">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-800 dark:text-blue-200 leading-relaxed">
             티켓 상세 사이드바 <strong>"전달"</strong> 탭의 프로젝트 드롭다운에는{' '}
             <strong>현재 로그인한 사용자의 GitLab OAuth 토큰</strong>으로 조회한 결과가 채워집니다.
             서비스 계정(PRIVATE-TOKEN)이 아닌 <strong>개인 OAuth 토큰</strong>을 사용하므로,
@@ -2067,9 +2076,9 @@ function TabWorkflow() {
             <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-3">정책 조합 예시</h4>
             <div className="space-y-2">
               {[
-                { priority: '긴급', trigger: 'warning', delay: 0, action: '알림 발송', color: 'bg-red-100 dark:bg-red-900/30 text-red-700' },
-                { priority: '높음', trigger: 'breach', delay: 30, action: '담당자 변경', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700' },
-                { priority: '보통', trigger: 'breach', delay: 60, action: '우선순위 자동 상향', color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700' },
+                { priority: '긴급', trigger: 'warning', delay: 0, action: '알림 발송', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
+                { priority: '높음', trigger: 'breach', delay: 30, action: '담당자 변경', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' },
+                { priority: '보통', trigger: 'breach', delay: 60, action: '우선순위 자동 상향', color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' },
               ].map((ex, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs flex-wrap">
                   <span className={`px-2 py-0.5 rounded font-bold ${ex.color}`}>{ex.priority}</span>
@@ -2248,15 +2257,15 @@ function TabWorkloadPerf() {
 
       {/* 접근 방법 */}
       <section className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-        <h3 className="font-semibold text-blue-900 mb-2">📍 접근 방법</h3>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-blue-800">
+        <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">📍 접근 방법</h3>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-blue-800 dark:text-blue-200">
           <span className="bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded px-2 py-0.5 font-mono">시스템 관리</span>
           <span>→</span>
           <span className="bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded px-2 py-0.5">리포트 그룹</span>
           <span>→</span>
           <span className="bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded px-2 py-0.5 font-semibold">📈 업무 현황 및 성과</span>
         </div>
-        <p className="text-xs text-blue-600 mt-2">Admin 역할만 접근 가능합니다. GitLab 이슈를 전수 조회하므로 첫 로딩에 수 초가 소요될 수 있습니다.</p>
+        <p className="text-xs text-blue-600 dark:text-blue-300 mt-2">Admin 역할만 접근 가능합니다. GitLab 이슈를 전수 조회하므로 첫 로딩에 수 초가 소요될 수 있습니다.</p>
       </section>
 
       {/* 화면 구성 */}
@@ -2375,8 +2384,8 @@ function TabWorkloadPerf() {
                   <p className="font-medium text-gray-800 dark:text-gray-100 text-sm">{f.title}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{f.desc}</p>
                   <div className="mt-2 flex items-start gap-1.5">
-                    <span className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 px-1.5 py-0.5 rounded font-medium shrink-0">TIP</span>
-                    <p className="text-xs text-blue-600">{f.tip}</p>
+                    <span className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-medium shrink-0">TIP</span>
+                    <p className="text-xs text-blue-600 dark:text-blue-300">{f.tip}</p>
                   </div>
                 </div>
               </div>
@@ -2452,7 +2461,7 @@ function TabPerf() {
           <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">1</div>
           <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">성능 개선 — 티켓 목록 로드 최적화</h2>
         </div>
-        <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-800">
+        <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-800 dark:text-blue-200">
           <span className="font-semibold">측정 기준:</span> 32개 이슈, 캐시 미스 환경 (GitLab CE 동일 호스트)
         </div>
         <div className="space-y-4">
@@ -2464,16 +2473,16 @@ function TabPerf() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 text-xs">
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                  <div className="text-red-600 font-semibold mb-1">개선 전</div>
-                  <div className="text-red-800">{item.before}</div>
+                  <div className="text-red-600 dark:text-red-400 font-semibold mb-1">개선 전</div>
+                  <div className="text-red-800 dark:text-red-200">{item.before}</div>
                 </div>
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                  <div className="text-green-600 font-semibold mb-1">개선 후</div>
-                  <div className="text-green-800">{item.after}</div>
+                  <div className="text-green-600 dark:text-green-400 font-semibold mb-1">개선 후</div>
+                  <div className="text-green-800 dark:text-green-200">{item.after}</div>
                 </div>
                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                  <div className="text-blue-600 font-semibold mb-1">효과</div>
-                  <div className="text-blue-800 font-medium">{item.saving}</div>
+                  <div className="text-blue-600 dark:text-blue-400 font-semibold mb-1">효과</div>
+                  <div className="text-blue-800 dark:text-blue-200 font-medium">{item.saving}</div>
                 </div>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{item.detail}</p>
@@ -2547,14 +2556,288 @@ function TabPerf() {
                   <div className="text-gray-700 dark:text-gray-300">{item.symptom}</div>
                 </div>
                 <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
-                  <div className="text-orange-600 font-semibold mb-1">원인</div>
-                  <div className="text-orange-800">{item.cause}</div>
+                  <div className="text-orange-600 dark:text-orange-400 font-semibold mb-1">원인</div>
+                  <div className="text-orange-800 dark:text-orange-200">{item.cause}</div>
                 </div>
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                  <div className="text-green-600 font-semibold mb-1">수정</div>
-                  <div className="text-green-800">{item.fix}</div>
+                  <div className="text-green-600 dark:text-green-400 font-semibold mb-1">수정</div>
+                  <div className="text-green-800 dark:text-green-200">{item.fix}</div>
                 </div>
               </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Celery 비동기 태스크 큐 */}
+      <section className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">4</div>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Celery 비동기 태스크 큐 구축</h2>
+        </div>
+
+        {/* 개요 */}
+        <div className="mb-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4 text-sm text-purple-800 dark:text-purple-200">
+          이메일·Telegram·웹훅 알림을 HTTP 요청 흐름에서 분리하여 Celery Worker가 비동기로 처리합니다.
+          브로커 장애 시 <code className="bg-purple-100 dark:bg-purple-800/50 px-1 rounded text-xs">BackgroundTasks</code> 직접 호출로 자동 fallback합니다.
+        </div>
+
+        {/* 아키텍처 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {[
+            {
+              title: '태스크 목록 (app/tasks.py)',
+              color: 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20',
+              items: [
+                'send_notification — 범용 알림 (이메일·Telegram·웹훅)',
+                'send_sla_warning — SLA 경고 (만료 N분 전)',
+                'send_sla_breach — SLA 위반 (기간 초과)',
+                'send_assigned_notification — 담당자 배정 알림',
+              ],
+            },
+            {
+              title: 'Fallback 전략',
+              color: 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20',
+              items: [
+                'CELERY_BROKER_URL 미설정 → BackgroundTasks 직접 실행',
+                'task.delay() 실패 → BackgroundTasks fallback',
+                'SLA 알림: send_sla_warning.delay() → notify_sla_warning()',
+                '담당자 알림: GitLab /users/{id} 이메일 조회 후 dispatch',
+              ],
+            },
+            {
+              title: '인프라 (docker-compose.yml)',
+              color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20',
+              items: [
+                'celery-worker: --concurrency=4, healthcheck ping',
+                'flower: mher/flower:2.0, 포트 5555 (localhost only)',
+                'Redis 7.4-alpine 브로커 재사용',
+                'Flower → celery-worker healthy 조건부 시작',
+              ],
+            },
+          ].map((card) => (
+            <div key={card.title} className={`border rounded-xl p-4 ${card.color}`}>
+              <div className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-2">{card.title}</div>
+              <ul className="space-y-1">
+                {card.items.map((item) => (
+                  <li key={item} className="text-xs text-gray-600 dark:text-gray-400 flex gap-1.5">
+                    <span className="text-gray-400 shrink-0">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        {/* 테스트 결과 */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/50 border-b dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+            테스트 결과 (2026-03-20)
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-gray-800/30 border-b dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-2 text-left">항목</th>
+                <th className="px-4 py-2 text-center">결과</th>
+                <th className="px-4 py-2 text-left">비고</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {[
+                { item: 'pytest 전체 테스트', result: '✅ 1,582 passed', note: '0 failed · 848 warnings' },
+                { item: '코드 커버리지', result: '✅ 93%', note: '10,043 statements (전체), 726 missed' },
+                { item: 'celery_app.py 임포트', result: '✅ 정상', note: 'Redis 브로커 연결 설정 포함' },
+                { item: '_dispatch_notification 래퍼', result: '✅ 정상', note: 'delay() 실패 시 BackgroundTasks fallback' },
+                { item: 'SLA warning 비동기화', result: '✅ 적용', note: 'sla.py → send_sla_warning.delay()' },
+                { item: 'SLA breach 알림', result: '✅ 신규', note: 'check_and_flag_breaches 후 breach task dispatch' },
+                { item: '담당자 배정 알림', result: '✅ 신규', note: 'get_user_email() → GitLab /users/{id}' },
+                { item: 'Flower 모니터링', result: '✅ 추가', note: 'docker-compose.yml flower 서비스 (포트 5555)' },
+              ].map((row) => (
+                <tr key={row.item} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300 text-sm">{row.item}</td>
+                  <td className="px-4 py-2.5 text-center text-xs font-semibold text-green-600 dark:text-green-400">{row.result}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-gray-400">{row.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* OpenTelemetry 분산 추적 */}
+      <section className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">5</div>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">OpenTelemetry 분산 추적</h2>
+        </div>
+        <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 text-sm text-indigo-800 dark:text-indigo-200">
+          <code className="bg-indigo-100 dark:bg-indigo-800/50 px-1 rounded text-xs">OTEL_ENABLED=true</code> 환경 변수로 활성화합니다.
+          FastAPI 요청 추적과 SQLAlchemy 쿼리 추적을 OTLP gRPC로 내보냅니다.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { title: '설정 (app/telemetry.py)', color: 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20', items: ['OTEL_ENABLED=true 로 활성화', 'OTEL_EXPORTER_OTLP_ENDPOINT 지정', 'OTEL_SERVICE_NAME=itsm-api (기본값)', 'FastAPIInstrumentor + SQLAlchemyInstrumentor'] },
+            { title: '계측 범위', color: 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20', items: ['모든 HTTP 요청 Span 자동 생성', 'SQLAlchemy 쿼리 commenter 활성화', 'BatchSpanProcessor로 비동기 내보내기', 'Resource에 service.name 태그 포함'] },
+            { title: '패키지 미설치 시 동작', color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20', items: ['ImportError 발생 시 graceful skip', '운영 코드에 영향 없음 (선택적 활성화)', 'OTEL_ENABLED=false 기본값으로 개발 환경 호환', 'Jaeger / OTEL Collector 연동 가능'] },
+          ].map((card) => (
+            <div key={card.title} className={`border rounded-xl p-4 ${card.color}`}>
+              <div className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-2">{card.title}</div>
+              <ul className="space-y-1">{card.items.map((i) => <li key={i} className="text-xs text-gray-600 dark:text-gray-400 flex gap-1.5"><span className="text-gray-400 shrink-0">•</span><span>{i}</span></li>)}</ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* DB 쿼리 N+1 감지 */}
+      <section className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">6</div>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">DB 쿼리 N+1 감지 및 최적화</h2>
+        </div>
+        <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-sm text-amber-800 dark:text-amber-200">
+          <code className="bg-amber-100 dark:bg-amber-800/50 px-1 rounded text-xs">app/db_profiler.py</code> — SQLAlchemy 이벤트 훅으로 느린 쿼리와 N+1 패턴을 실시간 감지합니다.
+          개발 환경에서는 요청별 쿼리 횟수까지 추적합니다.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { title: '느린 쿼리 감지 (항상 활성)', color: 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20', items: ['SLOW_QUERY_THRESHOLD_MS 환경변수로 임계값 조정 (기본 200ms)', '초과 쿼리: WARNING 로그 + SQL 스니펫 120자', 'production/development 모두 활성화', 'SQLAlchemy after_cursor_execute 이벤트 활용'] },
+            { title: 'N+1 패턴 감지', color: 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20', items: ['같은 요청 내 동일 테이블 10회 이상 → WARNING', 'FROM 절 정규식으로 테이블명 추출', '개발 환경: 요청별 QueryProfilerMiddleware 활성화', '20회 초과 시 상위 5개 테이블 INFO 로그'] },
+            { title: '적용 현황', color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20', items: ['main.py: setup_db_profiler(app, enabled=not is_production())', '개발환경: per-request N+1 추적 활성화', '운영환경: 느린 쿼리 감지만 활성화', 'ORM 조인 최적화 → selectinload/joinedload 적용'] },
+          ].map((card) => (
+            <div key={card.title} className={`border rounded-xl p-4 ${card.color}`}>
+              <div className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-2">{card.title}</div>
+              <ul className="space-y-1">{card.items.map((i) => <li key={i} className="text-xs text-gray-600 dark:text-gray-400 flex gap-1.5"><span className="text-gray-400 shrink-0">•</span><span>{i}</span></li>)}</ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 이메일 수신 자동 티켓 전환 */}
+      <section className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">7</div>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">이메일 수신 → 자동 티켓 전환</h2>
+        </div>
+        <div className="mb-4 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-xl p-4 text-sm text-teal-800 dark:text-teal-200">
+          <code className="bg-teal-100 dark:bg-teal-800/50 px-1 rounded text-xs">app/email_ingest.py</code> — IMAP으로 미열람 이메일을 폴링해 GitLab 이슈(티켓)로 자동 전환합니다.
+          답장 스레딩, 중복 방지, SLA 자동 생성, 배정 규칙 적용까지 완비됐습니다.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { title: '신규 티켓 처리', color: 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20', items: ['IMAP UNSEEN 폴링 (주기: IMAP_POLL_INTERVAL)', '이메일 → GitLab 이슈 자동 생성', 'HTML 태그 제거 + 최대 50,000자 제한', '배정 규칙 자동 적용 (evaluate_rules)', 'SLA 레코드 자동 생성', '접수 확인 이메일 발송'] },
+            { title: '답장 스레딩', color: 'border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/20', items: ['In-Reply-To / References 헤더 → Redis 조회', '제목 [티켓 #N] 패턴 → GitLab 이슈 검증 후 연결', 'IID 스푸핑 방지: GitLab API로 실존 확인', '답장 → 기존 티켓에 노트(댓글) 추가', 'message_id → ticket_iid 30일 TTL 캐시'] },
+            { title: '안정성·보안', color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20', items: ['Redis SET NX로 중복 이메일 방지', '사이클당 최대 50건 처리 (한도 초과 시 경고)', 'IMAP 연결 오류 → 재시도 다음 주기로 연기', 'PII 마스킹: 이메일 주소 로그 최소화', 'IMAP_ENABLED=false 기본값 (명시 활성화 필요)'] },
+          ].map((card) => (
+            <div key={card.title} className={`border rounded-xl p-4 ${card.color}`}>
+              <div className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-2">{card.title}</div>
+              <ul className="space-y-1">{card.items.map((i) => <li key={i} className="text-xs text-gray-600 dark:text-gray-400 flex gap-1.5"><span className="text-gray-400 shrink-0">•</span><span>{i}</span></li>)}</ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Alembic CI 자동화 */}
+      <section className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">8</div>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Alembic 마이그레이션 CI 자동화</h2>
+        </div>
+        <div className="mb-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-xl p-4 text-sm text-violet-800 dark:text-violet-200">
+          <code className="bg-violet-100 dark:bg-violet-800/50 px-1 rounded text-xs">migrate:check</code> CI 잡이 MR·main·release 브랜치마다 PostgreSQL 컨테이너에 모든 마이그레이션을 적용하고
+          미반영 파일 0건을 검증합니다. pytest는 SQLite를 사용하므로 이 잡이 실제 DB 호환성을 보장합니다.
+        </div>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm overflow-hidden mb-4">
+          <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/50 border-b dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+            CI 파이프라인 잡 (migrate:check)
+          </div>
+          <table className="w-full text-sm">
+            <thead><tr className="bg-gray-50 dark:bg-gray-800/30 border-b dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400"><th className="px-4 py-2 text-left">항목</th><th className="px-4 py-2 text-left">내용</th></tr></thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {[
+                { k: 'stage', v: 'test (lint:backend 완료 후 실행)' },
+                { k: '서비스', v: 'postgres:16-alpine (CI 서비스 컨테이너)' },
+                { k: '실행 명령', v: 'alembic upgrade head → alembic check' },
+                { k: '트리거', v: 'MR 생성·업데이트, main, release 브랜치 push' },
+                { k: '마이그레이션 파일', v: '0001 ~ 0052 (52단계)' },
+                { k: '실패 시', v: 'allow_failure: false — 파이프라인 차단' },
+              ].map((r) => (
+                <tr key={r.k} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="px-4 py-2.5 text-xs font-mono text-gray-500 dark:text-gray-400 w-40">{r.k}</td>
+                  <td className="px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300">{r.v}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* 데이터 내보내기·가져오기 */}
+      <section className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">9</div>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">데이터 내보내기·가져오기</h2>
+        </div>
+        <div className="mb-4 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl p-4 text-sm text-sky-800 dark:text-sky-200">
+          관리자가 배정 규칙·SLA 정책·빠른 답변·공지사항·에스컬레이션 정책을 JSON/CSV로 내보내고,
+          JSON 파일로 되가져올 수 있습니다. <code className="bg-sky-100 dark:bg-sky-800/50 px-1 rounded text-xs">mode=replace</code>로 전체 교체도 지원합니다.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { title: 'GET /admin/export/{target}', color: 'border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20', items: ['target: assignment-rules | sla-policies | quick-replies | announcements | escalation-policies', 'fmt=json (기본) 또는 fmt=csv', 'JSON: {target, exported_at, count, data[]} 구조', 'CSV: UTF-8 BOM, Content-Disposition 다운로드', '관리자 권한 필요'] },
+            { title: 'POST /admin/import/{target}', color: 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20', items: ['multipart/form-data — JSON 파일 업로드', 'mode=append: 기존 유지 + 새 항목 추가 (기본)', 'mode=replace: 기존 전체 삭제 후 교체', '파일 크기 제한: 최대 10 MB', 'id·created_at 등 읽기 전용 필드 자동 무시', 'created_by: 현재 관리자 계정으로 자동 설정'] },
+          ].map((card) => (
+            <div key={card.title} className={`border rounded-xl p-4 ${card.color}`}>
+              <div className="font-semibold text-sm font-mono text-gray-800 dark:text-gray-100 mb-2">{card.title}</div>
+              <ul className="space-y-1">{card.items.map((i) => <li key={i} className="text-xs text-gray-600 dark:text-gray-400 flex gap-1.5"><span className="text-gray-400 shrink-0">•</span><span>{i}</span></li>)}</ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* API v1 버전 관리 */}
+      <section className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">10</div>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">API v1 버전 관리 (/api/v1 프리픽스)</h2>
+        </div>
+        <div className="mb-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4 text-sm text-rose-800 dark:text-rose-200">
+          모든 라우터를 <code className="bg-rose-100 dark:bg-rose-800/50 px-1 rounded text-xs">_v1 = APIRouter()</code>로 집약한 뒤
+          <code className="bg-rose-100 dark:bg-rose-800/50 px-1 rounded text-xs">/api/v1/...</code>와 <code className="bg-rose-100 dark:bg-rose-800/50 px-1 rounded text-xs">/...</code> 두 경로에 동시 마운트합니다. 레거시 클라이언트 하위 호환을 유지하면서 신규 클라이언트는 /api/v1 사용을 권장합니다.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { title: '경로 구조 (main.py)', color: 'border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/20', items: ['_v1 = APIRouter() — 전체 라우터 집약점', 'app.include_router(_v1, prefix="/api/v1") — 버전 경로', 'app.include_router(_v1) — 레거시 경로 (하위 호환)', '향후 /api/v2 추가 시 _v1 유지·병행 운영 가능'] },
+            { title: '마운트된 라우터 (20개)', color: 'border-pink-200 dark:border-pink-800 bg-pink-50 dark:bg-pink-900/20', items: ['auth, tickets, ratings, projects (core)', 'admin, webhooks, kb, reports (enterprise)', 'notifications, templates, forwards, filters', 'portal, quick_replies, watchers, automation', 'approvals, ticket_types, service_catalog, dashboard, ip_allowlist, faq'] },
+            { title: '호환성 전략', color: 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20', items: ['현재: /tickets/ = /api/v1/tickets/ (동일 응답)', '프론트엔드: 레거시 경로 유지 (즉시 변경 불필요)', '신규 통합: /api/v1/... 사용 권장', 'deprecated 예고 후 레거시 경로 제거 예정'] },
+          ].map((card) => (
+            <div key={card.title} className={`border rounded-xl p-4 ${card.color}`}>
+              <div className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-2">{card.title}</div>
+              <ul className="space-y-1">{card.items.map((i) => <li key={i} className="text-xs text-gray-600 dark:text-gray-400 flex gap-1.5"><span className="text-gray-400 shrink-0">•</span><span>{i}</span></li>)}</ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Playwright E2E 테스트 */}
+      <section className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">11</div>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Playwright E2E 테스트 기본 설정</h2>
+        </div>
+        <div className="mb-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 text-sm text-emerald-800 dark:text-emerald-200">
+          <code className="bg-emerald-100 dark:bg-emerald-800/50 px-1 rounded text-xs">itsm-web/e2e/</code> 디렉토리에 Playwright E2E 테스트가 구성됩니다.
+          <code className="bg-emerald-100 dark:bg-emerald-800/50 px-1 rounded text-xs">npm run test:e2e</code>로 실행하며 로컬에서는 Next.js 개발 서버를 자동 시작합니다.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { title: '테스트 파일 구조 (65개 통과)', color: 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20', items: ['auth.setup.ts — 관리자 로그인·쿠키 저장', 'tickets.spec.ts — 티켓 목록·생성·검색 E2E', 'ticket-flow.spec.ts — 티켓 전체 플로우 (생성→목록→상세→댓글)', 'mobile.spec.ts — 모바일 뷰포트 반응형 UI 검증 (Pixel 7)', 'admin.spec.ts — 관리자 패널·접근성 검사', 'portal.spec.ts — 고객 포털 티켓 제출 플로우', 'automation.spec.ts — 자동화 규칙 관리·API', 'kb.spec.ts — 지식베이스 목록·상세·작성', 'notifications.spec.ts — 알림·SSE 스트림·배지', 'approvals.spec.ts — 승인 대기·E2E 플로우'] },
+            { title: '인증 전략 (JWT + Redis)', color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20', items: ['토큰 생성: create_token() + store_gitlab_token(jti)', 'E2E_ADMIN_TOKEN 환경변수 → 쿠키 직접 주입 (CI)', 'GitLab OAuth 버튼 클릭 → 인터랙티브 로그인 (로컬)', 'storageState: e2e/.auth/admin.json 재사용', '포털 테스트: 인증 없이 독립 실행 (portal 프로젝트)'] },
+            { title: 'CI 통합 (.github/workflows/e2e.yml)', color: 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20', items: ['E2E_BASE_URL: http://localhost:3000 (CI 내부)', 'JWT 토큰 자동 생성 + Redis JTI 등록 (CI 단계)', 'Next.js 서버 준비 대기 (curl 헬스체크 루프)', 'retries: 2 (CI 환경 flaky 대응)', 'screenshot/video: 실패 시 Artifact 14일 저장'] },
+          ].map((card) => (
+            <div key={card.title} className={`border rounded-xl p-4 ${card.color}`}>
+              <div className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-2">{card.title}</div>
+              <ul className="space-y-1">{card.items.map((i) => <li key={i} className="text-xs text-gray-600 dark:text-gray-400 flex gap-1.5"><span className="text-gray-400 shrink-0">•</span><span>{i}</span></li>)}</ul>
             </div>
           ))}
         </div>
@@ -2563,25 +2846,28 @@ function TabPerf() {
       {/* 안정화 체크 결과 */}
       <section className="mb-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">4</div>
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">12</div>
           <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">현재 시스템 상태</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[
-            { emoji: '✅', label: '모든 컨테이너', desc: '9개 Up (재시작 0회)' },
+            { emoji: '✅', label: '모든 컨테이너', desc: '11개 Up (재시작 0회)' },
             { emoji: '✅', label: 'API 헬스체크', desc: 'DB·Redis·GitLab·label_sync all ok' },
             { emoji: '✅', label: 'Python 모듈', desc: '30개 정상 로드' },
             { emoji: '✅', label: 'TypeScript 타입', desc: '오류 없음' },
-            { emoji: '✅', label: 'DB 마이그레이션', desc: '0041 (최신)' },
+            { emoji: '✅', label: 'DB 마이그레이션', desc: '0052 (최신) · CI alembic check 통과' },
             { emoji: '✅', label: 'DB 제약조건', desc: '비정상 0건' },
             { emoji: '✅', label: 'Prometheus 스크레이프', desc: 'itsm-api: up' },
             { emoji: '✅', label: 'Grafana 대시보드', desc: '4개 자동 프로비저닝' },
+            { emoji: '✅', label: 'Celery Worker', desc: '--concurrency=4, healthcheck ping' },
+            { emoji: '✅', label: 'Flower 모니터링', desc: 'mher/flower:2.0 (포트 5555)' },
             { emoji: '✅', label: '보안 헤더 7종', desc: 'CSP·HSTS·X-Frame 등' },
             { emoji: '✅', label: 'npm 취약점', desc: 'high/critical 없음 (low 4건)' },
             { emoji: '✅', label: '비즈니스 메트릭', desc: '27개 샘플 수집 중' },
+            { emoji: '✅', label: '테스트 커버리지', desc: '93% (pytest 1,582 + E2E 65 passed)' },
             { emoji: '⚠️', label: 'SECRET_KEY', desc: '운영 배포 전 반드시 교체 필요' },
           ].map((item) => (
-            <div key={item.label} className={`flex items-start gap-3 rounded-lg border p-3 ${item.emoji === '⚠️' ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800' : 'bg-white dark:bg-gray-900'}`}>
+            <div key={item.label} className={`flex items-start gap-3 rounded-lg border p-3 ${item.emoji === '⚠️' ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
               <span className="text-lg shrink-0">{item.emoji}</span>
               <div>
                 <div className="font-semibold text-sm text-gray-800 dark:text-gray-100">{item.label}</div>
@@ -2589,6 +2875,48 @@ function TabPerf() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* 서버 이전 스크립트 */}
+      <section className="mb-10">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">🚚 서버 이전 스크립트</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">scripts/</code> 디렉토리에 무중단 서버 이전을 위한 4개 스크립트가 포함되어 있습니다.
+          모든 스크립트는 <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">--dry-run</code> 옵션으로 실제 명령 없이 실행 계획을 먼저 확인할 수 있습니다.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            {
+              name: 'migrate_backup.sh',
+              desc: '구 서버에서 실행. nginx 점검 모드 전환 → PostgreSQL 최종 덤프(custom format, MD5 체크섬 생성) → Redis 스냅샷 → 업로드 파일 동기화 → 신규 서버로 rsync 전송.',
+              usage: './scripts/migrate_backup.sh [--output-dir DIR] [--new-server user@host]',
+            },
+            {
+              name: 'migrate_restore.sh',
+              desc: '신규 서버에서 실행. MD5 무결성 검증 → postgres/redis 기동 → pg_restore DB 복원 → Alembic 마이그레이션 → 전체 서비스 기동 → 데이터 정합성 검증 → API 헬스체크.',
+              usage: './scripts/migrate_restore.sh [--uploads-dir DIR] <dump.dump>',
+            },
+            {
+              name: 'migrate_verify.sh',
+              desc: '구·신 서버의 레코드 수(티켓·댓글·SLA·사용자·KB·감사 로그)를 비교하여 데이터 정합성을 검증합니다. 차이가 10% 이상이면 경고를 출력합니다.',
+              usage: './scripts/migrate_verify.sh --old-server OLD_DB_URL --new-server NEW_DB_URL',
+            },
+            {
+              name: 'migrate_rollback.sh',
+              desc: '긴급 롤백 시 사용. --dump-delta로 신규 서버 데이터 보존 → --block으로 신규 서버 nginx 점검 모드 전환 → 구 서버에서 --restore-old로 nginx 정상 복원.',
+              usage: './scripts/migrate_rollback.sh --block | --restore-old | --dump-delta',
+            },
+          ].map((s) => (
+            <div key={s.name} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+              <div className="font-semibold text-sm text-blue-700 dark:text-blue-400 mb-1">{s.name}</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">{s.desc}</div>
+              <code className="block text-xs bg-gray-100 dark:bg-gray-900 rounded px-2 py-1 text-gray-700 dark:text-gray-300 break-all">{s.usage}</code>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 text-xs text-gray-500 dark:text-gray-500">
+          롤백 기준: GitLab OAuth 로그인 전체 실패(5분 이상) · DB 데이터 유실 · API 에러율 &gt;10%(5분 기준) · 파일 업로드/다운로드 전체 실패
         </div>
       </section>
     </>
@@ -2605,16 +2933,16 @@ function TabArch() {
         <SectionTitle number="1" title="기술 스택 버전" />
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
-            { name: 'Python',      version: '3.13',    emoji: '🐍', color: 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-800' },
+            { name: 'Python',      version: '3.13',    emoji: '🐍', color: 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200' },
             { name: 'Next.js',     version: '15.5.x',  emoji: '⚛️', color: 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-800 dark:text-gray-100' },
-            { name: 'Node.js',     version: '22',      emoji: '🟢', color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-800' },
+            { name: 'Node.js',     version: '22',      emoji: '🟢', color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' },
             { name: 'PostgreSQL',  version: '17',      emoji: '🐘', color: 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-200' },
-            { name: 'Redis',       version: '7.4',     emoji: '🔴', color: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-800' },
-            { name: 'Nginx',       version: '1.27',    emoji: '🔀', color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-800' },
-            { name: 'Alembic',     version: '41단계',  emoji: '📋', color: 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 text-purple-800' },
-            { name: 'Prometheus',  version: 'latest',  emoji: '📊', color: 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 text-orange-800' },
-            { name: 'Grafana',     version: 'latest',  emoji: '📈', color: 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 text-purple-800' },
-            { name: 'ClamAV',      version: 'latest',  emoji: '🦠', color: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-800' },
+            { name: 'Redis',       version: '7.4',     emoji: '🔴', color: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200' },
+            { name: 'Nginx',       version: '1.27',    emoji: '🔀', color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' },
+            { name: 'Alembic',     version: '52단계',  emoji: '📋', color: 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200' },
+            { name: 'Prometheus',  version: 'latest',  emoji: '📊', color: 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-200' },
+            { name: 'Grafana',     version: 'latest',  emoji: '📈', color: 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200' },
+            { name: 'ClamAV',      version: 'latest',  emoji: '🦠', color: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200' },
           ].map((tech) => (
             <div key={tech.name} className={`border-2 rounded-xl p-3 text-center ${tech.color}`}>
               <div className="text-xl mb-1">{tech.emoji}</div>
@@ -2707,9 +3035,12 @@ function TabArch() {
               { key: 'REDIS_PASSWORD', default: '—', desc: 'Redis requirepass 인증 비밀번호' },
               { key: 'IMAP_POLL_INTERVAL', default: '60', desc: 'IMAP 폴링 주기 (초)' },
               { key: 'TELEGRAM_BOT_TOKEN', default: '—', desc: 'Telegram 알림 봇 토큰' },
+              { key: 'SLACK_ENABLED', default: 'false', desc: 'Slack 알림 활성화 (true/false)' },
+              { key: 'SLACK_WEBHOOK_URL', default: '—', desc: 'Slack Incoming Webhook URL (https://hooks.slack.com/...)' },
+              { key: 'SLACK_CHANNEL', default: '—', desc: 'Slack 기본 알림 채널 (예: #itsm-alerts), 비어 있으면 웹훅 기본 채널 사용' },
             ].map((env) => (
               <div key={env.key} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 p-3 flex items-start gap-3">
-                <code className="text-xs font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 px-2 py-1 rounded text-blue-700 shrink-0">{env.key}</code>
+                <code className="text-xs font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 px-2 py-1 rounded text-blue-700 dark:text-blue-300 shrink-0">{env.key}</code>
                 <div>
                   <div className="text-xs text-gray-600 dark:text-gray-400">{env.desc}</div>
                   <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">기본값: {env.default}</div>
@@ -2734,12 +3065,12 @@ function TabApi() {
         <div className="flex items-start gap-3">
           <span className="text-xl">📖</span>
           <div>
-            <div className="font-semibold text-blue-800 text-sm mb-1">전체 API 명세 (Swagger)</div>
-            <p className="text-xs text-blue-600 mb-2">
+            <div className="font-semibold text-blue-800 dark:text-blue-200 text-sm mb-1">전체 API 명세 (Swagger)</div>
+            <p className="text-xs text-blue-600 dark:text-blue-300 mb-2">
               Swagger UI(<Link href="http://localhost:8111/docs" target="_blank" rel="noopener noreferrer" className="underline">http://localhost:8111/docs</Link>)에서
               모든 엔드포인트를 직접 테스트할 수 있습니다. 인증이 필요한 엔드포인트는 로그인 후 쿠키가 자동 포함됩니다.
             </p>
-            <div className="text-xs text-blue-700">
+            <div className="text-xs text-blue-700 dark:text-blue-300">
               <span className="font-medium">API 키 인증:</span> Authorization: Bearer itsm_live_xxxx 헤더 사용 (외부 시스템 연동)
             </div>
           </div>
@@ -2816,7 +3147,7 @@ const PROCESS_ROLES = [
   {
     role: '현업',
     color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200',
-    badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700',
+    badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
     itsmRole: 'user',
     actions: ['요청 등록', '테스트 수행', '최종 완료 처리'],
     screens: ['포털 (/portal)', '티켓 상세'],
@@ -2887,9 +3218,9 @@ const PROCESS_STEPS: ProcessStep[] = [
     actor: '현업 → IT팀 → PL',
     actorColor: 'text-blue-700',
     steps: [
-      { who: '현업', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800', action: '요청 등록', detail: '포털(/) 또는 티켓 등록에서 서비스 유형·제목·내용·우선순위 입력 후 제출 → 티켓 생성 (상태: 접수됨/open)' },
-      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800', action: '검토 및 승인', detail: '티켓 상세 → 댓글로 승인 의사 기록 → 담당자(PL) 배정 → 상태를 승인완료로 변경 (이후 PL이 처리중으로 전환)', code: '티켓 담당자 드롭다운 → PL 선택 → 상태 "승인완료(approved)"로 변경' },
-      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800', action: '개발 전달 (Issue 생성)', detail: '티켓 상세 → 사이드바 "전달" 탭 → 대상 개발 프로젝트 선택 → 작업 내용·담당자 입력 → 전달', code: '티켓 상세 우측 → 개발 전달 탭 → "전달하기" 버튼' },
+      { who: '현업', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200', action: '요청 등록', detail: '포털(/) 또는 티켓 등록에서 서비스 유형·제목·내용·우선순위 입력 후 제출 → 티켓 생성 (상태: 접수됨/open)' },
+      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200', action: '검토 및 승인', detail: '티켓 상세 → 댓글로 승인 의사 기록 → 담당자(PL) 배정 → 상태를 승인완료로 변경 (이후 PL이 처리중으로 전환)', code: '티켓 담당자 드롭다운 → PL 선택 → 상태 "승인완료(approved)"로 변경' },
+      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200', action: '개발 전달 (Issue 생성)', detail: '티켓 상세 → 사이드바 "전달" 탭 → 대상 개발 프로젝트 선택 → 작업 내용·담당자 입력 → 전달', code: '티켓 상세 우측 → 개발 전달 탭 → "전달하기" 버튼' },
       { who: 'GitLab', color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300', action: 'feature 브랜치 생성', detail: 'GitLab 개발 프로젝트 → Issues → 해당 Issue → "Create branch" 버튼 → feature/이슈번호-설명 형식', code: 'GitLab > Issues > Create branch' },
     ],
   },
@@ -2901,8 +3232,8 @@ const PROCESS_STEPS: ProcessStep[] = [
     actorColor: 'text-orange-700',
     gitlabDirect: true,
     steps: [
-      { who: '개발자', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800', action: 'feature 브랜치 checkout', detail: '로컬에서 feature 브랜치를 내려받아 개발 시작', code: 'git checkout feature/이슈번호-설명' },
-      { who: '개발자', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800', action: '기능 개발 및 커밋', detail: '기능 개발 완료 후 커밋 메시지에 이슈 번호 포함 → ITSM 자동 참조 댓글 등록', code: 'git commit -m "feat: 기능 설명 (#이슈번호)"\ngit push origin feature/이슈번호-설명' },
+      { who: '개발자', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200', action: 'feature 브랜치 checkout', detail: '로컬에서 feature 브랜치를 내려받아 개발 시작', code: 'git checkout feature/이슈번호-설명' },
+      { who: '개발자', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200', action: '기능 개발 및 커밋', detail: '기능 개발 완료 후 커밋 메시지에 이슈 번호 포함 → ITSM 자동 참조 댓글 등록', code: 'git commit -m "feat: 기능 설명 (#이슈번호)"\ngit push origin feature/이슈번호-설명' },
     ],
     note: '커밋 메시지에 "#이슈번호" 포함 시 ITSM 티켓에 커밋 링크가 자동 기록됩니다.',
   },
@@ -2914,9 +3245,9 @@ const PROCESS_STEPS: ProcessStep[] = [
     actorColor: 'text-orange-700',
     gitlabDirect: true,
     steps: [
-      { who: '개발자', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800', action: 'MR 생성 (feature → main)', detail: 'GitLab → Merge Requests → New → source: feature/... → target: main → Assignee: PL', code: 'GitLab > MR > New MR\nsource: feature/... → target: main' },
+      { who: '개발자', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200', action: 'MR 생성 (feature → main)', detail: 'GitLab → Merge Requests → New → source: feature/... → target: main → Assignee: PL', code: 'GitLab > MR > New MR\nsource: feature/... → target: main' },
       { who: 'GitLab', color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300', action: 'CI 자동 실행', detail: 'MR 생성 트리거 → lint + test 파이프라인 자동 실행', code: '.gitlab-ci.yml → rules-lint-test' },
-      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800', action: 'MR 코드 리뷰 및 승인·병합', detail: 'GitLab → MR 상세 → 코드 리뷰 → "Approve" → "Merge" → feature 브랜치 자동 삭제', code: 'GitLab MR > Approve > Merge' },
+      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200', action: 'MR 코드 리뷰 및 승인·병합', detail: 'GitLab → MR 상세 → 코드 리뷰 → "Approve" → "Merge" → feature 브랜치 자동 삭제', code: 'GitLab MR > Approve > Merge' },
       { who: 'GitLab → ITSM', color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300', action: 'Issue 자동 Closed', detail: 'MR 병합 → 웹훅 이벤트 → ITSM 개발 전달 이슈 상태 자동 업데이트 (MR 설명에 "Closes #N" 포함 시 티켓도 resolved 자동 전환)', code: 'MR 설명: "Closes #N" → 티켓 자동 resolved' },
     ],
   },
@@ -2928,9 +3259,9 @@ const PROCESS_STEPS: ProcessStep[] = [
     actorColor: 'text-teal-700',
     gitlabDirect: true,
     steps: [
-      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800', action: '개발기 배포 태그 생성', detail: 'GitLab → 개발 프로젝트 → Repository → Tags → New tag → dev-YYYYMMDD → Create from: main', code: 'Tag name: dev-20260313\nCreate from: main 브랜치' },
+      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200', action: '개발기 배포 태그 생성', detail: 'GitLab → 개발 프로젝트 → Repository → Tags → New tag → dev-YYYYMMDD → Create from: main', code: 'Tag name: dev-20260313\nCreate from: main 브랜치' },
       { who: 'GitLab', color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300', action: '개발기 자동 배포', detail: 'dev-* 태그 트리거 → build:api + build:web → deploy:dev → healthcheck 자동 실행', code: 'CI/CD: deploy:dev 자동 실행' },
-      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800', action: 'ITSM 확인 기록', detail: 'ITSM 티켓 → 댓글: "개발기 배포 완료. 확인 요청드립니다."', code: '티켓 댓글 등록' },
+      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200', action: 'ITSM 확인 기록', detail: 'ITSM 티켓 → 댓글: "개발기 배포 완료. 확인 요청드립니다."', code: '티켓 댓글 등록' },
     ],
   },
   {
@@ -2941,11 +3272,11 @@ const PROCESS_STEPS: ProcessStep[] = [
     actorColor: 'text-teal-700',
     gitlabDirect: true,
     steps: [
-      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800', action: '테스트기 배포 태그 생성', detail: 'GitLab → Tags → New tag → stg-YYYYMMDD → Create from: main', code: 'Tag name: stg-20260313\nCreate from: main 브랜치' },
+      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200', action: '테스트기 배포 태그 생성', detail: 'GitLab → Tags → New tag → stg-YYYYMMDD → Create from: main', code: 'Tag name: stg-20260313\nCreate from: main 브랜치' },
       { who: 'GitLab', color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300', action: '테스트기 자동 배포', detail: 'stg-* 태그 트리거 → build → deploy:staging → healthcheck 자동 실행', code: 'CI/CD: deploy:staging 자동 실행' },
-      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800', action: '현업에 테스트 요청', detail: 'ITSM 티켓 → 댓글로 안내 → 상태를 "테스트중(testing)"으로 변경. 추가 정보가 필요하면 "대기중(waiting)"으로 변경 (SLA 자동 일시정지)', code: '상태 → 테스트중(testing)으로 변경\n(추가정보 대기 시 → 대기중(waiting))' },
-      { who: '현업', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800', action: '테스트기에서 테스트 수행', detail: 'ITSM 포털 → 내 요청 → 해당 티켓 → 테스트 후 댓글로 결과 전달', code: '티켓 댓글: "테스트 완료 확인했습니다."' },
-      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800', action: '테스트 확인 완료 처리', detail: 'ITSM 티켓 → 상태를 "운영배포전(ready_for_release)"으로 변경 (운영 배포 준비 완료 신호)', code: '상태 → 운영배포전(ready_for_release)으로 변경' },
+      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200', action: '현업에 테스트 요청', detail: 'ITSM 티켓 → 댓글로 안내 → 상태를 "테스트중(testing)"으로 변경. 추가 정보가 필요하면 "대기중(waiting)"으로 변경 (SLA 자동 일시정지)', code: '상태 → 테스트중(testing)으로 변경\n(추가정보 대기 시 → 대기중(waiting))' },
+      { who: '현업', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200', action: '테스트기에서 테스트 수행', detail: 'ITSM 포털 → 내 요청 → 해당 티켓 → 테스트 후 댓글로 결과 전달', code: '티켓 댓글: "테스트 완료 확인했습니다."' },
+      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200', action: '테스트 확인 완료 처리', detail: 'ITSM 티켓 → 상태를 "운영배포전(ready_for_release)"으로 변경 (운영 배포 준비 완료 신호)', code: '상태 → 운영배포전(ready_for_release)으로 변경' },
     ],
   },
   {
@@ -2956,9 +3287,9 @@ const PROCESS_STEPS: ProcessStep[] = [
     actorColor: 'text-teal-700',
     gitlabDirect: true,
     steps: [
-      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800', action: 'MR 생성 (main → release)', detail: 'GitLab → Merge Requests → New → source: main → target: release → Assignee: IT팀', code: 'GitLab > MR > New\nsource: main → target: release' },
+      { who: 'PL', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200', action: 'MR 생성 (main → release)', detail: 'GitLab → Merge Requests → New → source: main → target: release → Assignee: IT팀', code: 'GitLab > MR > New\nsource: main → target: release' },
       { who: 'GitLab', color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300', action: 'CI 자동 실행', detail: 'release 브랜치 대상 lint + test 파이프라인 자동 실행', code: 'CI/CD: lint + test 자동 실행' },
-      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800', action: 'release MR 승인·병합', detail: 'GitLab → MR 상세 → 코드 리뷰 → "Approve" → "Merge" → release 브랜치에 main 병합 완료', code: 'GitLab MR > Approve > Merge' },
+      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200', action: 'release MR 승인·병합', detail: 'GitLab → MR 상세 → 코드 리뷰 → "Approve" → "Merge" → release 브랜치에 main 병합 완료', code: 'GitLab MR > Approve > Merge' },
     ],
   },
   {
@@ -2969,11 +3300,11 @@ const PROCESS_STEPS: ProcessStep[] = [
     actorColor: 'text-purple-700',
     gitlabDirect: true,
     steps: [
-      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800', action: '운영 배포 태그 생성', detail: 'GitLab → release 브랜치 → Tags → New tag → v1.2.3 형식으로 생성', code: 'Tag name: v0.1.0\nCreate from: release 브랜치' },
+      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200', action: '운영 배포 태그 생성', detail: 'GitLab → release 브랜치 → Tags → New tag → v1.2.3 형식으로 생성', code: 'Tag name: v0.1.0\nCreate from: release 브랜치' },
       { who: 'GitLab', color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300', action: 'CI: deploy:production 대기', detail: 'v*.*.* 태그 트리거 → build 완료 → deploy:production 잡이 수동(manual) 상태로 대기', code: 'CI/CD > Pipelines > deploy:production ▶ 클릭' },
-      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800', action: '운영 배포 수동 승인', detail: 'GitLab → CI/CD → Pipelines → 해당 파이프라인 → deploy:production → ▶ 실행 버튼 클릭', code: 'GitLab Pipelines > ▶ deploy:production' },
-      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800', action: '운영 배포 확인 및 ITSM 기록', detail: 'ITSM 티켓 → 댓글: "운영 배포 완료. 확인 요청드립니다." → 상태를 "운영반영완료(released)"로 변경', code: '상태 → 운영반영완료(released)로 변경 후 댓글 등록' },
-      { who: '현업', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800', action: '최종 완료 처리', detail: 'ITSM 포털 → 해당 티켓 → 완료 처리 → 티켓 Closed (Epic: done)', code: '티켓 상태 → 종료(closed)' },
+      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200', action: '운영 배포 수동 승인', detail: 'GitLab → CI/CD → Pipelines → 해당 파이프라인 → deploy:production → ▶ 실행 버튼 클릭', code: 'GitLab Pipelines > ▶ deploy:production' },
+      { who: 'IT팀', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200', action: '운영 배포 확인 및 ITSM 기록', detail: 'ITSM 티켓 → 댓글: "운영 배포 완료. 확인 요청드립니다." → 상태를 "운영반영완료(released)"로 변경', code: '상태 → 운영반영완료(released)로 변경 후 댓글 등록' },
+      { who: '현업', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200', action: '최종 완료 처리', detail: 'ITSM 포털 → 해당 티켓 → 완료 처리 → 티켓 Closed (Epic: done)', code: '티켓 상태 → 종료(closed)' },
     ],
   },
 ]
@@ -3018,7 +3349,7 @@ function ProcessStepCard({ step, index }: { step: ProcessStep; index: number }) 
             {step.steps.map((s, i) => (
               <div key={i} className="flex gap-3">
                 <div className="flex flex-col items-center shrink-0">
-                  <div className="w-5 h-5 rounded-full bg-white dark:bg-gray-900 border-2 border-blue-300 dark:border-blue-700 flex items-center justify-center text-xs font-bold text-blue-600 shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-white dark:bg-gray-900 border-2 border-blue-300 dark:border-blue-700 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400 shrink-0">
                     {i + 1}
                   </div>
                   {i < step.steps.length - 1 && <div className="w-0.5 flex-1 bg-blue-100 dark:bg-blue-900/30 my-1 min-h-[12px]" />}
@@ -3134,9 +3465,9 @@ function TabProcess() {
         <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl shadow-sm p-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
             {[
-              { branch: 'feature/*', color: 'border-orange-400 bg-orange-50 dark:bg-orange-900/20', textColor: 'text-orange-800', badge: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700', desc: '개별 기능 개발용. GitLab Issue에서 생성. 개발 완료 후 main으로 MR.', from: 'Issue', to: 'main' },
-              { branch: 'main',      color: 'border-blue-400 bg-blue-50 dark:bg-blue-900/20',    textColor: 'text-blue-800',   badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700',   desc: '통합 개발 기준 브랜치. 개발기/테스트기 배포 기준. 검증 후 release로 MR.', from: 'feature/*', to: 'release' },
-              { branch: 'release',   color: 'border-green-400 bg-green-50 dark:bg-green-900/20',  textColor: 'text-green-800',  badge: 'bg-green-100 dark:bg-green-900/30 text-green-700', desc: '운영 반영 기준 브랜치. v*.*.* 태그를 이 브랜치에서 생성.', from: 'main', to: '운영 서버' },
+              { branch: 'feature/*', color: 'border-orange-400 bg-orange-50 dark:bg-orange-900/20', textColor: 'text-orange-800 dark:text-orange-200', badge: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300', desc: '개별 기능 개발용. GitLab Issue에서 생성. 개발 완료 후 main으로 MR.', from: 'Issue', to: 'main' },
+              { branch: 'main',      color: 'border-blue-400 bg-blue-50 dark:bg-blue-900/20',    textColor: 'text-blue-800 dark:text-blue-200',   badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',   desc: '통합 개발 기준 브랜치. 개발기/테스트기 배포 기준. 검증 후 release로 MR.', from: 'feature/*', to: 'release' },
+              { branch: 'release',   color: 'border-green-400 bg-green-50 dark:bg-green-900/20',  textColor: 'text-green-800 dark:text-green-200',  badge: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300', desc: '운영 반영 기준 브랜치. v*.*.* 태그를 이 브랜치에서 생성.', from: 'main', to: '운영 서버' },
             ].map((b) => (
               <div key={b.branch} className={`rounded-xl border-2 p-4 ${b.color}`}>
                 <code className={`font-bold text-base font-mono ${b.textColor}`}>{b.branch}</code>
@@ -3478,7 +3809,7 @@ function TabAbout() {
             {
               layer: 'Backend',
               color: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
-              badge: 'bg-green-100 dark:bg-green-900/30 text-green-700',
+              badge: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
               items: [
                 { name: 'Python 3.13',     role: '언어' },
                 { name: 'FastAPI 0.115',   role: 'API 프레임워크' },
@@ -3491,7 +3822,7 @@ function TabAbout() {
             {
               layer: 'Frontend',
               color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
-              badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700',
+              badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
               items: [
                 { name: 'Next.js 15',      role: 'React 프레임워크' },
                 { name: 'TypeScript',      role: '타입 안전성' },
@@ -3513,7 +3844,7 @@ function TabAbout() {
             {
               layer: '운영 · 관찰',
               color: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800',
-              badge: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700',
+              badge: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
               items: [
                 { name: 'Docker Compose',  role: '컨테이너 오케스트레이션' },
                 { name: 'Nginx',           role: '리버스 프록시' },
@@ -3581,7 +3912,7 @@ function TabAbout() {
             { version: 'v1.5',   desc: '보안 강화(IP 허용목록·JWT 블랙리스트), 승인 워크플로우, 티켓 유형 관리, 다크모드 FOUC 수정' },
           ].map(v => (
             <div key={v.version} className="flex items-start gap-3 text-sm">
-              <span className="shrink-0 font-mono font-bold text-blue-600 w-12">{v.version}</span>
+              <span className="shrink-0 font-mono font-bold text-blue-600 dark:text-blue-400 w-12">{v.version}</span>
               <span className="text-gray-600 dark:text-gray-400">{v.desc}</span>
             </div>
           ))}
@@ -3694,7 +4025,7 @@ export default function HelpPage() {
             {' · '}
             <Link href="http://localhost:3001" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Grafana</Link>
           </div>
-          <div>ZENITH · Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Alembic 41단계</div>
+          <div>ZENITH · Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Alembic 52단계</div>
         </div>
       </div>
     </div>

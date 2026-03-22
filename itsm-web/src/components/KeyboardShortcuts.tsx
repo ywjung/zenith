@@ -24,6 +24,20 @@ export default function KeyboardShortcuts() {
         return
       }
 
+      // '/' → 글로벌 검색 포커스
+      if (e.key === '/') {
+        e.preventDefault()
+        const el = document.querySelector<HTMLInputElement>('[data-global-search]')
+        el?.focus()
+        return
+      }
+
+      // 'r' → 현재 페이지 새로고침 (입력창 외부)
+      if (e.key === 'r') {
+        window.location.reload()
+        return
+      }
+
       if (gModeRef.current) {
         clearTimeout(gTimerRef.current)
         setGMode(false)
@@ -33,6 +47,8 @@ export default function KeyboardShortcuts() {
         if (e.key === 'b') router.push('/kb')
         if (e.key === 'r') router.push('/reports')
         if (e.key === 'a') router.push('/admin')
+        if (e.key === 'p') router.push('/portal')
+        if (e.key === 'h') router.push('/help')
         return
       }
 
@@ -63,7 +79,11 @@ export default function KeyboardShortcuts() {
     { key: 'g → b', desc: '지식베이스' },
     { key: 'g → r', desc: '리포트' },
     { key: 'g → a', desc: '관리' },
+    { key: 'g → p', desc: '포털 (게스트)' },
+    { key: 'g → h', desc: '도움말' },
     { key: 'n', desc: '새 티켓 등록' },
+    { key: 'r', desc: '현재 페이지 새로고침' },
+    { key: '/', desc: '검색창 포커스' },
     { key: '⌘K / Ctrl+K', desc: '글로벌 검색' },
     { key: '?', desc: '단축키 도움말' },
     { key: 'Esc', desc: '닫기' },

@@ -40,7 +40,7 @@ class UserRole(Base):
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    id = Column(BigInteger, primary_key=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     actor_id = Column(String(50), nullable=False)
     actor_username = Column(String(100), nullable=False)
     actor_name = Column(String(200), nullable=True)
@@ -74,6 +74,7 @@ class SLARecord(Base):
     breached = Column(Boolean, nullable=False, default=False)
     breach_notified = Column(Boolean, nullable=False, default=False)
     warning_sent = Column(Boolean, nullable=False, default=False)
+    warning_sent_30min = Column(Boolean, nullable=False, default=False)
     paused_at = Column(DateTime, nullable=True)
     total_paused_seconds = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -99,6 +100,21 @@ class KBArticle(Base):
     view_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class KBRevision(Base):
+    """KB 문서 수정 이력 — update_article 호출 시 수정 전 내용 스냅샷."""
+    __tablename__ = "kb_revisions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    article_id = Column(Integer, nullable=False, index=True)
+    revision_number = Column(Integer, nullable=False, default=1)
+    title = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)
+    category = Column(String(100), nullable=True)
+    tags = Column(JSONB, nullable=True)
+    editor_name = Column(String(200), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class DailyStatsSnapshot(Base):
@@ -252,7 +268,7 @@ class SavedFilter(Base):
     __tablename__ = "saved_filters"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(100), nullable=False, index=True)
+    username = Column(String(100), nullable=False)  # index via __table_args__
     name = Column(String(100), nullable=False)
     filters = Column(JSONB, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -558,6 +574,27 @@ class AutomationRule(Base):
     )
 
 
+class AutomationLog(Base):
+    __tablename__ = "automation_logs"
+
+    id = Column(Integer, primary_key=True)
+    rule_id = Column(Integer, nullable=True)  # SET NULL on rule delete
+    rule_name = Column(String(200), nullable=False)
+    ticket_iid = Column(Integer, nullable=False)
+    project_id = Column(String(100), nullable=True)
+    trigger_event = Column(String(50), nullable=False)
+    matched = Column(Boolean, nullable=False, default=True)
+    actions_taken = Column(JSONB, nullable=True)
+    error = Column(Text, nullable=True)
+    triggered_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_automation_logs_rule_id", "rule_id"),
+        Index("ix_automation_logs_ticket_iid", "ticket_iid"),
+        Index("ix_automation_logs_triggered_at", "triggered_at"),
+    )
+
+
 class ApprovalRequest(Base):
     __tablename__ = "approval_requests"
 
@@ -649,4 +686,37 @@ class UserDashboardConfig(Base):
 
     __table_args__ = (
         Index("ix_user_dashboard_configs_username", "username", unique=True),
+    )
+
+
+class TicketSearchIndex(Base):
+    """GitLab 이슈 제목·설명 전문검색 색인 (pg_trgm + GIN 인덱스).
+
+    웹훅(Issue Hook) 이벤트로 실시간 동기화되며,
+    주기적 Celery 태스크로 GitLab과 전체 동기화한다.
+    """
+    __tablename__ = "ticket_search_index"
+
+    id = Column(Integer, primary_key=True, index=True)
+    iid = Column(Integer, nullable=False)
+    project_id = Column(String(50), nullable=False)
+    title = Column(Text, nullable=False, default="")
+    description_text = Column(Text, nullable=True)  # markdown 제거한 plain text
+    state = Column(String(20), nullable=False, default="opened")
+    labels_json = Column(JSONB, nullable=False, server_default="[]")
+    assignee_username = Column(String(100), nullable=True)
+    created_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, nullable=True)
+    synced_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                       onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("uq_ticket_search_iid_project", "iid", "project_id", unique=True),
+        # pg_trgm GIN 인덱스 — LIKE '%q%' 및 % 연산자 고속 처리
+        Index("ix_ticket_search_title_trgm", "title",
+              postgresql_using="gin",
+              postgresql_ops={"title": "gin_trgm_ops"}),
+        Index("ix_ticket_search_desc_trgm", "description_text",
+              postgresql_using="gin",
+              postgresql_ops={"description_text": "gin_trgm_ops"}),
     )

@@ -15,9 +15,9 @@ server {
   add_header X-XSS-Protection "1; mode=block" always;
   add_header Referrer-Policy "strict-origin-when-cross-origin" always;
   add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
-  # C-4: unsafe-inline/unsafe-eval 제거 — Next.js 프로덕션 빌드는 외부 스크립트 인라인 불필요
-  # style-src unsafe-inline은 Tailwind CSS 런타임 인젝션에 필요 (nonce 도입 전까지 유지)
-  add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:8929; connect-src 'self'; font-src 'self'; frame-src 'self' blob:; object-src blob: 'self'; frame-ancestors 'none';" always;
+  # Next.js 다크모드 FOUC 인라인 스크립트 및 SSR 하이드레이션에 unsafe-inline 필요
+  # (nonce 기반 CSP 도입 전까지 유지. style-src unsafe-inline은 Tailwind 런타임 인젝션 필요)
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:8929; connect-src 'self'; font-src 'self'; frame-src 'self' blob:; object-src blob: 'self'; frame-ancestors 'none';" always;
   # MED-07: HSTS는 HTTPS 환경에서만 유효. HTTP 리버스 프록시(nginx)에서 전송해도
   # 브라우저는 HTTPS 응답에서만 처리한다. TLS 종단이 nginx 앞단(로드밸런서 등)에 있는
   # 경우 해당 계층에서도 HSTS를 설정해야 함.

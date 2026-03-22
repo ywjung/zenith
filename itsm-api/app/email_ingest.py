@@ -19,15 +19,44 @@ _TICKET_IID_RE = re.compile(r"\[티켓\s*#(\d+)\]|티켓\s*#(\d+)", re.IGNORECAS
 
 
 def _sanitize_email_body(text: str) -> str:
-    """Strip HTML tags and dangerous content from email body for GitLab issue description."""
+    """Strip HTML tags from email body, preserving link text and URLs."""
     if not text:
         return ""
-    # Strip HTML tags
+    # 링크 보존: <a href="URL">텍스트</a> → 텍스트 (URL)
+    text = re.sub(
+        r'<a\s[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+        lambda m: f"{m.group(2).strip()} ({m.group(1)})" if m.group(2).strip() else m.group(1),
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    # 나머지 HTML 태그 제거
     text = re.sub(r'<[^>]+>', '', text)
-    # Decode common HTML entities
+    # HTML 엔티티 디코딩
     text = html.unescape(text)
     # Limit length
     return text[:50000]
+
+
+def _extract_attachments(msg: email.message.Message) -> list[str]:
+    """Return list of attachment filenames from a multipart email."""
+    filenames: list[str] = []
+    if not msg.is_multipart():
+        return filenames
+    for part in msg.walk():
+        cd = str(part.get("Content-Disposition", ""))
+        if "attachment" not in cd:
+            continue
+        raw_name = part.get_filename()
+        if raw_name:
+            # RFC 2047 디코딩
+            decoded_parts = _decode_header(raw_name)
+            name = "".join(
+                (p.decode(ch or "utf-8", errors="replace") if isinstance(p, bytes) else p)
+                for p, ch in decoded_parts
+            ).strip()
+            if name:
+                filenames.append(name)
+    return filenames
 
 
 def _decode_str(value: str | bytes, charset: Optional[str] = None) -> str:
@@ -72,7 +101,11 @@ def _extract_email_address(raw: str) -> str:
 
 
 def _is_duplicate(message_id: str) -> bool:
-    """Return True if this Message-ID was already processed."""
+    """Return True if this Message-ID was already processed.
+
+    nx=True: 키가 없을 때만 SET → 새 메시지면 False(처리 진행), 이미 있으면 None(중복).
+    중복으로 판단된 키는 TTL을 갱신하여 30일 윈도우를 연장한다.
+    """
     if not message_id:
         return False
     try:
@@ -82,7 +115,11 @@ def _is_duplicate(message_id: str) -> bool:
             return False
         key = f"{_REDIS_MSGID_PREFIX}{message_id}"
         result = r.set(key, "1", ex=_REDIS_MSGID_TTL, nx=True)
-        return result is None
+        if result is None:
+            # 중복 — TTL 갱신 (이미 처리된 키지만 만료 기간을 늘려 재처리 방지)
+            r.expire(key, _REDIS_MSGID_TTL)
+            return True
+        return False
     except Exception as e:
         logger.warning("Redis msgid check failed (allowing through): %s", e)
         return False
@@ -140,14 +177,25 @@ def _find_parent_ticket(in_reply_to: str, references: str, subject: str) -> Opti
 
     # 3. Subject pattern — works even without Redis
     # Security: parent_iid comes from untrusted email subject.
-    # Validation against GitLab API should be done before setting parent.
-    # TODO: Verify ticket exists in the expected project before linking.
+    # Validate against GitLab API before linking to prevent IID spoofing.
     m = _TICKET_IID_RE.search(subject)
     if m:
         try:
-            return int(m.group(1) or m.group(2))
+            candidate_iid = int(m.group(1) or m.group(2))
+            # Verify the issue actually exists in the configured project
+            from .config import get_settings
+            from . import gitlab_client
+            settings = get_settings()
+            gitlab_client.get_issue(candidate_iid, settings.GITLAB_PROJECT_ID)
+            return candidate_iid
         except (ValueError, TypeError) as e:
             logger.warning("Failed to parse ticket IID from subject: %s", e)
+        except Exception as e:
+            logger.warning(
+                "Subject IID #%s validation failed — not linking: %s",
+                m.group(1) or m.group(2),
+                e,
+            )
 
     return None
 
@@ -218,6 +266,7 @@ def process_inbox() -> int:
                 subject_raw = msg.get("Subject", "(no subject)")
                 subject = _parse_subject(subject_raw)
                 body = _sanitize_email_body(_parse_body(msg))
+                attachments = _extract_attachments(msg)
 
                 in_reply_to = msg.get("In-Reply-To", "").strip()
                 references = msg.get("References", "").strip()
@@ -228,7 +277,7 @@ def process_inbox() -> int:
                 if parent_iid:
                     # Verify the ticket actually exists before adding a comment
                     try:
-                        gitlab_client.get_issue(parent_iid)
+                        gitlab_client.get_issue(parent_iid, settings.GITLAB_PROJECT_ID)
                     except Exception:
                         logger.warning(
                             "Email reply references non-existent ticket #%s — creating new ticket instead",
@@ -253,11 +302,17 @@ def process_inbox() -> int:
                     continue
 
                 # New ticket
+                _attachment_section = ""
+                if attachments:
+                    _att_lines = "\n".join(f"- {name}" for name in attachments)
+                    _attachment_section = f"\n\n**첨부 파일 ({len(attachments)}개)**\n{_att_lines}"
+
                 description = (
                     f"**신청자:** {from_email}\n"
                     f"**이메일:** {from_email}\n\n"
                     f"---\n\n"
                     f"{body}"
+                    f"{_attachment_section}"
                 )
 
                 labels = [

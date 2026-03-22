@@ -179,6 +179,42 @@ def send_telegram(message: str) -> None:
         logger.error("Failed to send Telegram message: %s", e)
 
 
+# ---------------------------------------------------------------------------
+# Slack
+# ---------------------------------------------------------------------------
+
+def send_slack(message: str, channel: str | None = None) -> None:
+    """Slack Incoming Webhook으로 메시지를 전송한다. stdlib only."""
+    settings = get_settings()
+    if not _get_channel_enabled("slack_enabled", settings.SLACK_ENABLED):
+        logger.debug("Slack notifications disabled – skipping message")
+        return
+    if not settings.SLACK_WEBHOOK_URL:
+        logger.warning("SLACK_WEBHOOK_URL not configured, skipping")
+        return
+
+    payload: dict = {"text": message}
+    ch = channel or settings.SLACK_CHANNEL
+    if ch:
+        payload["channel"] = ch
+
+    data = json.dumps(payload).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            settings.SLACK_WEBHOOK_URL,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status == 200:
+                logger.info("Slack message sent (channel=%s)", ch or "webhook-default")
+            else:
+                logger.warning("Slack webhook returned %s", resp.status)
+    except Exception as e:
+        logger.error("Failed to send Slack message: %s", e)
+
+
 def notify_ticket_created(ticket: dict) -> None:
     settings = get_settings()
     iid = ticket.get("iid", "?")
@@ -220,11 +256,17 @@ def notify_ticket_created(ticket: dict) -> None:
         </table>
         """
     send_email(recipients, subject, body)
-    send_telegram(
+    tg_msg = (
         f"🎫 <b>새 티켓 등록</b>\n"
         f"#️⃣ #{iid}: {title}\n"
         f"👤 신청자: {employee}\n"
         f"⚡ 우선순위: {priority} | 📂 카테고리: {category}"
+    )
+    send_telegram(tg_msg)
+    send_slack(
+        f"🎫 *새 티켓 등록* — #{iid}: {ticket.get('title', '')}\n"
+        f"신청자: {ticket.get('employee_name', '')} | 우선순위: {priority} | 카테고리: {category}\n"
+        f"<{settings.FRONTEND_URL}/tickets/{iid}|티켓 보기>"
     )
     # 아웃바운드 웹훅
     try:
@@ -282,11 +324,18 @@ def notify_status_changed(ticket: dict, old_status: str, new_status: str, actor_
             <p>처리자: {actor_name_e}</p>
             """
         send_email(recipients, subject, body)
+    old_ko = status_map.get(old_status, old_status)
+    new_ko = status_map.get(new_status, new_status)
     send_telegram(
         f"🔄 <b>티켓 상태 변경</b>\n"
         f"#️⃣ #{iid}: {title}\n"
-        f"📌 {status_map.get(old_status, old_status)} → <b>{status_map.get(new_status, new_status)}</b>\n"
+        f"📌 {old_ko} → <b>{new_ko}</b>\n"
         f"👷 처리자: {actor_name_e}"
+    )
+    send_slack(
+        f"🔄 *티켓 상태 변경* — #{iid}: {ticket.get('title', '')}\n"
+        f"{old_ko} → *{new_ko}* | 처리자: {actor_name}\n"
+        f"<{settings.FRONTEND_URL}/tickets/{iid}|티켓 보기>"
     )
     try:
         from .outbound_webhook import fire_event
@@ -443,13 +492,30 @@ def create_db_notification(
     title: str,
     body: Optional[str] = None,
     link: Optional[str] = None,
-) -> Notification:
+    dedup_key: Optional[str] = None,
+    dedup_ttl: int = 60,
+) -> Optional[Notification]:
     """Create a notification record in the DB and publish to Redis.
 
     Uses flush() instead of commit() so that the record participates in the
     caller's transaction. The caller is responsible for committing. If the
     outer transaction rolls back, the notification row is also rolled back.
+
+    dedup_key: Redis 중복 방지 키. 같은 키가 dedup_ttl 초 이내에 이미 설정돼 있으면 알림을 생성하지 않는다.
     """
+    if dedup_key:
+        try:
+            from .redis_client import get_redis
+            r = get_redis()
+            if r:
+                redis_key = f"itsm:notif-dedup:{recipient_id}:{dedup_key}"
+                if r.get(redis_key):
+                    logger.debug("create_db_notification: dedup skip key=%s", redis_key)
+                    return None
+                r.setex(redis_key, dedup_ttl, "1")
+        except Exception as _e:
+            logger.warning("create_db_notification: dedup Redis error: %s", _e)
+
     notif = Notification(
         recipient_id=recipient_id,
         title=title,
@@ -480,3 +546,72 @@ def push_to_redis(recipient_id: str, payload: dict) -> None:
             r.publish(f"notifications:{recipient_id}", json.dumps(payload))
     except Exception as e:
         logger.warning("Redis publish failed: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# 승인 워크플로우 이메일 알림
+# ---------------------------------------------------------------------------
+
+def notify_approval_requested(
+    approver_email: str,
+    approver_name: str,
+    ticket_iid: int,
+    requester_name: str,
+    project_id: Optional[str] = None,
+) -> None:
+    """승인 요청 생성 시 승인자에게 이메일 발송."""
+    settings = get_settings()
+    if not settings.NOTIFICATION_ENABLED or not settings.SMTP_HOST:
+        return
+
+    subject = f"[ITSM] 티켓 #{ticket_iid} 승인 요청"
+    frontend = settings.FRONTEND_URL.rstrip("/")
+    body = f"""\
+안녕하세요 {approver_name}님,
+
+{requester_name}님이 티켓 #{ticket_iid}에 대한 승인을 요청했습니다.
+
+아래 링크에서 요청 내용을 확인하고 승인 또는 반려해 주세요:
+{frontend}/tickets/{ticket_iid}
+
+감사합니다.
+ITSM 시스템
+"""
+    try:
+        _send_email(approver_email, subject, body)
+    except Exception as e:
+        logger.warning("notify_approval_requested failed: %s", e)
+
+
+def notify_approval_decided(
+    requester_email: str,
+    requester_name: str,
+    ticket_iid: int,
+    decision: str,
+    decider_name: str,
+    reason: Optional[str] = None,
+) -> None:
+    """승인 완료/반려 시 요청자에게 이메일 발송."""
+    settings = get_settings()
+    if not settings.NOTIFICATION_ENABLED or not settings.SMTP_HOST:
+        return
+
+    decision_ko = "승인" if decision == "approved" else "반려"
+    subject = f"[ITSM] 티켓 #{ticket_iid} {decision_ko} 완료"
+    frontend = settings.FRONTEND_URL.rstrip("/")
+    reason_line = f"\n사유: {reason}" if reason else ""
+    body = f"""\
+안녕하세요 {requester_name}님,
+
+티켓 #{ticket_iid}이(가) {decision_ko}되었습니다.
+처리자: {decider_name}{reason_line}
+
+티켓 확인: {frontend}/tickets/{ticket_iid}
+
+감사합니다.
+ITSM 시스템
+"""
+    try:
+        _send_email(requester_email, subject, body)
+    except Exception as e:
+        logger.warning("notify_approval_decided failed: %s", e)

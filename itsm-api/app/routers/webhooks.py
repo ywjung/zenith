@@ -18,6 +18,19 @@ from ..notifications import (
     create_db_notification,
 )
 
+
+def _dispatch_celery_or_sync(celery_task, fallback_fn, *args) -> None:
+    """Celery 브로커가 설정돼 있으면 .delay()로 큐에 넣고, 아니면 동기 폴백."""
+    try:
+        from ..config import get_settings as _gs
+        _broker = getattr(_gs(), "CELERY_BROKER_URL", None) or _gs().REDIS_URL
+        if _broker and _broker != "memory://":
+            celery_task.delay(*args)
+            return
+    except Exception:
+        pass
+    fallback_fn(*args)
+
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
@@ -166,8 +179,78 @@ def _handle_issue_hook(payload: dict) -> None:
             # ── 개발 프로젝트 이벤트 → 전달된 메인 티켓에 상태 동기화 ────────
             _sync_forwarded_issue(target_project_id=project_id, target_iid=iid, payload=payload)
 
+        # 검색 색인 동기화 (모든 프로젝트)
+        _upsert_search_index(iid, project_id, attrs, payload)
+
+        # Redis 통계 캐시 즉시 무효화 — stale 통계 방지
+        _invalidate_stats_cache(project_id)
+
     except Exception as e:
         logger.error("Error handling issue hook: %s", e)
+
+
+def _invalidate_stats_cache(project_id: str) -> None:
+    """이슈 변경 시 Redis 통계 캐시 패턴 삭제 — 다음 조회 시 GitLab에서 신선한 값 반환."""
+    try:
+        from ..redis_client import get_redis
+        r = get_redis()
+        if not r:
+            return
+        # itsm:stats:{project_id}:* 및 itsm:stats::* (전체 프로젝트) 삭제
+        for pattern in (f"itsm:stats:{project_id}:*", "itsm:stats::*"):
+            keys = r.keys(pattern)
+            if keys:
+                r.delete(*keys)
+    except Exception as e:
+        logger.debug("Stats cache invalidation failed: %s", e)
+
+
+def _upsert_search_index(iid: int, project_id: str, attrs: dict, payload: dict) -> None:
+    """Issue Hook 수신 시 ticket_search_index 테이블을 upsert한다."""
+    if not iid or not project_id:
+        return
+    try:
+        import re as _re
+        from ..models import TicketSearchIndex
+        from ..database import SessionLocal
+
+        title = attrs.get("title") or ""
+        desc_raw = attrs.get("description") or ""
+        # 마크다운 태그·HTML 제거 후 plain text 추출 (검색 품질 향상)
+        desc_text = _re.sub(r"<[^>]+>", " ", desc_raw)
+        desc_text = _re.sub(r"[#*`_~\[\]!>|]", " ", desc_text)
+        desc_text = _re.sub(r"\s+", " ", desc_text).strip()[:2000]
+
+        state = attrs.get("state") or "opened"
+        labels = [lb.get("title", "") for lb in payload.get("labels", [])]
+        assignees = payload.get("assignees") or []
+        assignee_username = assignees[0].get("username") if assignees else None
+
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        with SessionLocal() as db:
+            stmt = pg_insert(TicketSearchIndex).values(
+                iid=iid,
+                project_id=project_id,
+                title=title,
+                description_text=desc_text,
+                state=state,
+                labels_json=labels,
+                assignee_username=assignee_username,
+            ).on_conflict_do_update(
+                index_elements=["iid", "project_id"],
+                set_={
+                    "title": title,
+                    "description_text": desc_text,
+                    "state": state,
+                    "labels_json": labels,
+                    "assignee_username": assignee_username,
+                    "synced_at": __import__("sqlalchemy", fromlist=["func"]).func.now(),
+                },
+            )
+            db.execute(stmt)
+            db.commit()
+    except Exception as e:
+        logger.warning("Search index upsert failed for #%s: %s", iid, e)
 
 
 def _handle_issue_update(iid: int, project_id: str, payload: dict) -> None:
@@ -283,7 +366,8 @@ def _handle_external_issue(iid: int, project_id: str, attrs: dict, payload: dict
             "priority": priority,
             "category": category,
         }
-        notify_ticket_created(ticket_info)
+        from ...tasks import send_ticket_notification
+        _dispatch_celery_or_sync(send_ticket_notification, notify_ticket_created, ticket_info)
         logger.info("External issue #%s processed (priority=%s, category=%s)", iid, priority, category)
 
     except Exception as e:
@@ -449,7 +533,11 @@ def _handle_note_hook(payload: dict) -> None:
                 "project_id": project_id,
                 "employee_email": _extract_email_from_description(description),
             }
-            notify_comment_added(ticket_info, note_body, author_name, is_internal=False)
+            from ...tasks import send_comment_notification
+            _dispatch_celery_or_sync(
+                send_comment_notification, notify_comment_added,
+                ticket_info, note_body, author_name, False,
+            )
 
     except Exception as e:
         logger.error("Error handling note hook: %s", e)

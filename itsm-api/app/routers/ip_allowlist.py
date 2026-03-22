@@ -53,11 +53,24 @@ def get_my_ip(
     request: Request,
     _user: dict = Depends(require_admin),
 ):
-    """요청자의 실제 IP 반환 (관리자 전용)."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    ip = forwarded.split(",")[0].strip() if forwarded else (
-        request.client.host if request.client else "unknown"
-    )
+    """요청자의 실제 IP 반환 (관리자 전용).
+
+    신뢰 프록시(사설 IP)에서 온 요청만 X-Forwarded-For를 신뢰한다.
+    직접 요청이거나 공개 IP 프록시이면 client.host를 사용한다.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded and client_ip != "unknown":
+        try:
+            proxy_addr = ipaddress.ip_address(client_ip)
+            if proxy_addr.is_private:
+                ip = forwarded.split(",")[0].strip()
+            else:
+                ip = client_ip
+        except ValueError:
+            ip = client_ip
+    else:
+        ip = client_ip
     return {"ip": ip}
 
 

@@ -641,6 +641,7 @@ docker compose exec itsm-api alembic upgrade head
 - 내부 메모 (신청자 비공개), 연관 티켓 링크, 시간 기록 (분 단위)
 - **티켓 병합**: 중복 티켓을 대상 티켓으로 병합 (댓글 이전 + 소스 티켓 자동 종료)
 - 티켓 복제, Confidential Issue, CSV 내보내기
+- **CSV 일괄 티켓 생성**: CSV 파일 업로드로 다수 티켓을 한 번에 생성 (`POST /tickets/import/csv`)
 - **타임라인 뷰**: 댓글 · 감사로그 · GitLab 시스템 노트 시간순 통합 표시 + 마크다운 렌더링
 - **해결 노트**: 처리완료·종료 시 해결 내용·유형·원인 구조화 기록 → KB 변환 가능
 - 첨부 이미지 라이트박스 · PDF sandbox iframe 인라인 미리보기
@@ -656,12 +657,14 @@ docker compose exec itsm-api alembic upgrade head
 - SLA 일시정지/재개 (대기중 상태 연동), 60분 전 사전 경고 알림
 - **에스컬레이션 정책**: 위반 시 자동 알림·재배정·우선순위 상향
 - 칸반 보드 SLA 색상 배지 (⚠️ 초과 빨간색 / 🟢 여유 초록색)
+- **SLA 위반 히트맵**: GitHub 스타일 12주 히트맵 — 날짜별 위반 건수를 5단계 색상 강도로 시각화 (`/reports` 전체 현황 탭)
 
 ### 지식베이스 (KB)
 - PostgreSQL FTS 전문 검색 (GIN 인덱스, websearch_to_tsquery OR 방식)
 - 티켓 제목 6자+ 입력 시 실시간 KB 자동 추천 (긴 제목도 부분 매칭)
 - 파일 첨부, 태그·카테고리 분류, 조회수 중복 카운트 방지 (5분 쿨다운)
 - Markdown 에디터 (TipTap 기반), 빈 제목·내용 API 레벨 검증
+- **문서 버전 이력**: 수정 시 이전 내용을 `kb_revisions`에 자동 저장 — 버전별 열람 가능
 
 ### 알림
 - 인앱 실시간 알림 (SSE + Redis Pub/Sub) — tight loop 제거로 CPU 정상화
@@ -669,6 +672,7 @@ docker compose exec itsm-api alembic upgrade head
 - Telegram 봇, 아웃바운드 웹훅 (Slack Incoming Webhook, Teams Power Automate)
 - 개인 알림 설정 (이벤트별 이메일/인앱 토글)
 - **@멘션 인앱 알림**: 댓글에서 `@username` 멘션 시 대상 사용자에게 즉시 알림
+- **승인 이메일 알림**: 승인 요청 생성 · 승인 · 반려 시 신청자에게 자동 이메일 발송
 
 ### GitLab 연동
 - MR 머지 → 티켓 자동 해결 (`Closes #N`, `Fixes #N`)
@@ -698,15 +702,16 @@ docker compose exec itsm-api alembic upgrade head
 - 조건: AND 방식 다중 조건 (필드 + 연산자 `eq/neq/contains/startswith/in` + 값)
 - 액션: 상태 변경 · 우선순위 설정 · 알림 발송 등 JSONB 배열로 유연하게 확장
 - `order` 기준 우선순위 정렬, `is_active` 토글로 개별 활성/비활성 제어
+- **실행 이력**: 규칙별·전체 실행 이력 조회 (`/admin/automation-rules` → 이력 버튼) — 트리거 이벤트·조건 매칭 여부·적용된 액션·오류 기록
 
 ### 대시보드 위젯 커스터마이징
 - 홈 화면 ⚙️ 버튼으로 위젯 표시 여부 개인 설정 — 서버(`/dashboard/config`)에 저장
 - 위젯: 상태 현황 탭 · 내 담당 티켓 · SLA 현황 · 최근 활동
 
 ### 편의 기능
-- **칸반 보드**: 드래그앤드롭 상태 변경 + **전환 규칙 강제** (이동 불가 컬럼 🚫 자동 비활성화)
+- **칸반 보드**: 드래그앤드롭 상태 변경 + **전환 규칙 강제** (이동 불가 컬럼 🚫 자동 비활성화) + **기간 필터** (전체·오늘·이번 주·이번 달)
 - **DORA 4대 지표**: 배포 빈도 / 리드타임 / 변경 실패율 / MTTR — 리포트 탭에서 기간별 조회
-- 리포트 & 에이전트 성과 분석 (날짜 필터 정확 적용, 역방향 날짜 검증)
+- 리포트 & 에이전트 성과 분석 (날짜 필터 정확 적용, 역방향 날짜 검증) + **리포트 CSV · Excel 내보내기**
 - 빠른 답변 (Canned Response) 템플릿, 티켓 구독 (Watcher)
 - 공지사항·배너 시스템 (info/warning/critical)
 - **키보드 단축키**: `g+t`(티켓), `g+k`(칸반), `g+b`(KB), `g+r`(리포트), `n`(새 티켓), `?`(도움말)
@@ -724,6 +729,7 @@ docker compose exec itsm-api alembic upgrade head
 - **알림 채널 관리**: 이메일·Telegram 활성화 상태 확인 및 전환
 - **IP 접근 제한 설정 가이드**: 관리 API를 특정 CIDR 대역으로 제한하는 방법 안내
 - **업무 시간 설정**: 영업일·업무 시간 기반 SLA 계산 설정
+- **이메일 수신 모니터링**: IMAP 활성화 상태·서버·계정 확인 + 수동 즉시 실행 (`/admin/email-ingest`)
 
 ---
 
@@ -1041,6 +1047,52 @@ docker run --rm \
   find /opt/zenith/backups -name "db_*.sql.gz" -mtime +7 -delete
 ```
 
+### 서버 이전 (무중단 마이그레이션)
+
+`scripts/` 디렉토리의 스크립트를 순서대로 실행합니다. 모든 스크립트는 `--dry-run` 으로 사전 검증이 가능합니다.
+
+#### 이전 절차
+
+```bash
+# ① 구 서버에서 — 점검 모드 전환 및 최종 백업
+./scripts/migrate_backup.sh --output-dir /tmp/itsm-migration \
+  --new-server ubuntu@NEW_SERVER_IP
+
+# ② 신규 서버에서 — DB 복원 및 서비스 기동
+./scripts/migrate_restore.sh /tmp/itsm_final_*.dump
+
+# ③ 데이터 정합성 검증
+./scripts/migrate_verify.sh \
+  --old-server postgres://itsm:PASS@OLD_HOST:5432/itsm \
+  --new-server postgres://itsm:PASS@NEW_HOST:5432/itsm
+
+# ④ DNS/IP 컷오버 수행 → 신규 서버로 트래픽 전환
+```
+
+#### 롤백 절차
+
+```bash
+# 신규 서버 데이터 보존
+./scripts/migrate_rollback.sh --dump-delta
+
+# 신규 서버 트래픽 차단
+./scripts/migrate_rollback.sh --block
+
+# 구 서버에서 서비스 복원
+./scripts/migrate_rollback.sh --restore-old
+```
+
+#### 롤백 기준
+
+| 상황 | 조건 |
+|------|------|
+| GitLab OAuth 로그인 실패 | 5분 이상 지속 |
+| API 에러율 | 5분 기준 > 10% |
+| DB 데이터 유실 또는 정합성 오류 | 발생 즉시 |
+| 파일 업로드·다운로드 전체 실패 | 발생 즉시 |
+
+> 상세 이전 계획은 `docs/migration-plan.md` 참조.
+
 ---
 
 ## 15. 운영 관리
@@ -1305,13 +1357,27 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev
 ### 테스트
 
 ```bash
-# 백엔드 통합 테스트 (65개, SQLite 인메모리 + Redis Mock)
+# 백엔드 통합 테스트 (pytest · SQLite 인메모리 + Redis Mock)
 cd itsm-api && pytest tests/ -v
 
 # 커버리지 포함 실행
 cd itsm-api && pytest tests/ --cov=app --cov-report=term-missing
 
-# 프론트엔드 테스트
+# E2E 테스트 (Playwright · 로컬 실행)
+# 1. 토큰 생성 및 Redis 등록
+docker compose exec itsm-api python3 -c "
+import json, base64, time
+from app.auth import create_token, store_gitlab_token
+user = {'id': 1, 'username': 'admin', 'name': 'Admin', 'email': 'admin@test.com', 'avatar_url': None, 'organization': ''}
+token = create_token(user, gitlab_token='test_token', role='admin')
+payload = json.loads(base64.b64decode(token.split('.')[1] + '=='))
+store_gitlab_token(payload['jti'], 'test_token', payload['exp'] - int(time.time()))
+print(token)
+"
+# 2. E2E 실행
+cd itsm-web && E2E_BASE_URL=http://localhost:8111 E2E_ADMIN_TOKEN=<위 토큰> npm run test:e2e
+
+# 프론트엔드 유닛 테스트
 cd itsm-web && npm test
 
 # 전체 린터
@@ -1319,7 +1385,7 @@ make lint
 # ruff (Python) + eslint (TypeScript) 동시 실행
 ```
 
-#### 테스트 구성
+#### 백엔드 테스트 구성
 
 | 파일 | 테스트 항목 |
 |------|------------|
@@ -1333,6 +1399,23 @@ make lint
 | `test_health.py` | 헬스체크 엔드포인트 응답 |
 
 **SQLite 호환 레이어**: PostgreSQL 전용 타입(JSONB, ARRAY, INET)과 pool 인수를 자동 변환하여 Docker 없이 로컬에서도 테스트 실행이 가능합니다.
+
+#### E2E 테스트 구성 (Playwright · 65개)
+
+| 파일 | 테스트 항목 |
+|------|------------|
+| `auth.setup.ts` | 관리자 JWT 쿠키 주입 및 storageState 저장 |
+| `tickets.spec.ts` | 티켓 목록·생성 폼·필터·검색 E2E |
+| `ticket-flow.spec.ts` | 티켓 전체 플로우 (생성→목록→상세→댓글·네비게이션) |
+| `mobile.spec.ts` | 모바일 뷰포트 반응형 UI 검증 (Pixel 7, 412px) |
+| `admin.spec.ts` | 관리자 패널·사용자관리·SLA·접근성 |
+| `portal.spec.ts` | 고객 포털 티켓 제출·이메일 유효성 |
+| `automation.spec.ts` | 자동화 규칙 페이지·탭·API |
+| `kb.spec.ts` | 지식베이스 목록·상세·작성 페이지 |
+| `notifications.spec.ts` | 알림 목록·전체읽음·SSE 스트림 |
+| `approvals.spec.ts` | 승인 대기 목록·상세·E2E 플로우 |
+
+**인증 방식**: JWT 토큰을 `create_token()` + `store_gitlab_token()` 로 생성·Redis 등록 후 `E2E_ADMIN_TOKEN` 환경변수로 주입합니다. CI (`e2e.yml`)에서는 토큰 생성과 Redis 등록이 자동으로 실행됩니다.
 
 GitHub Actions (`.github/workflows/tests.yml`)에서 PR마다 자동 실행되며 커버리지 리포트를 생성합니다.
 
@@ -1544,16 +1627,24 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ## 20. 버전 이력
 
-### 현재 버전 (2026-03-18)
+### 현재 버전 (2026-03-21)
 
-- **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22
-- **DB 마이그레이션**: 47단계 (0001~0047)
-- **API 엔드포인트**: 150개+
+- **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22 · Celery 5
+- **DB 마이그레이션**: 55단계 (0001~0055)
+- **API 엔드포인트**: 160개+
 
 ### 마이그레이션 이력
 
 | 버전 | 주요 변경 |
 |------|---------|
+| `0055` | `automation_logs` 테이블 — 자동화 규칙 실행 이력 (트리거·매칭 여부·액션·오류) |
+| `0054` | `kb_revisions` 테이블 — KB 문서 버전 이력 자동 저장 |
+| `0053` | CSV 일괄 티켓 생성 지원 스키마 (`ticket_import_rows`) |
+| `0052` | SLA 일별 스냅샷 (`daily_stats_snapshots`) — 히트맵 데이터 소스 |
+| `0051` | IP 허용 목록 (`ip_allowlist`) — 관리 API CIDR 제한 |
+| `0050` | 서비스 카탈로그 추가 필드 스키마 확장 |
+| `0049` | 업무 시간 설정 (`business_hours`) |
+| `0048` | 승인 워크플로우 이메일 알림 추가 컬럼 |
 | `0047` | `ticket_type_meta` · `service_catalog_items` · `user_dashboard_configs` 테이블 — 티켓 유형·서비스 카탈로그·대시보드 위젯 설정 |
 | `0046` | `automation_rules` · `approval_requests` 테이블 — 자동화 규칙 엔진·티켓 승인 워크플로우 |
 | `0045` | `sla_records.reopened_at` — MTTR 계산용 재오픈 시각 기록 |
@@ -1593,6 +1684,19 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **테스트중 상태** | `testing` 상태 추가 — 처리중 → 테스트중 → 처리완료 워크플로우 지원 |
 | **업무 부하 현황** | 담당자별 할당·해결율·SLA 충족률·평점 일람 페이지 (`/admin/workload`) |
 | **알림 채널 관리** | 이메일·Telegram 채널 상태 확인·전환 UI (`/admin/notification-channels`) |
+| **SLA 위반 히트맵** | GitHub 스타일 12주 히트맵 — 날짜별 위반 건수를 5단계 색상으로 시각화 (`/reports` 전체 현황 탭) |
+| **KB 문서 버전 이력** | KB 수정 시 이전 버전 자동 저장 → 상세 페이지 "버전 이력" 버튼으로 사이드바에서 버전 목록·본문 미리보기 (IT 개발자 이상) |
+| **CSV 일괄 티켓 생성** | CSV 업로드로 다수 티켓을 한 번에 생성 (`POST /tickets/import/csv`, IT PL 이상) |
+| **승인 이메일 알림** | 승인 요청 생성·승인·반려 시 신청자에게 자동 이메일 발송 |
+| **자동화 규칙 실행 이력** | 규칙별 실행 로그 — 트리거 이벤트·조건 매칭·액션·오류 기록 (Admin, `/admin/automation-rules` → 이력 버튼) |
+| **이메일 수신 모니터링** | IMAP 설정 상태 확인 + 수동 즉시 실행 버튼 (`/admin/email-ingest`) |
+| **Celery 비동기 알림** | 티켓 생성·상태 변경·댓글·담당자 배정 알림을 Celery 워커로 비동기 처리 — API 응답 지연 없이 즉시 반환. Celery 미사용 환경에서는 BackgroundTasks 폴백 |
+| **Slack 알림** | 티켓 생성·상태 변경 시 Slack Incoming Webhook으로 자동 알림 발송 (`SLACK_WEBHOOK_URL` 환경변수) |
+| **Excel(XLSX) 내보내기** | 티켓 목록을 서식 있는 Excel 파일로 다운로드 (`GET /tickets/export/xlsx`) — 헤더 파란 배경·열 너비 자동 조정·Formula Injection 방어 |
+| **업무 시간 기반 SLA** | 요일별 업무 시작·종료 시각 및 공휴일 설정 (`/admin/business-hours`) — 비업무 시간 제외 실제 업무 시간만 SLA 카운트 |
+| **DB N+1 쿼리 최적화** | 티켓 목록 조회 시 `selectinload`/`joinedload` 적용 — 연관 데이터(SLA·레이블·담당자) 쿼리를 서브쿼리로 일괄 로드 |
+| **라우터 모듈 분리** | `tickets.py` 단일 파일(2000+ 줄) → `crud`·`search`·`comments`·`helpers`·`links`·`bulk`·`export`·`stream`·`custom_fields`·`resolution` 10개 서브모듈 분리 |
+| **통합 테스트 확대** | pytest 1562개 테스트 전량 통과 — 승인 워크플로우·자동화 규칙·Celery 폴백·XLSX 내보내기·KB FTS 폴백 등 신규 테스트 추가 |
 | **브랜딩** | ITSM 포털 → **ZENITH** 리브랜딩 (아이콘·파비콘·README 포함) |
 | **CPU 100% 수정** | SSE 스트림 tight loop 제거 → CPU 100% 고착 완전 해소 (0.24% 안정) |
 | **성능** | `/health` GitLab 캐시 60초 → 2~8초 → 3ms |
@@ -1603,7 +1707,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **보안 (4차 감사)** | XFF 신뢰 프록시 처리 · DOMPurify 적용 · SECRET_KEY 기본값 차단 · Sudo 재인증 범위 확대 · CSV Formula Injection 방어 · 감사로그 필터 allowlist · 이메일 XSS 이스케이프 · Webhook 제어문자 제거 · KB LIKE 메타문자 이스케이프 · 인앱 알림 링크 검증 · Prometheus/Grafana localhost 전용 · CORS 와일드카드 프로덕션 차단 · Refresh Token 30일→7일 · nginx Metrics Token envsubst |
 | **보안** | itsm-api 컨테이너 non-root 실행 (`appuser`) |
 | **의존성 취약점 스캔** | GitHub Actions CI에서 pip-audit(Python) + npm audit(Node.js) + Trivy(Docker) 자동 스캔 — push/PR/주간 cron 실행. Dependabot으로 pip·npm·docker·Actions 의존성 주간 자동 PR 생성 |
-| **통합 테스트 스위트** | pytest + FastAPI TestClient 기반 65개 통합 테스트 구축 — SQLite 인메모리 DB(StaticPool) + Redis Mock으로 외부 의존성 없이 실행 가능. RBAC 권한, CRUD 흐름, 보안 입력 검증 포함. GitHub Actions tests.yml에서 PR마다 자동 실행 |
+| **통합 테스트 스위트** | pytest + FastAPI TestClient 기반 1562개 통합 테스트 전량 통과 — SQLite 인메모리 DB(StaticPool) + Redis Mock으로 외부 의존성 없이 실행 가능. RBAC 권한, CRUD 흐름, 보안 입력 검증 포함. GitHub Actions tests.yml에서 PR마다 자동 실행 |
 | **CI/CD** | 3-환경 파이프라인 (개발기·테스트기·운영기) — 태그 기반 자동/수동 배포 |
 
 ### 주요 버그 수정 이력

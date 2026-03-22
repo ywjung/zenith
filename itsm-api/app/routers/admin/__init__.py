@@ -10,17 +10,17 @@ logger = logging.getLogger(__name__)
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
-from ..audit import write_audit_log
-from ..config import get_settings
-from ..database import get_db
-from ..models import UserRole, AuditLog, AssignmentRule, SLAPolicy, ServiceType, EscalationPolicy, EscalationRecord, EmailTemplate, OutboundWebhook, SystemSetting, Rating, SLARecord, BusinessHoursConfig, BusinessHoliday, CustomFieldDef, TicketCustomValue
-from ..rbac import require_agent, require_admin
-from ..rate_limit import limiter
-from ..schemas import (
+from ...auth import get_current_user
+from ...audit import write_audit_log
+from ...config import get_settings
+from ...database import get_db
+from ...models import UserRole, AuditLog, AssignmentRule, SLAPolicy, ServiceType, OutboundWebhook, SystemSetting, Rating, SLARecord, CustomFieldDef, TicketCustomValue
+from ...rbac import require_agent, require_admin
+from ...rate_limit import limiter
+from ...schemas import (
     AssignmentRuleResponse,
     SLARecordResponse,
     SLAPolicyResponse,
@@ -96,7 +96,7 @@ def update_user_role(
     user: dict = Depends(require_admin),
 ):
     # 고위험 작업 — Sudo 재인증 검증 (VULN-07: 쿠키 기반으로 변경)
-    from ..routers.auth import verify_sudo_token
+    from ...routers.auth import verify_sudo_token
     verify_sudo_token(request, user, db)
 
     # 자기 자신 역할 변경 방지 (관리자 없는 상태 방지)
@@ -249,7 +249,7 @@ def download_audit_logs(
     user: dict = Depends(require_admin),
 ):
     """감사 로그 CSV 다운로드 (최대 10,000건, 청크 스트리밍). 관리자 전용."""
-    from ..routers.auth import verify_sudo_token
+    from ...routers.auth import verify_sudo_token
     verify_sudo_token(request, user, db)
     q = _build_audit_query(db, resource_type, actor_id, action, from_date, to_date, actor_username)
 
@@ -389,7 +389,7 @@ def list_breached_sla(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_agent),
 ):
-    from ..models import SLARecord
+    from ...models import SLARecord
     records = (
         db.query(SLARecord)
         .filter(SLARecord.breached == True)  # noqa: E712
@@ -494,15 +494,15 @@ def get_service_type_usage(
     """서비스 유형별 사용 중인 티켓 수를 반환한다 (병렬 조회, 5분 캐시)."""
     import json as _json
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from .. import gitlab_client as _gc
-    from ..config import get_settings as _gs
+    from ... import gitlab_client as _gc
+    from ...config import get_settings as _gs
 
     _CACHE_KEY = "itsm:admin:service_type_usage"
     _CACHE_TTL = 300  # 5분
 
     # Redis 캐시 확인
     try:
-        from ..redis_client import get_redis as _get_redis
+        from ...redis_client import get_redis as _get_redis
         _r = _get_redis()
         if _r:
             cached = _r.get(_CACHE_KEY)
@@ -563,7 +563,7 @@ def create_service_type(
     db.refresh(st)
     # GitLab 라벨 동기화 (cat::{value})
     try:
-        from .. import gitlab_client as _gc
+        from ... import gitlab_client as _gc
         _gc.sync_label_to_gitlab(f"cat::{st.value}", st.color or "#95a5a6")
     except Exception as e:
         logger.warning("서비스 유형 생성 후 GitLab 라벨 동기화 실패: %s", e)
@@ -586,7 +586,7 @@ def update_service_type(
     db.refresh(st)
     # 색상 변경 시 GitLab 라벨 색상도 업데이트
     try:
-        from .. import gitlab_client as _gc
+        from ... import gitlab_client as _gc
         _gc.sync_label_to_gitlab(f"cat::{st.value}", st.color or "#95a5a6")
     except Exception as e:
         logger.warning("서비스 유형 수정 후 GitLab 라벨 동기화 실패: %s", e)
@@ -600,7 +600,7 @@ def delete_service_type(
     db: Session = Depends(get_db),
     user: dict = Depends(require_admin),
 ):
-    from ..routers.auth import verify_sudo_token  # HIGH-03
+    from ...routers.auth import verify_sudo_token  # HIGH-03
     verify_sudo_token(request, user, db)
     st = db.query(ServiceType).filter(ServiceType.id == type_id).first()
     if not st:
@@ -609,7 +609,7 @@ def delete_service_type(
     # 해당 카테고리(cat::N)를 사용 중인 티켓 수 확인
     label_name = f"cat::{st.value}"
     try:
-        from .. import gitlab_client as _gc
+        from ... import gitlab_client as _gc
         _, ticket_count = _gc.get_issues(
             labels=label_name, state="all", per_page=1, page=1
         )
@@ -643,7 +643,7 @@ def cleanup_labels(
 
     project_id를 지정하지 않으면 ITSM 메인 프로젝트에 대해 실행한다.
     """
-    from .. import gitlab_client
+    from ... import gitlab_client
     s = get_settings()
     if not s.GITLAB_GROUP_ID or not s.GITLAB_GROUP_TOKEN:
         raise HTTPException(
@@ -659,240 +659,10 @@ def cleanup_labels(
 
 
 # ---------------------------------------------------------------------------
-# Escalation policies
-# ---------------------------------------------------------------------------
-
-_VALID_NOTIFICATION_CHANNELS = {"email", "slack", "telegram", "webhook"}
-
-
-class EscalationPolicyCreate(BaseModel):
-    name: str
-    priority: Optional[str] = None   # None = 전체 우선순위 적용
-    trigger: str                      # "warning" | "breach"
-    delay_minutes: int = Field(default=0, ge=1, le=10080, description="에스컬레이션 간격(분), 최소 1분 최대 1주일")
-    action: str                       # "notify" | "reassign" | "upgrade_priority"
-    target_user_id: Optional[str] = None
-    target_user_name: Optional[str] = None
-    notify_email: Optional[str] = None
-    notification_channel: Optional[str] = None
-    enabled: bool = True
-
-    @field_validator("notification_channel")
-    @classmethod
-    def validate_notification_channel(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in _VALID_NOTIFICATION_CHANNELS:
-            raise ValueError(f"허용된 채널: {', '.join(sorted(_VALID_NOTIFICATION_CHANNELS))}")
-        return v
-
-
-class EscalationPolicyResponse(BaseModel):
-    id: int
-    name: str
-    priority: Optional[str]
-    trigger: str
-    delay_minutes: int
-    action: str
-    target_user_id: Optional[str]
-    target_user_name: Optional[str]
-    notify_email: Optional[str]
-    enabled: bool
-    created_by: str
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-@router.get("/escalation-policies", response_model=list[EscalationPolicyResponse])
-def list_escalation_policies(
-    db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
-):
-    """에스컬레이션 정책 목록 조회."""
-    return db.query(EscalationPolicy).order_by(EscalationPolicy.id).all()
-
-
-@router.post("/escalation-policies", response_model=EscalationPolicyResponse, status_code=201)
-def create_escalation_policy(
-    body: EscalationPolicyCreate,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    """에스컬레이션 정책 생성."""
-    valid_triggers = {"warning", "breach"}
-    valid_actions = {"notify", "reassign", "upgrade_priority"}
-    if body.trigger not in valid_triggers:
-        raise HTTPException(400, f"trigger는 {valid_triggers} 중 하나여야 합니다.")
-    if body.action not in valid_actions:
-        raise HTTPException(400, f"action은 {valid_actions} 중 하나여야 합니다.")
-    if body.action == "reassign" and not body.target_user_id:
-        raise HTTPException(400, "reassign 액션은 target_user_id가 필요합니다.")
-
-    policy = EscalationPolicy(**body.model_dump(), created_by=user["username"])
-    db.add(policy)
-    db.commit()
-    db.refresh(policy)
-    return policy
-
-
-@router.put("/escalation-policies/{policy_id}", response_model=EscalationPolicyResponse)
-def update_escalation_policy(
-    policy_id: int,
-    body: EscalationPolicyCreate,
-    db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
-):
-    """에스컬레이션 정책 수정."""
-    policy = db.query(EscalationPolicy).filter(EscalationPolicy.id == policy_id).with_for_update().first()
-    if not policy:
-        raise HTTPException(404, "정책을 찾을 수 없습니다.")
-    for key, val in body.model_dump().items():
-        setattr(policy, key, val)
-    db.commit()
-    db.refresh(policy)
-    return policy
-
-
-@router.delete("/escalation-policies/{policy_id}", status_code=204)
-def delete_escalation_policy(
-    request: Request,
-    policy_id: int,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    """에스컬레이션 정책 삭제 (실행 기록도 함께 삭제)."""
-    from ..routers.auth import verify_sudo_token  # HIGH-03
-    verify_sudo_token(request, user, db)
-    policy = db.query(EscalationPolicy).filter(EscalationPolicy.id == policy_id).first()
-    if not policy:
-        raise HTTPException(404, "정책을 찾을 수 없습니다.")
-    db.query(EscalationRecord).filter(EscalationRecord.policy_id == policy_id).delete()
-    db.delete(policy)
-    db.commit()
-
-
-# ---------------------------------------------------------------------------
-# Email templates
-# ---------------------------------------------------------------------------
-
-class EmailTemplateResponse(BaseModel):
-    id: int
-    event_type: str
-    subject: str
-    html_body: str
-    enabled: bool
-    updated_by: Optional[str]
-    updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
-
-
-class EmailTemplateUpdate(BaseModel):
-    subject: str
-    html_body: str
-    enabled: bool = True
-
-
-_EVENT_TYPE_LABELS = {
-    "ticket_created": "티켓 생성",
-    "status_changed": "상태 변경",
-    "comment_added": "댓글 추가",
-    "sla_warning": "SLA 경고",
-    "sla_breach": "SLA 위반",
-}
-
-
-@router.get("/email-templates", response_model=list[EmailTemplateResponse])
-def list_email_templates(
-    db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
-):
-    """이메일 템플릿 목록 조회."""
-    return db.query(EmailTemplate).order_by(EmailTemplate.event_type).all()
-
-
-@router.get("/email-templates/{event_type}", response_model=EmailTemplateResponse)
-def get_email_template(
-    event_type: str,
-    db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
-):
-    """특정 이벤트 타입의 이메일 템플릿 조회."""
-    tmpl = db.query(EmailTemplate).filter(EmailTemplate.event_type == event_type).first()
-    if not tmpl:
-        raise HTTPException(404, "템플릿을 찾을 수 없습니다.")
-    return tmpl
-
-
-@router.put("/email-templates/{event_type}", response_model=EmailTemplateResponse)
-def update_email_template(
-    event_type: str,
-    body: EmailTemplateUpdate,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    """이메일 템플릿 수정. Jinja2 문법 검증 후 저장."""
-    # Jinja2 문법 유효성 검사
-    try:
-        from jinja2.sandbox import SandboxedEnvironment
-        env = SandboxedEnvironment(autoescape=True)
-        env.parse(body.subject)
-        env.parse(body.html_body)
-    except Exception:
-        raise HTTPException(400, "템플릿 문법 오류입니다. 문법을 확인해 주세요.")
-
-    tmpl = db.query(EmailTemplate).filter(EmailTemplate.event_type == event_type).first()
-    if not tmpl:
-        raise HTTPException(404, "템플릿을 찾을 수 없습니다.")
-
-    tmpl.subject = body.subject
-    tmpl.html_body = body.html_body
-    tmpl.enabled = body.enabled
-    tmpl.updated_by = user["username"]
-    db.commit()
-    db.refresh(tmpl)
-    return tmpl
-
-
-@router.post("/email-templates/{event_type}/preview")
-def preview_email_template(
-    event_type: str,
-    body: EmailTemplateUpdate,
-    _user: dict = Depends(require_admin),
-):
-    """템플릿 미리보기 — 샘플 데이터로 렌더링해 반환."""
-    sample_ctx: dict = {
-        "iid": 42,
-        "title": "샘플 티켓 제목입니다",
-        "employee_name": "홍길동",
-        "priority": "high",
-        "category": "소프트웨어",
-        "description": "문제 설명 내용입니다.",
-        "old_status": "접수됨",
-        "new_status": "처리 중",
-        "actor_name": "IT팀 담당자",
-        "author_name": "IT팀 담당자",
-        "comment_preview": "확인 후 처리하겠습니다.",
-        "minutes_left": 45,
-        "portal_url": "http://itsm.example.com/tickets/42",
-    }
-    try:
-        from jinja2.sandbox import SandboxedEnvironment
-        env = SandboxedEnvironment(autoescape=True)
-        subject = env.from_string(body.subject).render(**sample_ctx)
-        html_body = env.from_string(body.html_body).render(**sample_ctx)
-        return {"subject": subject, "html_body": html_body}
-    except Exception:
-        raise HTTPException(400, "템플릿 렌더링 오류입니다. 문법을 확인해 주세요.")
-
-
-
-# ---------------------------------------------------------------------------
 # Outbound Webhooks
 # ---------------------------------------------------------------------------
 
-from ..outbound_webhook import SUPPORTED_EVENTS as _WEBHOOK_EVENTS
+from ...outbound_webhook import SUPPORTED_EVENTS as _WEBHOOK_EVENTS
 
 
 class OutboundWebhookCreate(BaseModel):
@@ -914,8 +684,7 @@ class OutboundWebhookResponse(BaseModel):
     last_triggered_at: Optional[datetime]
     last_status: Optional[int]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/outbound-webhooks", response_model=list[OutboundWebhookResponse])
@@ -932,7 +701,7 @@ def create_outbound_webhook(
     db: Session = Depends(get_db),
     user: dict = Depends(require_admin),
 ):
-    from ..security import validate_external_url
+    from ...security import validate_external_url
     validate_external_url(body.url, "웹훅 URL")
     invalid = [e for e in body.events if e not in _WEBHOOK_EVENTS]
     if invalid:
@@ -951,7 +720,7 @@ def update_outbound_webhook(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_admin),
 ):
-    from ..security import validate_external_url
+    from ...security import validate_external_url
     hook = db.query(OutboundWebhook).filter(OutboundWebhook.id == hook_id).with_for_update().first()
     if not hook:
         raise HTTPException(404, "웹훅을 찾을 수 없습니다.")
@@ -973,7 +742,7 @@ def delete_outbound_webhook(
     db: Session = Depends(get_db),
     user: dict = Depends(require_admin),
 ):
-    from ..routers.auth import verify_sudo_token  # HIGH-03
+    from ...routers.auth import verify_sudo_token  # HIGH-03
     verify_sudo_token(request, user, db)
     hook = db.query(OutboundWebhook).filter(OutboundWebhook.id == hook_id).first()
     if not hook:
@@ -991,7 +760,7 @@ def test_outbound_webhook(
     _user: dict = Depends(require_admin),
 ):
     """테스트 페이로드를 발송해 연결 상태를 확인한다."""
-    from ..outbound_webhook import _send_one
+    from ...outbound_webhook import _send_one
     hook = db.query(OutboundWebhook).filter(OutboundWebhook.id == hook_id).first()
     if not hook:
         raise HTTPException(404, "웹훅을 찾을 수 없습니다.")
@@ -1006,7 +775,7 @@ def test_outbound_webhook(
 @router.get("/sessions/{gitlab_user_id}")
 def list_user_sessions(gitlab_user_id: int, db: Session = Depends(get_db), _user: dict = Depends(require_admin)):
     """사용자의 활성 세션(리프레시 토큰) 목록."""
-    from ..models import RefreshToken
+    from ...models import RefreshToken
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     sessions = db.query(RefreshToken).filter(
@@ -1022,42 +791,12 @@ def list_user_sessions(gitlab_user_id: int, db: Session = Depends(get_db), _user
 @router.delete("/sessions/{session_id}", status_code=204)
 def revoke_session(session_id: int, db: Session = Depends(get_db), _user: dict = Depends(require_admin)):
     """특정 세션 강제 폐기."""
-    from ..models import RefreshToken
+    from ...models import RefreshToken
     s = db.query(RefreshToken).filter(RefreshToken.id == session_id).with_for_update().first()
     if not s:
         raise HTTPException(404, "세션을 찾을 수 없습니다.")
     s.revoked = True
     db.commit()
-
-
-# ---------------------------------------------------------------------------
-# Announcements
-# ---------------------------------------------------------------------------
-
-from ..models import Announcement as AnnouncementModel
-from datetime import datetime as _dt, timezone as _tz
-
-
-class AnnouncementCreate(BaseModel):
-    title: str
-    content: str
-    type: str = "info"
-    enabled: bool = True
-    expires_at: Optional[datetime] = None
-
-
-class AnnouncementResponse(BaseModel):
-    id: int
-    title: str
-    content: str
-    type: str
-    enabled: bool
-    expires_at: Optional[datetime]
-    created_by: str
-    created_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 # ---------------------------------------------------------------------------
@@ -1067,15 +806,15 @@ class AnnouncementResponse(BaseModel):
 @router.get("/label-status")
 def get_label_status(_user: dict = Depends(require_admin)):
     """GitLab 프로젝트·그룹의 라벨 동기화 현황을 반환한다."""
-    from .. import gitlab_client as _gc
+    from ... import gitlab_client as _gc
     return _gc.get_label_sync_status()
 
 
 @router.post("/sync-labels", status_code=200)
 def sync_all_labels(_user: dict = Depends(require_admin)):
     """모든 필수 라벨(status/prio/cat)을 GitLab에 강제 동기화한다."""
-    from .. import gitlab_client as _gc
-    from ..gitlab_client import REQUIRED_LABELS, get_category_labels_from_db
+    from ... import gitlab_client as _gc
+    from ...gitlab_client import REQUIRED_LABELS, get_category_labels_from_db
     all_labels = list(REQUIRED_LABELS) + get_category_labels_from_db()
     results = {"synced": [], "failed": []}
     for name, color in all_labels:
@@ -1088,189 +827,6 @@ def sync_all_labels(_user: dict = Depends(require_admin)):
     return results
 
 
-@router.get("/announcements", response_model=list[AnnouncementResponse])
-def list_announcements(
-    db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
-):
-    """공지사항 전체 목록 조회 (관리자)."""
-    return db.query(AnnouncementModel).order_by(AnnouncementModel.created_at.desc()).all()
-
-
-@router.post("/announcements", response_model=AnnouncementResponse, status_code=201)
-def create_announcement(
-    body: AnnouncementCreate,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    """공지사항 생성 (관리자)."""
-    allowed_types = {"info", "warning", "critical"}
-    if body.type not in allowed_types:
-        raise HTTPException(400, f"type은 {allowed_types} 중 하나여야 합니다.")
-    ann = AnnouncementModel(
-        title=body.title,
-        content=body.content,
-        type=body.type,
-        enabled=body.enabled,
-        expires_at=body.expires_at,
-        created_by=user.get("username", ""),
-        created_at=_dt.now(_tz.utc),
-    )
-    db.add(ann)
-    db.commit()
-    db.refresh(ann)
-    return ann
-
-
-@router.put("/announcements/{ann_id}", response_model=AnnouncementResponse)
-def update_announcement(
-    ann_id: int,
-    body: AnnouncementCreate,
-    db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
-):
-    """공지사항 수정 (관리자)."""
-    ann = db.query(AnnouncementModel).filter(AnnouncementModel.id == ann_id).first()
-    if not ann:
-        raise HTTPException(404, "공지사항을 찾을 수 없습니다.")
-    ann.title = body.title
-    ann.content = body.content
-    ann.type = body.type
-    ann.enabled = body.enabled
-    ann.expires_at = body.expires_at
-    db.commit()
-    db.refresh(ann)
-    return ann
-
-
-@router.delete("/announcements/{ann_id}", status_code=204)
-def delete_announcement(
-    ann_id: int,
-    db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
-):
-    """공지사항 삭제 (관리자)."""
-    ann = db.query(AnnouncementModel).filter(AnnouncementModel.id == ann_id).first()
-    if not ann:
-        raise HTTPException(404, "공지사항을 찾을 수 없습니다.")
-    db.delete(ann)
-    db.commit()
-
-
-# ---------------------------------------------------------------------------
-# API 키 관리
-# ---------------------------------------------------------------------------
-
-import hashlib as _hashlib
-import secrets as _secrets
-
-
-_API_KEY_SCOPES = ["tickets:read", "tickets:write", "kb:read", "kb:write", "webhooks:write"]
-
-
-class ApiKeyCreate(BaseModel):
-    name: str
-    scopes: list[str]
-    expires_days: Optional[int] = Field(None, gt=0)  # None = 무기한, 양수만 허용
-
-    @field_validator("name")
-    @classmethod
-    def validate_name(cls, v: str) -> str:
-        import re
-        if not re.match(r'^[a-zA-Z0-9가-힣\-_\. ]{1,64}$', v):
-            raise ValueError("API 키 이름은 1~64자의 영문, 숫자, 한글, -, _, . 만 허용됩니다")
-        return v
-
-
-class ApiKeyResponse(BaseModel):
-    id: int
-    name: str
-    key_prefix: str
-    scopes: list
-    created_by: str
-    created_at: Optional[datetime]
-    expires_at: Optional[datetime]
-    last_used_at: Optional[datetime]
-    revoked: bool
-
-    class Config:
-        from_attributes = True
-
-
-@router.get("/api-keys", response_model=list[ApiKeyResponse])
-def list_api_keys(db: Session = Depends(get_db), _user: dict = Depends(require_admin)):
-    from ..models import ApiKey
-    return db.query(ApiKey).order_by(ApiKey.created_at.desc()).all()
-
-
-@router.post("/api-keys", status_code=201)
-def create_api_key(
-    body: ApiKeyCreate,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    """API 키 발급. raw 키는 응답에서 한 번만 반환 — 재조회 불가."""
-    from ..models import ApiKey
-    from datetime import timezone as _tz, timedelta
-
-    invalid_scopes = [s for s in body.scopes if s not in _API_KEY_SCOPES]
-    if invalid_scopes:
-        raise HTTPException(400, f"유효하지 않은 스코프: {invalid_scopes}. 가능: {_API_KEY_SCOPES}")
-
-    # 이름 중복 방지
-    from ..models import ApiKey
-    if db.query(ApiKey).filter(ApiKey.name == body.name, ApiKey.is_active == True).first():  # noqa: E712
-        raise HTTPException(400, f"'{body.name}' 이름의 활성 API 키가 이미 존재합니다.")
-
-    # itsm_live_ + 32자 랜덤
-    raw_key = "itsm_live_" + _secrets.token_urlsafe(24)
-    prefix = raw_key[:16]
-    key_hash = _hashlib.sha256(raw_key.encode()).hexdigest()
-
-    expires_at = None
-    if body.expires_days:
-        expires_at = (datetime.now(_tz.utc) + timedelta(days=body.expires_days)).replace(tzinfo=None)
-
-    rec = ApiKey(
-        name=body.name,
-        key_prefix=prefix,
-        key_hash=key_hash,
-        scopes=body.scopes,
-        created_by=user["username"],
-        expires_at=expires_at,
-    )
-    db.add(rec)
-    db.commit()
-    db.refresh(rec)
-
-    return {
-        "id": rec.id,
-        "name": rec.name,
-        "key": raw_key,  # 한 번만 반환
-        "key_prefix": prefix,
-        "scopes": rec.scopes,
-        "expires_at": rec.expires_at.isoformat() if rec.expires_at else None,
-        "warning": "이 키는 지금만 표시됩니다. 안전한 곳에 저장하세요.",
-    }
-
-
-@router.delete("/api-keys/{key_id}", status_code=204)
-def revoke_api_key(
-    request: Request,
-    key_id: int,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    from ..routers.auth import verify_sudo_token  # HIGH-03
-    verify_sudo_token(request, user, db)
-    from ..models import ApiKey
-    rec = db.query(ApiKey).filter(ApiKey.id == key_id).first()
-    if not rec:
-        raise HTTPException(404, "API 키를 찾을 수 없습니다.")
-    rec.revoked = True
-    db.commit()
-
-
 @router.get("/filter-options")
 def get_filter_options(db: Session = Depends(get_db)):
     """티켓 목록 필터에 필요한 옵션(상태·우선순위·카테고리)을 동적으로 반환한다.
@@ -1279,7 +835,7 @@ def get_filter_options(db: Session = Depends(get_db)):
     - 우선순위: SLA 정책 테이블에서 조회 (없으면 기본값 사용)
     - 카테고리: service_types 테이블에서 조회
     """
-    from ..models import SLAPolicy
+    from ...models import SLAPolicy
 
     # ── 상태 (워크플로우 정의, 관리자 Label Sync 기준) ──────────────────
     statuses = [
@@ -1398,12 +954,12 @@ def put_role_labels(
 # 알림 채널 설정 (이메일 / 텔레그램 enable/disable)
 # ---------------------------------------------------------------------------
 
-_CHANNEL_KEYS = ("email_enabled", "telegram_enabled")
+_CHANNEL_KEYS = ("email_enabled", "telegram_enabled", "slack_enabled")
 _SETTINGS_CACHE_TTL = 60
 
 
 def _invalidate_settings_cache(*keys: str) -> None:
-    from ..redis_client import get_redis
+    from ...redis_client import get_redis
     r = get_redis()
     if r:
         for key in keys:
@@ -1416,6 +972,7 @@ def _invalidate_settings_cache(*keys: str) -> None:
 class NotificationChannelPatch(BaseModel):
     email_enabled: Optional[bool] = None
     telegram_enabled: Optional[bool] = None
+    slack_enabled: Optional[bool] = None
 
 
 @router.get("/notification-channels")
@@ -1423,14 +980,16 @@ def get_notification_channels(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_admin),
 ):
-    """이메일·텔레그램 채널 활성화 상태와 인프라(env) 설정 여부를 반환한다."""
+    """이메일·텔레그램·Slack 채널 활성화 상태와 인프라(env) 설정 여부를 반환한다."""
     settings = get_settings()
     rows = {r.key: r.value for r in db.query(SystemSetting).filter(SystemSetting.key.in_(list(_CHANNEL_KEYS))).all()}
     return {
         "email_enabled": rows.get("email_enabled", "true") == "true",
         "telegram_enabled": rows.get("telegram_enabled", "true") == "true",
+        "slack_enabled": rows.get("slack_enabled", "true") == "true",
         "email_configured": bool(settings.NOTIFICATION_ENABLED and settings.SMTP_HOST),
         "telegram_configured": bool(settings.TELEGRAM_ENABLED and settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID),
+        "slack_configured": bool(settings.SLACK_ENABLED and settings.SLACK_WEBHOOK_URL),
     }
 
 
@@ -1461,6 +1020,8 @@ def patch_notification_channels(
         _upsert("email_enabled", data.email_enabled)
     if data.telegram_enabled is not None:
         _upsert("telegram_enabled", data.telegram_enabled)
+    if data.slack_enabled is not None:
+        _upsert("slack_enabled", data.slack_enabled)
 
     if not changed:
         raise HTTPException(status_code=400, detail="변경할 설정이 없습니다.")
@@ -1494,7 +1055,7 @@ def get_workload(
     """사용자별 담당 티켓 수·처리 건수·평균 처리 시간·SLA 달성률·평점을 집계한다."""
     from datetime import date as _date, datetime as _datetime, time as _dt_time
     from concurrent.futures import ThreadPoolExecutor
-    from .. import gitlab_client as _gl
+    from ... import gitlab_client as _gl
 
     # 날짜 파싱
     def _parse(d: Optional[str], end: bool = False):
@@ -1650,204 +1211,6 @@ def get_workload(
     return result
 
 
-# ── 업무시간 설정 ─────────────────────────────────────────────────────────────
-
-class BusinessHoursItem(BaseModel):
-    day_of_week: int          # 0=월 … 6=일
-    start_time: str           # "HH:MM"
-    end_time: str             # "HH:MM"
-    is_active: bool = True
-
-    @field_validator("end_time")
-    @classmethod
-    def end_after_start(cls, v: str, info) -> str:
-        start = (info.data or {}).get("start_time")
-        if start is not None and v <= start:
-            raise ValueError("end_time은 start_time 이후여야 합니다")
-        return v
-
-
-class BusinessHoursPayload(BaseModel):
-    schedule: list[BusinessHoursItem]
-
-
-class HolidayCreate(BaseModel):
-    date: str   # "YYYY-MM-DD"
-    name: str = ""
-
-
-@router.get("/business-hours")
-def get_business_hours(
-    db: Session = Depends(get_db),
-    _user: dict = Depends(require_admin),
-):
-    """업무시간 설정과 공휴일 목록 반환."""
-    from datetime import time as _time, date as _date
-    schedule = [
-        {
-            "id": s.id,
-            "day_of_week": s.day_of_week,
-            "start_time": s.start_time.strftime("%H:%M"),
-            "end_time": s.end_time.strftime("%H:%M"),
-            "is_active": s.is_active,
-        }
-        for s in db.query(BusinessHoursConfig).order_by(BusinessHoursConfig.day_of_week).all()
-    ]
-    holidays = [
-        {"id": h.id, "date": h.date.isoformat(), "name": h.name or ""}
-        for h in db.query(BusinessHoliday).order_by(BusinessHoliday.date).all()
-    ]
-    from ..models import HolidayYear
-    pinned_years = [
-        row.year for row in db.query(HolidayYear).order_by(HolidayYear.year).all()
-    ]
-    return {"schedule": schedule, "holidays": holidays, "pinned_years": pinned_years}
-
-
-@router.put("/business-hours")
-def put_business_hours(
-    request: Request,
-    data: BusinessHoursPayload,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    """업무시간 스케줄 전체 교체 (기존 설정 삭제 후 재등록)."""
-    from datetime import time as _time
-    db.query(BusinessHoursConfig).delete()
-    for item in data.schedule:
-        try:
-            s_h, s_m = map(int, item.start_time.split(":"))
-            e_h, e_m = map(int, item.end_time.split(":"))
-            if not (0 <= s_h <= 23 and 0 <= s_m <= 59 and 0 <= e_h <= 23 and 0 <= e_m <= 59):
-                raise ValueError("out of range")
-            start_t = _time(s_h, s_m)
-            end_t = _time(e_h, e_m)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"시간 형식 오류: {item.start_time}")
-        db.add(BusinessHoursConfig(
-            day_of_week=item.day_of_week,
-            start_time=start_t,
-            end_time=end_t,
-            is_active=item.is_active,
-        ))
-    db.commit()
-    write_audit_log(db, user, "business_hours.update", "system", "business_hours", request=request)
-    return {"ok": True}
-
-
-@router.post("/holidays", status_code=201)
-def add_holiday(
-    request: Request,
-    data: HolidayCreate,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    from datetime import date as _date
-    try:
-        d = _date.fromisoformat(data.date)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="날짜 형식 오류 (YYYY-MM-DD)")
-    existing = db.query(BusinessHoliday).filter(BusinessHoliday.date == d).first()
-    if existing:
-        raise HTTPException(status_code=409, detail="이미 등록된 날짜입니다.")
-    h = BusinessHoliday(date=d, name=data.name or None)
-    db.add(h); db.commit(); db.refresh(h)
-    write_audit_log(db, user, "holiday.add", "system", str(h.id), request=request)
-    return {"id": h.id, "date": h.date.isoformat(), "name": h.name or ""}
-
-
-@router.delete("/holidays/{holiday_id}", status_code=204)
-def delete_holiday(
-    request: Request,
-    holiday_id: int,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    h = db.query(BusinessHoliday).filter(BusinessHoliday.id == holiday_id).with_for_update().first()
-    if not h:
-        raise HTTPException(status_code=404, detail="공휴일을 찾을 수 없습니다.")
-    db.delete(h); db.commit()
-    write_audit_log(db, user, "holiday.delete", "system", str(holiday_id), request=request)
-
-
-@router.post("/holiday-years/{year}", status_code=201)
-def add_holiday_year(
-    request: Request,
-    year: int,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    """공휴일 관리 탭에 연도 고정."""
-    from ..models import HolidayYear
-    if not (2000 <= year <= 2100):
-        raise HTTPException(status_code=422, detail="연도는 2000~2100 사이여야 합니다.")
-    if db.query(HolidayYear).filter_by(year=year).first():
-        return {"year": year}
-    db.add(HolidayYear(year=year))
-    db.commit()
-    return {"year": year}
-
-
-@router.delete("/holiday-years/{year}", status_code=204)
-def delete_holiday_year(
-    request: Request,
-    year: int,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    """공휴일 관리 탭에서 연도 제거 (공휴일이 있으면 거부)."""
-    from ..models import HolidayYear
-    from datetime import date as _date
-    has_holidays = db.query(BusinessHoliday).filter(
-        BusinessHoliday.date >= _date(year, 1, 1),
-        BusinessHoliday.date <= _date(year, 12, 31),
-    ).first()
-    if has_holidays:
-        raise HTTPException(status_code=409, detail="해당 연도에 공휴일이 있어 삭제할 수 없습니다.")
-    row = db.query(HolidayYear).filter_by(year=year).first()
-    if row:
-        db.delete(row)
-        db.commit()
-
-
-class HolidayBulkItem(BaseModel):
-    date: str   # "YYYY-MM-DD"
-    name: str = ""
-
-
-class HolidayBulkCreate(BaseModel):
-    holidays: list[HolidayBulkItem]
-
-
-@router.post("/holidays/bulk", status_code=201)
-def bulk_add_holidays(
-    request: Request,
-    data: HolidayBulkCreate,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_admin),
-):
-    """여러 공휴일을 한 번에 등록합니다. 이미 등록된 날짜는 건너뜁니다."""
-    from datetime import date as _date
-    added = []
-    skipped = []
-    for item in data.holidays:
-        try:
-            d = _date.fromisoformat(item.date)
-        except ValueError:
-            continue
-        existing = db.query(BusinessHoliday).filter(BusinessHoliday.date == d).first()
-        if existing:
-            skipped.append(item.date)
-            continue
-        h = BusinessHoliday(date=d, name=item.name or None)
-        db.add(h)
-        db.flush()
-        added.append({"id": h.id, "date": h.date.isoformat(), "name": h.name or ""})
-    db.commit()
-    write_audit_log(db, user, "holiday.bulk_add", "system", f"added={len(added)}", request=request)
-    return {"added": added, "skipped": skipped}
-
-
 # ---------------------------------------------------------------------------
 # 커스텀 필드 관리
 # ---------------------------------------------------------------------------
@@ -1960,3 +1323,213 @@ def delete_custom_field(
     db.query(TicketCustomValue).filter(TicketCustomValue.field_id == field_id).delete(synchronize_session=False)
     db.delete(f); db.commit()
     write_audit_log(db, user, "custom_field.delete", "custom_field", str(field_id), request=request)
+
+
+# ---------------------------------------------------------------------------
+# 이메일 인제스트 모니터링
+# ---------------------------------------------------------------------------
+
+@router.get("/email-ingest/status")
+def get_email_ingest_status(_user: dict = Depends(require_admin)):
+    """이메일 수신 모니터링: 최근 Celery 태스크 결과 및 설정 상태."""
+    from ...config import get_settings as _gs
+    settings = _gs()
+    if not settings.IMAP_ENABLED:
+        return {"enabled": False, "recent_results": []}
+
+    recent: list[dict] = []
+    try:
+        from celery.result import AsyncResult
+        from ...celery_app import celery_app
+        # Celery flower 없이 backend에서 최근 태스크 결과 조회
+        backend = celery_app.backend
+        if hasattr(backend, "_get_task_meta_for"):
+            pass  # Redis backend
+        # Flower 없이는 개별 task_id를 알아야 조회 가능하므로 Redis에서 직접 스캔
+        try:
+            redis_client = celery_app.backend.client
+            keys = redis_client.keys("celery-task-meta-*")
+            import json as _json
+            from datetime import timezone as _tz
+            for key in sorted(keys, reverse=True)[:20]:
+                raw = redis_client.get(key)
+                if not raw:
+                    continue
+                meta = _json.loads(raw)
+                if meta.get("task_id") and "itsm.periodic_email_ingest" in str(meta.get("task_id", "")):
+                    recent.append(meta)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # Redis에서 태스크 ID로 필터링이 어려우므로 대신 task명 기반 직접 조회
+    # Celery beat 실행 결과를 별도로 추적하는 경량 방식 제공
+    return {
+        "enabled": True,
+        "imap_host": settings.IMAP_HOST or "",
+        "imap_user": settings.IMAP_USER or "",
+        "schedule": "2분마다",
+        "recent_results": recent,
+    }
+
+
+@router.post("/email-ingest/trigger", status_code=202)
+def trigger_email_ingest(_user: dict = Depends(require_admin)):
+    """이메일 수신을 즉시 수동으로 실행한다."""
+    try:
+        from ...tasks import periodic_email_ingest
+        result = periodic_email_ingest.delay()
+        return {"task_id": result.id, "status": "queued"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Celery 사용 불가: {e}")
+
+
+@router.get("/search-index/status")
+def get_search_index_status(_user: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """ticket_search_index 현황 반환 (총 색인 수, 최근 동기화 시간, pg_trgm 인덱스 상태)."""
+    from ...models import TicketSearchIndex
+    from sqlalchemy import func, text
+    total = db.query(func.count(TicketSearchIndex.id)).scalar() or 0
+    last_synced = db.query(func.max(TicketSearchIndex.synced_at)).scalar()
+
+    # pg_trgm GIN 인덱스 존재 여부 확인
+    trgm_indexes: list[dict] = []
+    try:
+        rows = db.execute(text(
+            "SELECT indexname, indexdef FROM pg_indexes "
+            "WHERE tablename IN ('ticket_search_index', 'kb_articles') "
+            "AND indexdef ILIKE '%gin%' "
+            "ORDER BY indexname"
+        )).fetchall()
+        trgm_indexes = [{"name": r[0], "definition": r[1]} for r in rows]
+    except Exception:
+        pass
+
+    # pg_trgm 확장 설치 여부
+    trgm_enabled = False
+    try:
+        row = db.execute(text(
+            "SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'"
+        )).fetchone()
+        trgm_enabled = row is not None
+    except Exception:
+        pass
+
+    return {
+        "total_indexed": total,
+        "last_synced_at": last_synced.isoformat() if last_synced else None,
+        "trgm_enabled": trgm_enabled,
+        "gin_indexes": trgm_indexes,
+    }
+
+
+@router.post("/search-index/sync", status_code=202)
+def trigger_search_index_sync(_user: dict = Depends(require_admin)):
+    """전문검색 색인 전체 동기화를 즉시 실행한다."""
+    try:
+        from ...tasks import periodic_search_index_sync
+        result = periodic_search_index_sync.delay()
+        return {"task_id": result.id, "status": "queued"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Celery 사용 불가: {e}")
+
+
+# ---------------------------------------------------------------------------
+# DB 보존 정책 관리 — 감사로그 / 알림 / 만료 토큰
+# ---------------------------------------------------------------------------
+
+@router.get("/db-cleanup/stats")
+def get_db_cleanup_stats(_user: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """만료 데이터 현황 (각 테이블 대상 행 수) 조회."""
+    from ...models import RefreshToken, GuestToken, Notification, AuditLog
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    cut_notif = now - timedelta(days=90)
+    cut_audit = now - timedelta(days=180)
+
+    return {
+        "expired_refresh_tokens": db.query(RefreshToken).filter(RefreshToken.expires_at < now).count(),
+        "expired_guest_tokens": db.query(GuestToken).filter(GuestToken.expires_at < now).count(),
+        "old_read_notifications": db.query(Notification).filter(
+            Notification.is_read == True,  # noqa: E712
+            Notification.created_at < cut_notif,
+        ).count(),
+        "old_audit_logs": db.query(AuditLog).filter(AuditLog.created_at < cut_audit).count(),
+        "policy": {
+            "refresh_token_ttl_days": "expires_at 기준 즉시 삭제",
+            "guest_token_ttl_days": "expires_at 기준 즉시 삭제",
+            "notification_retention_days": 90,
+            "audit_log_retention_days": 180,
+            "schedule": "매일 03:00 KST 자동 실행",
+        },
+    }
+
+
+@router.post("/db-cleanup/run", status_code=202)
+def trigger_db_cleanup(_user: dict = Depends(require_admin)):
+    """DB 만료 데이터 정리를 즉시 실행한다."""
+    try:
+        from ...tasks import periodic_db_cleanup
+        result = periodic_db_cleanup.delay()
+        return {"task_id": result.id, "status": "queued"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Celery 사용 불가: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Celery 상태
+# ---------------------------------------------------------------------------
+
+@router.get("/celery/stats")
+def get_celery_stats(_user: dict = Depends(require_admin)):
+    """Celery 워커 · 큐 상태를 반환한다."""
+    try:
+        from ...celery_app import celery_app
+        inspect = celery_app.control.inspect(timeout=3)
+        active = inspect.active() or {}
+        reserved = inspect.reserved() or {}
+        workers = list(active.keys())
+        active_count = sum(len(v) for v in active.values())
+        reserved_count = sum(len(v) for v in reserved.values())
+
+        # 큐별 메시지 수 (Redis 브로커)
+        queues: dict[str, int] = {}
+        try:
+            from ...redis_client import get_redis
+            r = get_redis()
+            if r:
+                for queue_name in ("celery", "itsm_notifications", "itsm_periodic"):
+                    length = r.llen(queue_name)
+                    if length is not None:
+                        queues[queue_name] = length
+        except Exception:
+            pass
+
+        return {
+            "active_tasks": active_count,
+            "reserved_tasks": reserved_count,
+            "workers": workers,
+            "queues": queues,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Celery 연결 실패: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Sub-module routers
+# ---------------------------------------------------------------------------
+from .announcements import announcements_router
+from .api_keys import api_keys_router
+from .data_export import data_export_router
+from .escalation import escalation_router
+from .email_templates import email_templates_router
+from .business_hours import business_hours_router
+
+router.include_router(announcements_router)
+router.include_router(api_keys_router)
+router.include_router(data_export_router)
+router.include_router(escalation_router)
+router.include_router(email_templates_router)
+router.include_router(business_hours_router)

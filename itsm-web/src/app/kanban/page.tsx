@@ -98,6 +98,7 @@ function KanbanContent() {
   const [selectedProject, setSelectedProject] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
   const [filterAssignee, setFilterAssignee] = useState('')
+  const [filterPeriod, setFilterPeriod] = useState('')
   const initializedRef = useRef(false)
   const prevProjectRef = useRef('')
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -155,11 +156,23 @@ function KanbanContent() {
   // 언마운트 시 백그라운드 동기화 타이머 정리
   useEffect(() => () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current) }, [])
 
-  const filtered = useMemo(() => tickets.filter(t => {
-    if (filterPriority && t.priority !== filterPriority) return false
-    if (filterAssignee && t.assignee_name !== filterAssignee) return false
-    return true
-  }), [tickets, filterPriority, filterAssignee])
+  const filtered = useMemo(() => {
+    const now = Date.now()
+    const periodMs: Record<string, number> = {
+      today: 24 * 3600_000,
+      week: 7 * 24 * 3600_000,
+      month: 30 * 24 * 3600_000,
+    }
+    return tickets.filter(t => {
+      if (filterPriority && t.priority !== filterPriority) return false
+      if (filterAssignee && t.assignee_name !== filterAssignee) return false
+      if (filterPeriod && periodMs[filterPeriod]) {
+        const age = now - new Date(t.created_at).getTime()
+        if (age > periodMs[filterPeriod]) return false
+      }
+      return true
+    })
+  }, [tickets, filterPriority, filterAssignee, filterPeriod])
 
   const ticketMap = useMemo(() => {
     const m: Record<number, Ticket> = {}
@@ -327,9 +340,20 @@ function KanbanContent() {
           </select>
         )}
 
-        {(filterPriority || filterAssignee) && (
+        <select
+          value={filterPeriod}
+          onChange={e => setFilterPeriod(e.target.value)}
+          className="border dark:border-gray-600 rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700"
+        >
+          <option value="">전체 기간</option>
+          <option value="today">오늘</option>
+          <option value="week">이번 주</option>
+          <option value="month">이번 달</option>
+        </select>
+
+        {(filterPriority || filterAssignee || filterPeriod) && (
           <button
-            onClick={() => { setFilterPriority(''); setFilterAssignee('') }}
+            onClick={() => { setFilterPriority(''); setFilterAssignee(''); setFilterPeriod('') }}
             className="text-xs text-red-500 hover:text-red-700 underline"
           >
             필터 초기화
@@ -368,9 +392,9 @@ function KanbanContent() {
       )}
 
       {/* Board */}
-      <div className="flex-1 min-h-0 px-4 py-4">
+      <div className="flex-1 min-h-0 px-4 py-4 overflow-x-auto">
         {loading ? (
-          <div className="grid grid-cols-9 gap-3 h-full">
+          <div className="grid grid-cols-9 gap-3 h-full min-w-[1400px]">
             {[1,2,3,4,5].map(i => (
               <div key={i} className="flex flex-col rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm animate-pulse">
                 <div className="h-9 bg-gray-200 dark:bg-gray-700 shrink-0" />
@@ -391,7 +415,7 @@ function KanbanContent() {
           </div>
         ) : (
           <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
-            <div className="grid grid-cols-9 gap-3 h-full">
+            <div className="grid grid-cols-9 gap-3 h-full min-w-[1400px]">
               {COLUMNS.map(col => {
                 const allColTickets = getColTickets(col.id)
                 const isClosed = col.id === 'closed'
@@ -436,11 +460,13 @@ function KanbanContent() {
                     className={`flex flex-col min-h-0 rounded-lg overflow-hidden shadow-sm border transition-opacity ${
                       isDisabled
                         ? 'border-gray-200 dark:border-gray-700 opacity-40'
-                        : 'border-gray-200 dark:border-gray-700'
+                        : overWip
+                          ? 'border-red-400 dark:border-red-500 ring-1 ring-red-300 dark:ring-red-600'
+                          : 'border-gray-200 dark:border-gray-700'
                     }`}
                   >
                     {/* Column header */}
-                    <div className={`flex-none flex items-center justify-between px-3 py-2 ${col.header}`}>
+                    <div className={`flex-none flex items-center justify-between px-3 py-2 ${col.header} ${overWip ? 'bg-red-100 dark:bg-red-900/40' : ''}`}>
                       <span className="text-xs font-bold tracking-wide">{col.label}</span>
                       <div className="flex items-center gap-1">
                         {isDisabled && (
@@ -495,9 +521,15 @@ function KanbanContent() {
                                     ref={prov.innerRef}
                                     {...prov.draggableProps}
                                     {...prov.dragHandleProps}
-                                    className={`mb-2 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 border-l-4 ${
+                                    className={`mb-2 rounded-md border border-l-4 ${
                                       PRIORITY_BORDER[priority] ?? 'border-l-gray-300 dark:border-l-gray-600'
                                     } transition-shadow cursor-grab active:cursor-grabbing ${
+                                      sla === 'breached'
+                                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700'
+                                        : sla === 'warning'
+                                          ? 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-700'
+                                          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                                    } ${
                                       snap.isDragging
                                         ? 'shadow-xl rotate-1 opacity-95'
                                         : 'hover:shadow-md dark:hover:shadow-gray-900/50'

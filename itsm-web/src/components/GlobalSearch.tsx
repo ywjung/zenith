@@ -155,6 +155,7 @@ export default function GlobalSearch() {
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onFocus={() => setOpen(true)}
+          data-global-search
           placeholder="티켓 검색… (⌘K)"
           className="bg-blue-600 dark:bg-blue-900/60 text-white placeholder-blue-300 dark:placeholder-blue-400 text-sm px-3 py-1.5 pl-8 rounded-md w-52 focus:outline-none focus:ring-2 focus:ring-white/40 focus:w-72 transition-all border-0"
         />

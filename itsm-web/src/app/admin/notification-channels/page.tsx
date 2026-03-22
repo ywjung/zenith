@@ -6,8 +6,10 @@ import { API_BASE } from '@/lib/constants'
 interface ChannelState {
   email_enabled: boolean
   telegram_enabled: boolean
+  slack_enabled: boolean
   email_configured: boolean
   telegram_configured: boolean
+  slack_configured: boolean
 }
 
 function ToggleRow({
@@ -88,7 +90,13 @@ export default function NotificationChannelsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const toggle = async (field: 'email_enabled' | 'telegram_enabled', value: boolean) => {
+  const CHANNEL_LABELS: Record<string, string> = {
+    email_enabled: '이메일',
+    telegram_enabled: '텔레그램',
+    slack_enabled: 'Slack',
+  }
+
+  const toggle = async (field: 'email_enabled' | 'telegram_enabled' | 'slack_enabled', value: boolean) => {
     if (!state) return
     setSaving(field)
     setError('')
@@ -102,7 +110,7 @@ export default function NotificationChannelsPage() {
       })
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText)
       setState(prev => prev ? { ...prev, [field]: value } : prev)
-      setSuccessMsg(`${field === 'email_enabled' ? '이메일' : '텔레그램'} 알림이 ${value ? '활성화' : '비활성화'}되었습니다.`)
+      setSuccessMsg(`${CHANNEL_LABELS[field] ?? field} 알림이 ${value ? '활성화' : '비활성화'}되었습니다.`)
       setTimeout(() => setSuccessMsg(''), 3000)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '저장 실패')
@@ -165,13 +173,25 @@ export default function NotificationChannelsPage() {
           onToggle={v => toggle('telegram_enabled', v)}
           loading={saving === 'telegram_enabled'}
         />
+        <ToggleRow
+          icon="💬"
+          label="Slack 알림"
+          description="Slack Incoming Webhook을 통해 IT 채널로 티켓 생성·상태 변경·SLA 위반 알림을 전송합니다. 자동화 규칙의 send_slack 액션도 이 채널을 사용합니다."
+          enabled={state.slack_enabled}
+          configured={state.slack_configured}
+          configuredLabel="Webhook 설정됨"
+          unconfiguredLabel="SLACK_WEBHOOK_URL 미설정"
+          onToggle={v => toggle('slack_enabled', v)}
+          loading={saving === 'slack_enabled'}
+        />
       </div>
 
       <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs text-gray-500 dark:text-gray-400 space-y-1">
         <p className="font-medium text-gray-600 dark:text-gray-300 mb-2">📋 동작 방식</p>
-        <p>• 환경 변수(NOTIFICATION_ENABLED / TELEGRAM_ENABLED)가 비활성화된 경우 이 설정과 무관하게 발송되지 않습니다.</p>
+        <p>• 환경 변수(NOTIFICATION_ENABLED / TELEGRAM_ENABLED / SLACK_ENABLED)가 비활성화된 경우 이 설정과 무관하게 발송되지 않습니다.</p>
         <p>• 환경 변수가 활성화된 경우 이 토글로 런타임에 발송을 제어할 수 있습니다.</p>
         <p>• 변경 사항은 즉시 반영되며 최대 60초 내에 모든 서버에 적용됩니다.</p>
+        <p>• Slack은 <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">SLACK_WEBHOOK_URL</code> 환경 변수에 Incoming Webhook URL을 설정해야 합니다.</p>
         <p>• 이메일 템플릿별 개별 비활성화는 <a href="/admin/email-templates" className="text-blue-600 underline">이메일 템플릿</a> 메뉴에서 설정하세요.</p>
       </div>
     </div>

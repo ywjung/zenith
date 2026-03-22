@@ -136,16 +136,19 @@ TEST_SECRET = "test-secret-key-at-least-32-chars-long"
 TEST_ALGORITHM = "HS256"
 
 
-def make_token(role: str = "user", user_id: str = "42", name: str = "홍길동", username: str = "hong") -> str:
+def make_token(role: str = "user", user_id: str = "42", name: str = "홍길동", username: str = "hong", email: str = "hong@example.com") -> str:
     """Create a test JWT without 'jti' so Redis check is skipped."""
     payload = {
         "sub": user_id,
         "role": role,
         "name": name,
         "username": username,
+        "email": email,
         "iat": int(time.time()),
         "exp": int(time.time()) + 7200,
         # No 'jti' — avoids Redis gl_token check in get_current_user
+        # Include gitlab_token directly since VULN-01 Redis lookup is skipped without jti
+        "gitlab_token": "test-gitlab-token",
     }
     return _jwt.encode(payload, TEST_SECRET, algorithm=TEST_ALGORITHM)
 
@@ -163,3 +166,8 @@ def user_cookies():
 @pytest.fixture
 def admin_cookies():
     return auth_cookies("admin")
+
+
+@pytest.fixture
+def developer_cookies():
+    return auth_cookies("developer", user_id="200")

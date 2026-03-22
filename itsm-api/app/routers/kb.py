@@ -6,7 +6,7 @@ from typing import Optional, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import text as sa_text
+from sqlalchemy import text as sa_text, func as sa_func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -95,18 +95,21 @@ def list_articles(
     if not is_agent:
         query = query.filter(KBArticle.published == True)  # noqa: E712
 
+    _base_query = query  # saved for LIKE fallback
     if q:
         try:
+            # pg_trgm similarity OR FTS: 한국어 부분 매칭 개선
             fts_filter = sa_text(
-                "to_tsvector('simple', title || ' ' || content) @@ plainto_tsquery('simple', :q)"
-            ).bindparams(q=q)
+                "(to_tsvector('simple', title || ' ' || content) @@ plainto_tsquery('simple', :q))"
+                " OR (title % :q2)"
+                " OR (content % :q3)"
+            ).bindparams(q=q, q2=q, q3=q)
             query = query.filter(fts_filter)
         except Exception:
-            # MED-04: LIKE 메타문자 이스케이프 (% _ \ 를 리터럴로 취급)
-            _q = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            like = f"%{_q}%"
-            query = query.filter(
-                KBArticle.title.ilike(like, escape="\\") | KBArticle.content.ilike(like, escape="\\")
+            _q_esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            _like = f"%{_q_esc}%"
+            query = _base_query.filter(
+                KBArticle.title.ilike(_like, escape="\\") | KBArticle.content.ilike(_like, escape="\\")
             )
     if category:
         query = query.filter(KBArticle.category == category)
@@ -115,13 +118,36 @@ def list_articles(
         if tag_list:
             query = query.filter(KBArticle.tags.contains(tag_list))
 
-    total = query.count()
-    articles = (
-        query.order_by(KBArticle.updated_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
+    # count + all 이중 쿼리 → 윈도우 함수로 단일 쿼리
+    from sqlalchemy import over as _over
+    from sqlalchemy.orm import load_only as _load_only
+    count_col = sa_func.count().over().label("_total")
+    def _exec(q):
+        return (
+            q.add_columns(count_col)
+            .order_by(KBArticle.updated_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
+
+    try:
+        rows = _exec(query)
+    except Exception:
+        # FTS/trgm not available (e.g. SQLite in tests) — fall back to LIKE
+        if q:
+            _q_esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            _like = f"%{_q_esc}%"
+            fallback_query = _base_query.filter(
+                KBArticle.title.ilike(_like, escape="\\") | KBArticle.content.ilike(_like, escape="\\")
+            )
+            if category:
+                fallback_query = fallback_query.filter(KBArticle.category == category)
+            rows = _exec(fallback_query)
+        else:
+            raise
+    total = rows[0][1] if rows else 0
+    articles = [r[0] for r in rows]
     result = {
         "total": total,
         "page": page,
@@ -212,7 +238,19 @@ def suggest_kb_articles(
             .limit(limit)
             .all()
         )
-        # websearch 결과가 없으면 단어 분리 OR 검색으로 폴백
+        # websearch 결과가 없으면 pg_trgm 트라이그램 유사도 검색 (한국어 부분 매칭)
+        if not results:
+            results = (
+                db.query(KBArticle)
+                .filter(
+                    KBArticle.published == True,  # noqa: E712
+                    sa_text("(title % :q OR content % :q2)").bindparams(q=q, q2=q),
+                )
+                .order_by(KBArticle.view_count.desc())
+                .limit(limit)
+                .all()
+            )
+        # 트라이그램도 없으면 단어 분리 OR FTS 폴백
         if not results:
             words = q.split()[:5]  # 최대 5개 단어
             or_query = " | ".join(words)
@@ -301,6 +339,36 @@ def update_article(
     if not article:
         raise HTTPException(status_code=404, detail="아티클을 찾을 수 없습니다.")
 
+    # 수정 전 내용 스냅샷 저장 (최근 10개만 유지)
+    from ..models import KBRevision
+    last_rev = (
+        db.query(KBRevision)
+        .filter(KBRevision.article_id == article_id)
+        .order_by(KBRevision.revision_number.desc())
+        .first()
+    )
+    next_rev_num = (last_rev.revision_number + 1) if last_rev else 1
+    snapshot = KBRevision(
+        article_id=article_id,
+        revision_number=next_rev_num,
+        title=article.title,
+        content=article.content,
+        category=article.category,
+        tags=article.tags,
+        editor_name=_user.get("name") or _user.get("username"),
+    )
+    db.add(snapshot)
+    # 10개 초과 시 가장 오래된 것 삭제
+    old_revs = (
+        db.query(KBRevision)
+        .filter(KBRevision.article_id == article_id)
+        .order_by(KBRevision.revision_number.asc())
+        .all()
+    )
+    if len(old_revs) >= 10:
+        for old in old_revs[: len(old_revs) - 9]:
+            db.delete(old)
+
     old_title = article.title
     article.title = data.title
     article.content = data.content
@@ -331,6 +399,110 @@ def delete_article(
     db.delete(article)
     db.commit()
     _invalidate_kb_cache()
+
+
+@router.get("/articles/{article_id}/revisions")
+def get_article_revisions(
+    article_id: int,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_pl),
+):
+    """KB 문서 수정 이력 목록 반환 (최근 10개, 본문 미포함)."""
+    from ..models import KBRevision
+    revisions = (
+        db.query(KBRevision)
+        .filter(KBRevision.article_id == article_id)
+        .order_by(KBRevision.revision_number.desc())
+        .limit(10)
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "revision_number": r.revision_number,
+            "title": r.title,
+            "category": r.category,
+            "editor_name": r.editor_name,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in revisions
+    ]
+
+
+@router.get("/articles/{article_id}/revisions/{revision_id}")
+def get_article_revision_detail(
+    article_id: int,
+    revision_id: int,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_pl),
+):
+    """특정 버전의 전체 내용 반환 (본문 포함)."""
+    from ..models import KBRevision
+    rev = db.query(KBRevision).filter(
+        KBRevision.id == revision_id,
+        KBRevision.article_id == article_id,
+    ).first()
+    if not rev:
+        raise HTTPException(status_code=404, detail="이력을 찾을 수 없습니다.")
+    return {
+        "id": rev.id,
+        "article_id": rev.article_id,
+        "revision_number": rev.revision_number,
+        "title": rev.title,
+        "content": rev.content,
+        "category": rev.category,
+        "tags": rev.tags,
+        "editor_name": rev.editor_name,
+        "created_at": rev.created_at.isoformat() if rev.created_at else None,
+    }
+
+
+@router.post("/articles/{article_id}/revisions/{revision_id}/restore")
+def restore_article_revision(
+    article_id: int,
+    revision_id: int,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_pl),
+):
+    """특정 버전으로 아티클 내용을 복원한다."""
+    from ..models import KBRevision
+    article = db.query(KBArticle).filter(KBArticle.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="아티클을 찾을 수 없습니다.")
+    rev = db.query(KBRevision).filter(
+        KBRevision.id == revision_id,
+        KBRevision.article_id == article_id,
+    ).first()
+    if not rev:
+        raise HTTPException(status_code=404, detail="이력을 찾을 수 없습니다.")
+
+    # 복원 전 현재 내용을 새 리비전으로 저장
+    last_rev = (
+        db.query(KBRevision)
+        .filter(KBRevision.article_id == article_id)
+        .order_by(KBRevision.revision_number.desc())
+        .first()
+    )
+    next_rev_num = (last_rev.revision_number + 1) if last_rev else 1
+    db.add(KBRevision(
+        article_id=article_id,
+        revision_number=next_rev_num,
+        title=article.title,
+        content=article.content,
+        category=article.category,
+        tags=article.tags,
+        editor_name=user.get("name") or user.get("username", ""),
+        change_summary=f"버전 {rev.revision_number}으로 복원 전 자동 저장",
+    ))
+
+    article.title = rev.title
+    article.content = rev.content
+    article.category = rev.category
+    article.tags = rev.tags
+    article.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    _invalidate_kb_cache()
+    return {"ok": True, "restored_revision": rev.revision_number}
 
 
 @router.patch("/articles/{article_id}/publish")
@@ -364,10 +536,12 @@ async def upload_kb_attachment(
     GitLab 프로젝트에 업로드하고 마크다운 삽입 문자열을 반환한다.
     """
     # 티켓 라우터의 검증 로직 재사용
-    from .tickets import (
+    from .tickets.helpers import (
         MAX_FILE_SIZE,
         ALLOWED_MIME_TYPES,
         _validate_magic_bytes,
+        _strip_image_metadata,
+        _scan_with_clamav,
     )
     from .. import gitlab_client
 
@@ -381,9 +555,8 @@ async def upload_kb_attachment(
 
     _validate_magic_bytes(content, mime)
     # 이미지 EXIF 메타데이터 제거
-    from .tickets import _strip_image_metadata, _scan_with_clamav
     content = _strip_image_metadata(content, mime)
-    # ClamAV 바이러스 스캔
+    # ClamAV 바이러스 스캔 (helpers에서 이미 import됨)
     _scan_with_clamav(content, file.filename or "file")
 
     pid = project_id or get_settings().GITLAB_PROJECT_ID

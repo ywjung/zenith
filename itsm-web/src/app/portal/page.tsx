@@ -87,6 +87,7 @@ export default function PortalPage() {
           content: buildContent(),
           category: form.category || undefined,
           priority: form.priority,
+          catalog_item_id: selectedCatalog?.id ?? undefined,
         }),
       })
       if (!res.ok) {
@@ -220,7 +221,7 @@ export default function PortalPage() {
         {/* Contact Info */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 space-y-4">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">신청자 정보</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">이름 *</label>
               <input

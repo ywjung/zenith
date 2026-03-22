@@ -58,29 +58,29 @@ function RateContent() {
   }
 
   if (loading) {
-    return <div className="text-center py-12 text-gray-400">로딩 중...</div>
+    return <div className="text-center py-12 text-gray-400 dark:text-gray-500">로딩 중...</div>
   }
 
   return (
     <div>
       <div className="mb-6">
-        <Link href={`/tickets/${iid}`} className="text-blue-600 hover:underline text-sm">
+        <Link href={`/tickets/${iid}`} className="text-blue-600 dark:text-blue-400 hover:underline text-sm">
           ← 티켓으로 돌아가기
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 mt-2">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">
           {isEdit ? '만족도 평가 수정' : '만족도 평가'}
         </h1>
-        <p className="text-gray-500 text-sm mt-1">
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
           {isEdit
             ? '이전에 남긴 평가를 수정할 수 있습니다.'
             : 'IT 서비스 개선을 위해 솔직한 의견을 남겨주세요.'}
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg border shadow-sm p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6 space-y-6">
         {/* 별점 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3 text-center">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 text-center">
             서비스 만족도를 선택해주세요 <span className="text-red-500">*</span>
           </label>
           <div className="flex justify-center gap-2">
@@ -90,7 +90,7 @@ function RateContent() {
                 type="button"
                 onClick={() => setScore(n)}
                 className={`text-4xl transition-transform hover:scale-110 focus:outline-none ${
-                  score >= n ? 'text-yellow-400' : 'text-gray-200'
+                  score >= n ? 'text-yellow-400' : 'text-gray-200 dark:text-gray-600'
                 }`}
               >
                 ★
@@ -98,7 +98,7 @@ function RateContent() {
             ))}
           </div>
           {score > 0 && (
-            <p className="text-center text-sm text-gray-600 mt-2">
+            <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-2">
               {score}점 · {SCORE_LABELS[score]}
             </p>
           )}
@@ -106,31 +106,31 @@ function RateContent() {
 
         {/* 의견 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            추가 의견 <span className="text-gray-400 font-normal">(선택)</span>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            추가 의견 <span className="text-gray-400 dark:text-gray-500 font-normal">(선택)</span>
           </label>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             rows={4}
             placeholder="서비스에 대한 의견을 자유롭게 작성해주세요."
-            className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
           />
         </div>
 
-        <hr />
+        <hr className="border-gray-200 dark:border-gray-700" />
 
         {/* 평가자 정보 */}
-        <div className="bg-gray-50 rounded-md p-3 text-sm text-gray-600">
-          <span className="font-medium text-gray-700">평가자:</span>{' '}
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-3 text-sm text-gray-600 dark:text-gray-400">
+          <span className="font-medium text-gray-700 dark:text-gray-300">평가자:</span>{' '}
           {user?.name || user?.username}
           {user?.email && (
-            <span className="text-gray-400 ml-2">({user.email})</span>
+            <span className="text-gray-400 dark:text-gray-500 ml-2">({user.email})</span>
           )}
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-md p-3 text-sm">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-md p-3 text-sm">
             ⚠️ {error}
           </div>
         )}
@@ -139,13 +139,13 @@ function RateContent() {
           <button
             type="submit"
             disabled={submitting}
-            className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2.5 rounded-md transition-colors disabled:opacity-50"
+            className="flex-1 bg-yellow-400 hover:bg-yellow-500 dark:bg-yellow-500 dark:hover:bg-yellow-400 text-yellow-900 font-semibold py-2.5 rounded-md transition-colors disabled:opacity-50"
           >
             {submitting ? '제출 중...' : isEdit ? '✏️ 평가 수정' : '⭐ 평가 제출'}
           </button>
           <Link
             href={`/tickets/${iid}`}
-            className="px-6 py-2.5 border rounded-md text-sm text-gray-600 hover:bg-gray-50 text-center"
+            className="px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 text-center"
           >
             취소
           </Link>

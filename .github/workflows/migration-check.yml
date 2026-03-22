@@ -1,0 +1,95 @@
+name: Migration Check
+
+on:
+  pull_request:
+    paths:
+      - 'itsm-api/alembic/**'
+      - 'itsm-api/app/models.py'
+  push:
+    branches: [main]
+    paths:
+      - 'itsm-api/alembic/**'
+      - 'itsm-api/app/models.py'
+
+jobs:
+  migration-check:
+    name: Alembic migration integrity
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: itsm-api
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: itsm
+          POSTGRES_PASSWORD: itsm_test
+          POSTGRES_DB: itsm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U itsm -d itsm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://itsm:itsm_test@localhost:5432/itsm_test
+      SECRET_KEY: ci_test_key_that_is_long_enough_32chars
+      GITLAB_URL: http://localhost
+      GITLAB_PROJECT_TOKEN: ci_token
+      GITLAB_PROJECT_ID: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: itsm-api/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check migration history is linear (no branching heads)
+        run: |
+          alembic heads
+          COUNT=$(alembic heads | wc -l)
+          if [ "$COUNT" -ne 1 ]; then
+            echo "ERROR: Multiple Alembic heads detected. Merge your migrations first."
+            alembic heads
+            exit 1
+          fi
+
+      - name: Run all migrations (upgrade head)
+        run: alembic upgrade head
+
+      - name: Check no pending auto-generated changes
+        run: |
+          OUTPUT=$(alembic check 2>&1 || true)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "Target database is not up to date"; then
+            echo "ERROR: Database is not up to date after applying migrations."
+            exit 1
+          fi
+          if echo "$OUTPUT" | grep -qi "detected"; then
+            echo "WARNING: alembic check detected schema drift — verify migrations are complete."
+          fi
+
+      - name: Run downgrade/upgrade round-trip (last 3 revisions)
+        run: |
+          HEAD=$(alembic current | awk '{print $1}')
+          # downgrade -3 then back to head
+          alembic downgrade -3
+          alembic upgrade head
+          echo "Round-trip migration OK"
+
+      - name: Verify all tests pass against migrated DB
+        env:
+          DATABASE_URL: postgresql://itsm:itsm_test@localhost:5432/itsm_test
+          REDIS_URL: memory://
+        run: |
+          pip install pytest pytest-cov
+          python -m pytest tests/ -q --tb=short

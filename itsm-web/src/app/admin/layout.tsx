@@ -48,11 +48,22 @@ const MENU_GROUPS: MenuGroup[] = [
     adminOnly: true,
     items: [
       { href: '/admin/announcements', label: '공지사항 / 배너', icon: '📢', desc: '시스템 공지 · 배너 관리' },
-      { href: '/admin/notification-channels', label: '알림 채널 설정', icon: '🔔', desc: '이메일 · 텔레그램 발송 ON/OFF' },
+      { href: '/admin/notification-channels', label: '알림 채널 설정', icon: '🔔', desc: '이메일 · 텔레그램 · Slack 발송 ON/OFF' },
       { href: '/admin/email-templates', label: '이메일 템플릿', icon: '📧', desc: 'Jinja2 이메일 편집' },
+      { href: '/admin/email-ingest', label: '이메일 수신 현황', icon: '📥', desc: 'IMAP 수신 모니터링' },
       { href: '/admin/outbound-webhooks', label: '아웃바운드 웹훅', icon: '🔗', desc: 'Slack · Teams 연동' },
       { href: '/admin/api-keys', label: 'API 키', icon: '🔑', desc: '외부 시스템 인증 키' },
       { href: '/admin/labels', label: 'GitLab 라벨 동기화', icon: '🏷️', desc: '라벨 현황 확인 · 수동 동기화' },
+      { href: '/admin/search-index', label: '전문검색 색인', icon: '🔎', desc: '검색 색인 현황 · 수동 동기화' },
+      { href: '/admin/db-cleanup', label: 'DB 보존 정책', icon: '🗑️', desc: '만료 토큰·로그 자동 정리' },
+    ],
+  },
+  {
+    group: '모니터링',
+    icon: '📊',
+    adminOnly: true,
+    items: [
+      { href: '/admin/monitoring', label: '시스템 모니터링', icon: '📊', desc: 'Celery 작업 · 성능 지표' },
     ],
   },
   {

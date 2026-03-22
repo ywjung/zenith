@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { fetchKBArticle, deleteKBArticle, publishKBArticle, fetchKBArticles } from '@/lib/api'
+import { fetchKBArticle, deleteKBArticle, publishKBArticle, fetchKBArticles, fetchKBRevisions, fetchKBRevisionDetail, restoreKBRevision } from '@/lib/api'
+import type { KBRevision } from '@/lib/api'
 import type { KBArticle } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
@@ -56,6 +57,11 @@ function ArticleContent() {
   const [related, setRelated] = useState<KBArticle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [revisions, setRevisions] = useState<KBRevision[]>([])
+  const [showRevisions, setShowRevisions] = useState(false)
+  const [restoringId, setRestoringId] = useState<number | null>(null)
+  const [previewRev, setPreviewRev] = useState<(KBRevision & { content: string; tags: string[] }) | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const idOrSlug = params?.id as string
 
@@ -81,6 +87,43 @@ function ArticleContent() {
       router.push('/kb')
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+    }
+  }
+
+  const handleShowRevisions = async () => {
+    if (!article) return
+    if (!showRevisions && revisions.length === 0) {
+      try {
+        const list = await fetchKBRevisions(article.id)
+        setRevisions(list)
+      } catch { /* ignore */ }
+    }
+    setShowRevisions(v => !v)
+  }
+
+  const handlePreview = async (rev: KBRevision) => {
+    if (!article) return
+    setPreviewLoading(true)
+    try {
+      const detail = await fetchKBRevisionDetail(article.id, rev.id)
+      setPreviewRev(detail)
+    } catch { /* ignore */ }
+    finally { setPreviewLoading(false) }
+  }
+
+  const handleRestore = async (rev: KBRevision) => {
+    if (!article || !confirm(`버전 ${rev.revision_number}으로 복원하시겠습니까?`)) return
+    setRestoringId(rev.id)
+    try {
+      await restoreKBRevision(article.id, rev.id)
+      const updated = await fetchKBArticle(String(article.id))
+      setArticle(updated)
+      setRevisions([])
+      setShowRevisions(false)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : '복원에 실패했습니다.')
+    } finally {
+      setRestoringId(null)
     }
   }
 
@@ -172,6 +215,12 @@ function ArticleContent() {
                   >
                     {article.published ? '비공개 전환' : '공개하기'}
                   </button>
+                  <button
+                    onClick={handleShowRevisions}
+                    className="text-xs border border-gray-300 dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    {showRevisions ? '이력 닫기' : '버전 이력'}
+                  </button>
                   {isAdmin && (
                     <button
                       onClick={handleDelete}
@@ -246,6 +295,45 @@ function ArticleContent() {
             </div>
           )}
 
+          {/* Version history */}
+          {showRevisions && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">버전 이력</div>
+              {revisions.length === 0 ? (
+                <p className="text-xs text-gray-400 dark:text-gray-500">이력 없음</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {revisions.map((rev) => (
+                    <div key={rev.id} className="flex items-start justify-between gap-2 text-xs">
+                      <div className="min-w-0">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">v{rev.revision_number}</span>
+                        <span className="ml-1.5 text-gray-400 dark:text-gray-500">{new Date(rev.created_at).toLocaleDateString('ko-KR')}</span>
+                        {rev.editor_name && <p className="text-gray-500 dark:text-gray-400 truncate">{rev.editor_name}</p>}
+                        {rev.change_summary && <p className="text-gray-400 dark:text-gray-500 truncate italic">{rev.change_summary}</p>}
+                      </div>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button
+                          onClick={() => handlePreview(rev)}
+                          disabled={previewLoading}
+                          className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:underline disabled:opacity-50"
+                        >
+                          보기
+                        </button>
+                        <button
+                          onClick={() => handleRestore(rev)}
+                          disabled={restoringId === rev.id}
+                          className="text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                        >
+                          {restoringId === rev.id ? '...' : '복원'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Article info */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
             <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">정보</div>
@@ -267,6 +355,58 @@ function ArticleContent() {
             </div>
           </div>
         </aside>
+      </div>
+      {previewRev && (
+        <RevisionPreviewModal
+          rev={previewRev}
+          onClose={() => setPreviewRev(null)}
+          onRestore={handleRestore}
+        />
+      )}
+    </div>
+  )
+}
+
+function RevisionPreviewModal({ rev, onClose, onRestore }: {
+  rev: KBRevision & { content: string; tags: string[] }
+  onClose: () => void
+  onRestore: (rev: KBRevision) => void
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+          <div>
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">버전 v{rev.revision_number} 미리보기</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {new Date(rev.created_at).toLocaleString('ko-KR')}
+              {rev.editor_name && ` · ${rev.editor_name}`}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { onRestore(rev); onClose() }}
+              className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700"
+            >
+              이 버전으로 복원
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
+          </div>
+        </div>
+        <div className="overflow-y-auto flex-1 p-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">{rev.title}</h2>
+          {rev.tags && rev.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {rev.tags.map(tag => (
+                <span key={tag} className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full px-2.5 py-1">#{tag}</span>
+              ))}
+            </div>
+          )}
+          <MarkdownRenderer content={rev.content} />
+        </div>
       </div>
     </div>
   )

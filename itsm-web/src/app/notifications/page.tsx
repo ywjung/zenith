@@ -50,7 +50,7 @@ interface WatchedTicket {
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
   return (
     <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={onChange}
-      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${checked ? 'bg-blue-600' : 'bg-gray-200'}`}>
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${checked ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'}`}>
       <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
     </button>
   )
@@ -87,25 +87,25 @@ function TabPrefs() {
   }
 
   return (
-    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-5 py-3 bg-gray-50 border-b">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">이벤트</span>
-        <span className="text-xs font-semibold text-gray-500 w-16 text-center"><span className="mr-1">📧</span>이메일</span>
-        <span className="text-xs font-semibold text-gray-500 w-16 text-center"><span className="mr-1">🔔</span>인앱</span>
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-5 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">이벤트</span>
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 w-16 text-center"><span className="mr-1">📧</span>이메일</span>
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 w-16 text-center"><span className="mr-1">🔔</span>인앱</span>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-gray-400 text-sm animate-pulse">설정을 불러오는 중...</div>
+        <div className="py-12 text-center text-gray-400 dark:text-gray-500 text-sm animate-pulse">설정을 불러오는 중...</div>
       ) : (
         <ul>
           {EVENTS.map((ev, idx) => (
             <li key={ev.key}
-              className={`grid grid-cols-[1fr_auto_auto] items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors ${idx < EVENTS.length - 1 ? 'border-b' : ''}`}>
+              className={`grid grid-cols-[1fr_auto_auto] items-center gap-4 px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${idx < EVENTS.length - 1 ? 'border-b border-gray-100 dark:border-gray-700/60' : ''}`}>
               <div className="flex items-center gap-3 min-w-0">
                 <span className="text-xl shrink-0">{ev.icon}</span>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-800">{ev.label}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{ev.desc}</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{ev.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{ev.desc}</p>
                 </div>
               </div>
               <div className="w-16 flex justify-center">
@@ -123,10 +123,10 @@ function TabPrefs() {
         </ul>
       )}
 
-      <div className="px-5 py-4 bg-gray-50 border-t flex items-center justify-between gap-4">
+      <div className="px-5 py-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4">
         <div className="text-sm">
-          {status === 'success' && <span className="text-green-600 font-medium">✅ 저장됐습니다.</span>}
-          {status === 'error'   && <span className="text-red-600 font-medium">저장 실패. 다시 시도해주세요.</span>}
+          {status === 'success' && <span className="text-green-600 dark:text-green-400 font-medium">✅ 저장됐습니다.</span>}
+          {status === 'error'   && <span className="text-red-600 dark:text-red-400 font-medium">저장 실패. 다시 시도해주세요.</span>}
         </div>
         <button type="button" onClick={handleSave} disabled={saving || loading}
           className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
@@ -179,42 +179,42 @@ function TabWatches() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         {[1,2,3,4].map(i => (
-          <div key={i} className="grid grid-cols-[56px_1fr_96px_80px_128px_96px] items-center gap-4 px-5 py-4 border-b last:border-0 animate-pulse">
-            <div className="h-3 bg-gray-200 rounded w-10" />
+          <div key={i} className="grid grid-cols-[56px_1fr_96px_80px_128px_96px] items-center gap-4 px-5 py-4 border-b border-gray-100 dark:border-gray-700/60 last:border-0 animate-pulse">
+            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-10" />
             <div className="space-y-1.5">
-              <div className="h-4 bg-gray-200 rounded w-3/4" />
-              <div className="h-3 bg-gray-100 rounded w-1/3" />
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+              <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/3" />
             </div>
-            <div className="flex justify-center"><div className="h-5 bg-gray-200 rounded-full w-14" /></div>
-            <div className="flex justify-center"><div className="h-5 bg-gray-100 rounded-full w-10" /></div>
-            <div className="h-3 bg-gray-100 rounded w-20" />
-            <div className="flex justify-center"><div className="h-7 bg-gray-100 rounded-lg w-16" /></div>
+            <div className="flex justify-center"><div className="h-5 bg-gray-200 dark:bg-gray-700 rounded-full w-14" /></div>
+            <div className="flex justify-center"><div className="h-5 bg-gray-100 dark:bg-gray-800 rounded-full w-10" /></div>
+            <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-20" />
+            <div className="flex justify-center"><div className="h-7 bg-gray-100 dark:bg-gray-800 rounded-lg w-16" /></div>
           </div>
         ))}
       </div>
     )
   }
 
-  if (error) return <p className="text-sm text-red-500 py-6 text-center">{error}</p>
+  if (error) return <p className="text-sm text-red-500 dark:text-red-400 py-6 text-center">{error}</p>
 
   if (watches.length === 0) {
     return (
-      <div className="bg-white rounded-xl border shadow-sm py-16 text-center">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm py-16 text-center">
         <p className="text-4xl mb-3">🔕</p>
-        <p className="text-gray-500 text-sm">구독 중인 티켓이 없습니다.</p>
-        <p className="text-gray-400 text-xs mt-2">
-          티켓 상세 화면 사이드바의 <strong>"🔕 이 티켓 구독"</strong> 버튼으로 구독할 수 있습니다.
+        <p className="text-gray-500 dark:text-gray-400 text-sm">구독 중인 티켓이 없습니다.</p>
+        <p className="text-gray-400 dark:text-gray-500 text-xs mt-2">
+          티켓 상세 화면 사이드바의 <strong className="text-gray-600 dark:text-gray-300">&quot;🔕 이 티켓 구독&quot;</strong> 버튼으로 구독할 수 있습니다.
         </p>
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
       {/* 헤더 */}
-      <div className="hidden sm:grid grid-cols-[56px_1fr_96px_80px_128px_96px] items-center gap-4 px-5 py-3 bg-gray-50 border-b text-xs font-semibold text-gray-500 uppercase tracking-wide">
+      <div className="hidden sm:grid grid-cols-[56px_1fr_96px_80px_128px_96px] items-center gap-4 px-5 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
         <span>#</span>
         <span>제목 / 담당자</span>
         <span className="text-center">상태</span>
@@ -223,7 +223,7 @@ function TabWatches() {
         <span className="text-center">구독 취소</span>
       </div>
 
-      <ul className="divide-y divide-gray-100">
+      <ul className="divide-y divide-gray-100 dark:divide-gray-700/60">
         {watches.map(w => {
           const isClosed = w.state === 'closed'
           const isUnwatching = unwatching.has(w.ticket_iid)
@@ -233,36 +233,36 @@ function TabWatches() {
 
           return (
             <li key={w.watch_id}
-              className={`grid grid-cols-[56px_1fr] sm:grid-cols-[56px_1fr_96px_80px_128px_96px] items-center gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors ${isClosed ? 'opacity-60' : ''}`}>
+              className={`grid grid-cols-[56px_1fr] sm:grid-cols-[56px_1fr_96px_80px_128px_96px] items-center gap-4 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors ${isClosed ? 'opacity-60' : ''}`}>
               {/* # */}
-              <Link href={href} className="font-mono text-xs text-gray-400 hover:text-blue-600 truncate">
+              <Link href={href} className="font-mono text-xs text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 truncate">
                 #{w.ticket_iid}
               </Link>
 
               {/* 제목 + 담당자 */}
               <div className="min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <Link href={href} className="block text-sm font-medium text-gray-800 hover:text-blue-600 truncate leading-snug flex-1 min-w-0">
+                  <Link href={href} className="block text-sm font-medium text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 truncate leading-snug flex-1 min-w-0">
                     {w.title}
                   </Link>
                   {/* 모바일: 구독 취소 버튼 */}
                   <button
                     onClick={() => handleUnwatch(w.ticket_iid, w.project_id)}
                     disabled={isUnwatching}
-                    className="sm:hidden shrink-0 text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors text-base leading-none mt-0.5"
+                    className="sm:hidden shrink-0 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-base leading-none mt-0.5"
                     title="구독 취소"
                   >
                     {isUnwatching ? '⏳' : '🔕'}
                   </button>
                 </div>
                 {w.assignee_name && (
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">담당: {w.assignee_name}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">담당: {w.assignee_name}</p>
                 )}
                 {/* 모바일: 상태·우선순위·구독일 인라인 */}
                 <div className="flex gap-1.5 mt-1.5 sm:hidden flex-wrap items-center">
                   <StatusBadge status={w.status} />
                   <PriorityBadge priority={w.priority} />
-                  <span className="text-xs text-gray-300 ml-1">{formatDate(w.subscribed_at ?? '')}</span>
+                  <span className="text-xs text-gray-300 dark:text-gray-600 ml-1">{formatDate(w.subscribed_at ?? '')}</span>
                 </div>
               </div>
 
@@ -277,7 +277,7 @@ function TabWatches() {
               </div>
 
               {/* 구독일 */}
-              <div className="hidden lg:flex items-center text-xs text-gray-400 whitespace-nowrap">
+              <div className="hidden lg:flex items-center text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
                 {formatDate(w.subscribed_at ?? '')}
               </div>
 
@@ -286,7 +286,7 @@ function TabWatches() {
                 <button
                   onClick={() => handleUnwatch(w.ticket_iid, w.project_id)}
                   disabled={isUnwatching}
-                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-red-300 dark:hover:border-red-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   title="구독 취소"
                 >
                   {isUnwatching ? (
@@ -301,8 +301,8 @@ function TabWatches() {
         })}
       </ul>
 
-      <div className="px-5 py-3 bg-gray-50 border-t text-xs text-gray-400 flex items-center justify-between">
-        <span>총 <strong className="text-gray-700">{watches.length}</strong>개 구독 중</span>
+      <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500 flex items-center justify-between">
+        <span>총 <strong className="text-gray-700 dark:text-gray-300">{watches.length}</strong>개 구독 중</span>
         <span>구독 티켓의 상태 변경·댓글 발생 시 이메일로 알림을 받습니다.</span>
       </div>
     </div>
@@ -319,7 +319,6 @@ function NotificationsContent() {
     searchParams.get('tab') === 'prefs' ? 'prefs' : 'watches'
   )
 
-  // 이미 페이지가 열린 상태에서 URL 파라미터 변경 시 탭 동기화
   useEffect(() => {
     setTab(searchParams.get('tab') === 'prefs' ? 'prefs' : 'watches')
   }, [searchParams])
@@ -328,12 +327,12 @@ function NotificationsContent() {
     <div className="w-full">
       {/* 페이지 헤더 */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">알림 & 구독 관리</h1>
-        <p className="text-sm text-gray-500 mt-1">알림 수신 설정과 구독 중인 티켓을 관리합니다.</p>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">알림 &amp; 구독 관리</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">알림 수신 설정과 구독 중인 티켓을 관리합니다.</p>
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 border-b mb-6">
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-6">
         {([
           { id: 'watches', label: '🔔 구독 중인 티켓' },
           { id: 'prefs',   label: '⚙️ 알림 수신 설정' },
@@ -341,8 +340,8 @@ function NotificationsContent() {
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.id
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}>
             {t.label}
           </button>

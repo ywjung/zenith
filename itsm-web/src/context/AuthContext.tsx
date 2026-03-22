@@ -56,8 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // 네트워크 오류가 있어도 클라이언트 측 로그아웃 진행
     }
-    sessionStorage.removeItem('itsm_search_history')
-    localStorage.removeItem('itsm_search_history') // clear legacy data written by older versions
+    // L-5: 로그아웃 시 모든 클라이언트 스토리지 초기화
+    sessionStorage.clear()
+    localStorage.clear()
     setUser(null)
     window.location.href = '/login'
   }

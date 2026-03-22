@@ -226,6 +226,19 @@ export function addComment(
   })
 }
 
+export function updateComment(iid: number, noteId: number, body: string, projectId?: string): Promise<Comment> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<Comment>(`/tickets/${iid}/comments/${noteId}${qs}`, {
+    method: 'PUT',
+    body: JSON.stringify({ body }),
+  })
+}
+
+export function deleteComment(iid: number, noteId: number, projectId?: string): Promise<void> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request(`/tickets/${iid}/comments/${noteId}${qs}`, { method: 'DELETE' })
+}
+
 export async function uploadFile(
   file: File,
   projectId?: string,
@@ -368,12 +381,37 @@ export function publishKBArticle(id: number, published: boolean): Promise<{ id: 
   return request(`/kb/articles/${id}/publish?published=${published}`, { method: 'PATCH' })
 }
 
+export interface KBRevision {
+  id: number
+  revision_number: number
+  title: string
+  editor_name: string
+  created_at: string
+  change_summary?: string | null
+}
+
+export function fetchKBRevisions(articleId: number): Promise<KBRevision[]> {
+  return request(`/kb/articles/${articleId}/revisions`)
+}
+
+export function fetchKBRevisionDetail(articleId: number, revisionId: number): Promise<KBRevision & { content: string; tags: string[] }> {
+  return request(`/kb/articles/${articleId}/revisions/${revisionId}`)
+}
+
+export function restoreKBRevision(articleId: number, revisionId: number): Promise<{ ok: boolean }> {
+  return request(`/kb/articles/${articleId}/revisions/${revisionId}/restore`, { method: 'POST' })
+}
+
+export function suggestKBArticles(q: string, limit = 3): Promise<KBArticle[]> {
+  return request(`/kb/suggest?q=${encodeURIComponent(q)}&limit=${limit}`)
+}
+
 // ---------------------------------------------------------------------------
 // Admin
 // ---------------------------------------------------------------------------
 
 export function fetchAdminUsers(): Promise<UserRole[]> {
-  return request('/admin/users')
+  return request<{ items: UserRole[] }>('/admin/users').then(r => r.items ?? r)
 }
 
 /** 고위험 관리 작업 전 Sudo 재인증 — HttpOnly 쿠키 itsm_sudo 를 서버가 설정한다. */
@@ -462,6 +500,11 @@ export function exportReport(params?: { from?: string; to?: string; project_id?:
   return `${API_BASE}/reports/export${query}`
 }
 
+export function exportReportXlsx(params?: { from?: string; to?: string; project_id?: string }): string {
+  const query = buildQuery({ format: 'xlsx', ...params })
+  return `${API_BASE}/reports/export${query}`
+}
+
 // ---------------------------------------------------------------------------
 // Notifications
 // ---------------------------------------------------------------------------
@@ -546,6 +589,10 @@ export function fetchAgentPerformance(params?: { from?: string; to?: string; pro
 
 export function fetchDoraMetrics(params?: { days?: number; project_id?: string }): Promise<DoraMetrics> {
   return request<DoraMetrics>(`/reports/dora${buildQuery(params)}`)
+}
+
+export function fetchSLAHeatmap(params?: { weeks?: number }): Promise<{ date: string; breached: number; total: number }[]> {
+  return request(`/reports/sla/heatmap${buildQuery(params)}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -756,3 +803,31 @@ export function updateFaqItem(id: number, data: Partial<Pick<FaqItem, 'question'
 export function deleteFaqItem(id: number): Promise<void> {
   return request(`/faq/${id}`, { method: 'DELETE' })
 }
+
+// Approvals
+export function fetchApprovals(ticketIid?: number, status?: string): Promise<import('@/types').ApprovalRequest[]> {
+  const qs = buildQuery({ ticket_iid: ticketIid, status })
+  return request(`/approvals${qs}`)
+}
+
+export function createApproval(data: { ticket_iid: number; project_id: string; approver_username?: string }): Promise<import('@/types').ApprovalRequest> {
+  return request('/approvals', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export function approveApproval(id: number, reason?: string): Promise<import('@/types').ApprovalRequest> {
+  return request(`/approvals/${id}/approve`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) })
+}
+
+export function rejectApproval(id: number, reason?: string): Promise<import('@/types').ApprovalRequest> {
+  return request(`/approvals/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) })
+}
+
+// Notification preferences
+export function fetchNotificationPrefs(): Promise<Record<string, { email: boolean; inapp: boolean }>> {
+  return request('/notifications/prefs')
+}
+
+export function updateNotificationPrefs(prefs: Record<string, { email: boolean; inapp: boolean }>): Promise<Record<string, { email: boolean; inapp: boolean }>> {
+  return request('/notifications/prefs', { method: 'PUT', body: JSON.stringify(prefs) })
+}
+

@@ -213,10 +213,19 @@ export default function RichTextEditor({
       const imgMatch = markdown.match(/^!\[([^\]]*)\]\(([^)]+)\)$/)
       if (imgMatch) {
         editor.chain().focus().setImage({ src: imgMatch[2], alt: imgMatch[1] }).run()
-      } else {
-        // 파일 링크 패턴: [name](url) — 현재 커서 위치에 삽입
-        editor.chain().focus().insertContent(markdown).run()
+        return
       }
+      // 파일 링크 패턴: [name](url) — HTML <a> 태그로 변환해 삽입
+      // (insertContent에 markdown 문자열을 그대로 넣으면 plain text로 저장됨)
+      const linkMatch = markdown.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+      if (linkMatch) {
+        const [, text, href] = linkMatch
+        editor.chain().focus().insertContent(
+          `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`
+        ).run()
+        return
+      }
+      editor.chain().focus().insertContent(markdown).run()
     })
   }, [editor, onInsertRef])
 

@@ -44,8 +44,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <RoleLabelsProvider>
           <ServiceTypesProvider>
-            <Header />
-            <AnnouncementBanner />
+            <div className="print-hidden"><Header /></div>
+            <div className="print-hidden"><AnnouncementBanner /></div>
             <main className="w-full px-4 py-6">
               <ErrorBoundary>{children}</ErrorBoundary>
             </main>

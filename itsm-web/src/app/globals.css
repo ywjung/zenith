@@ -283,3 +283,31 @@
 .dark .prose td {
   color: #d1d5db;
 }
+
+/* ── 인쇄 / PDF 출력 ─────────────────────────────────────────── */
+@media print {
+  /* 헤더, 사이드바, 액션 버튼 등 UI 크롬 숨김 */
+  .print-hidden { display: none !important; }
+
+  /* 강제 흰 배경 + 검정 텍스트 */
+  body, html {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 12pt;
+  }
+
+  /* 다크모드 재정의 */
+  .dark body { background: #fff !important; color: #000 !important; }
+
+  /* 티켓 상세 콘텐츠 전체 너비 */
+  .print-full { width: 100% !important; max-width: 100% !important; }
+
+  /* 페이지 나눔 방지 */
+  .print-no-break { break-inside: avoid; }
+
+  /* 링크 URL 표시 */
+  a[href]::after { content: " (" attr(href) ")"; font-size: 0.8em; color: #666; }
+
+  /* 버튼, 폼 요소 숨김 */
+  button, select, input[type="text"], input[type="search"], textarea { display: none !important; }
+}

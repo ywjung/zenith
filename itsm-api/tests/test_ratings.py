@@ -72,3 +72,49 @@ def test_get_rating_exists(client, user_cookies):
     resp = client.get("/tickets/1/ratings", cookies=user_cookies)
     assert resp.status_code == 200
     assert resp.json()["score"] == 5
+
+
+def test_get_my_rating_none(client, user_cookies):
+    resp = client.get("/tickets/999/ratings/me", cookies=user_cookies)
+    assert resp.status_code == 200
+    assert resp.json() is None
+
+
+def test_get_my_rating_exists(client, user_cookies):
+    with (
+        patch("app.gitlab_client.get_issue", return_value=CLOSED_ISSUE),
+        patch("app.gitlab_client.add_note", return_value={}),
+    ):
+        client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=user_cookies)
+    resp = client.get("/tickets/1/ratings/me", cookies=user_cookies)
+    assert resp.status_code == 200
+    assert resp.json()["score"] == 5
+
+
+def test_update_rating_success(client, user_cookies):
+    with (
+        patch("app.gitlab_client.get_issue", return_value=CLOSED_ISSUE),
+        patch("app.gitlab_client.add_note", return_value={}),
+    ):
+        client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=user_cookies)
+        resp = client.put("/tickets/1/ratings", json={"score": 3, "comment": "수정됨"}, cookies=user_cookies)
+    assert resp.status_code == 200
+    assert resp.json()["score"] == 3
+    assert resp.json()["comment"] == "수정됨"
+
+
+def test_update_rating_not_found(client, user_cookies):
+    resp = client.put("/tickets/99/ratings", json={"score": 3}, cookies=user_cookies)
+    assert resp.status_code == 404
+
+
+def test_create_rating_gitlab_error(client, user_cookies):
+    """GitLab fetch error returns 502."""
+    with patch("app.gitlab_client.get_issue", side_effect=Exception("GitLab 오류")):
+        resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=user_cookies)
+    assert resp.status_code == 502
+
+
+def test_create_rating_requires_auth(client):
+    resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD)
+    assert resp.status_code == 401

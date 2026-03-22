@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest --passWithNoTests",
-    "test:ci": "jest --ci --coverage --passWithNoTests"
+    "test:ci": "jest --ci --coverage --passWithNoTests",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",
@@ -33,6 +35,7 @@
     "tippy.js": "^6.3.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.44.0",
     "@tailwindcss/typography": "^0.5.10",
     "@testing-library/jest-dom": "^6.4.0",
     "@testing-library/react": "^15.0.0",

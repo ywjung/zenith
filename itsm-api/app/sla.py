@@ -258,6 +258,26 @@ def check_and_flag_breaches(db: Session) -> list[SLARecord]:
         )
     if overdue:
         db.commit()
+        for record in overdue:
+            try:
+                from .tasks import send_sla_breach as _breach_task
+                _breach_task.delay(record.gitlab_issue_iid, record.project_id, None)
+            except Exception:
+                from .notifications import notify_sla_breach
+                try:
+                    notify_sla_breach(record.gitlab_issue_iid, record.project_id, None)
+                except Exception as e:
+                    logger.warning("Failed to send SLA breach notification for ticket #%s: %s", record.gitlab_issue_iid, e)
+            # 자동화 규칙 실행 — ticket.sla_breached 이벤트
+            try:
+                from .routers.automation import evaluate_automation_rules
+                evaluate_automation_rules(db, "ticket.sla_breached", {
+                    "iid": record.gitlab_issue_iid,
+                    "project_id": record.project_id,
+                    "priority": record.priority,
+                })
+            except Exception as _ae:
+                logger.warning("Automation rule eval failed on sla_breached #%s: %s", record.gitlab_issue_iid, _ae)
     return overdue
 
 
@@ -298,7 +318,11 @@ def check_and_send_warnings(db: Session, warning_minutes: int = 60) -> list[SLAR
         db.commit()
 
         try:
-            notify_sla_warning(record.gitlab_issue_iid, record.project_id, minutes_left)
+            try:
+                from .tasks import send_sla_warning as _sla_warn_task
+                _sla_warn_task.delay(record.gitlab_issue_iid, record.project_id, minutes_left)
+            except Exception:
+                notify_sla_warning(record.gitlab_issue_iid, record.project_id, minutes_left)
         except Exception as e:
             logger.warning("Failed to send SLA warning for ticket #%s: %s", record.gitlab_issue_iid, e)
 
@@ -319,8 +343,86 @@ def check_and_send_warnings(db: Session, warning_minutes: int = 60) -> list[SLAR
         except Exception as e:
             logger.warning("Failed to create SLA in-app notification for ticket #%s: %s", record.gitlab_issue_iid, e)
 
+        # 자동화 규칙 실행 — ticket.sla_warning 이벤트
+        try:
+            from .routers.automation import evaluate_automation_rules
+            evaluate_automation_rules(db, "ticket.sla_warning", {
+                "iid": record.gitlab_issue_iid,
+                "project_id": record.project_id,
+                "priority": record.priority,
+                "minutes_left": str(minutes_left),
+            })
+        except Exception as _ae:
+            logger.warning("Automation rule eval failed on sla_warning #%s: %s", record.gitlab_issue_iid, _ae)
+
         logger.info(
             "SLA warning sent for ticket #%s (project %s, %d minutes left)",
+            record.gitlab_issue_iid, record.project_id, minutes_left,
+        )
+
+    return at_risk
+
+
+def check_and_send_warnings_30min(db: Session) -> list[SLARecord]:
+    """30분 임박 경고 알림 — warning_sent_30min 플래그로 중복 발송 방지.
+
+    60분 경고(warning_sent)와 독립적으로 동작하여 이중 경고를 지원한다.
+    """
+    from .notifications import notify_sla_warning
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = now + timedelta(minutes=30)
+
+    at_risk = (
+        db.query(SLARecord)
+        .filter(
+            SLARecord.breached == False,  # noqa: E712
+            SLARecord.resolved_at == None,  # noqa: E711
+            SLARecord.warning_sent_30min == False,  # noqa: E712
+            SLARecord.paused_at == None,  # noqa: E711
+            SLARecord.sla_deadline > now,
+            SLARecord.sla_deadline <= cutoff,
+        )
+        .with_for_update(skip_locked=True)
+        .all()
+    )
+
+    for record in at_risk:
+        deadline_utc = _ensure_utc(record.sla_deadline)
+        now_utc = datetime.now(timezone.utc)
+        remaining = deadline_utc - now_utc
+        minutes_left = max(1, int(remaining.total_seconds() / 60))
+
+        record.warning_sent_30min = True
+        db.commit()
+
+        try:
+            try:
+                from .tasks import send_sla_warning as _sla_warn_task
+                _sla_warn_task.delay(record.gitlab_issue_iid, record.project_id, minutes_left)
+            except Exception:
+                notify_sla_warning(record.gitlab_issue_iid, record.project_id, minutes_left)
+        except Exception as e:
+            logger.warning("Failed to send 30min SLA warning for ticket #%s: %s", record.gitlab_issue_iid, e)
+
+        try:
+            from .models import UserRole
+            from .notifications import create_db_notification
+            staff = db.query(UserRole).filter(UserRole.role.in_(["admin", "agent"])).all()
+            for member in staff:
+                create_db_notification(
+                    db,
+                    recipient_id=str(member.gitlab_user_id),
+                    title=f"🚨 SLA 30분 임박 - 티켓 #{record.gitlab_issue_iid}",
+                    body=f"{minutes_left}분 내에 SLA 기한이 만료됩니다.",
+                    link=f"/tickets/{record.gitlab_issue_iid}",
+                )
+            db.commit()
+        except Exception as e:
+            logger.warning("Failed to create 30min SLA in-app notification for ticket #%s: %s", record.gitlab_issue_iid, e)
+
+        logger.info(
+            "30min SLA warning sent for ticket #%s (project %s, %d minutes left)",
             record.gitlab_issue_iid, record.project_id, minutes_left,
         )
 

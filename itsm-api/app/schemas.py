@@ -1,5 +1,5 @@
 from enum import Enum
-from pydantic import BaseModel, Field, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from datetime import datetime, date
 from typing import Optional
 
@@ -40,6 +40,9 @@ class BulkActionEnum(str, Enum):
     CLOSE = "close"
     ASSIGN = "assign"
     SET_PRIORITY = "set_priority"
+    SET_STATUS = "set_status"
+    ADD_LABEL = "add_label"
+    REMOVE_LABEL = "remove_label"
 
 
 # ---------------------------------------------------------------------------
@@ -161,8 +164,7 @@ class RatingResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------------------------------------------------------------------
@@ -182,8 +184,7 @@ class AssignmentRuleResponse(BaseModel):
     created_by: Optional[str] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SLARecordResponse(BaseModel):
@@ -199,8 +200,7 @@ class SLARecordResponse(BaseModel):
     paused_at: Optional[datetime] = None
     total_paused_seconds: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SLAPolicyResponse(BaseModel):
@@ -211,8 +211,7 @@ class SLAPolicyResponse(BaseModel):
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ServiceTypeResponse(BaseModel):
@@ -228,5 +227,4 @@ class ServiceTypeResponse(BaseModel):
     context_options: list[str] = []
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

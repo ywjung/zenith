@@ -34,6 +34,10 @@ const TRIGGER_EVENTS = [
   { value: 'ticket.assigned', label: '담당자 배정' },
   { value: 'ticket.priority_changed', label: '우선순위 변경' },
   { value: 'ticket.commented', label: '댓글 등록' },
+  { value: 'ticket.sla_warning', label: 'SLA 임박 경고' },
+  { value: 'ticket.sla_breached', label: 'SLA 위반 발생' },
+  { value: 'ticket.closed', label: '티켓 종료' },
+  { value: 'ticket.reopened', label: '티켓 재오픈' },
 ]
 
 const CONDITION_FIELDS = [
@@ -78,7 +82,197 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.status === 204 ? null : res.json()
 }
 
+interface AutomationLogEntry {
+  id: number
+  rule_id?: number
+  rule_name?: string
+  ticket_iid: number
+  project_id?: string
+  trigger_event: string
+  matched: boolean
+  actions_taken: Action[] | null
+  error: string | null
+  triggered_at: string
+}
+
+const TRIGGER_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  TRIGGER_EVENTS.map(e => [e.value, e.label])
+)
+
+function AutomationLogsModal({ rule, onClose }: { rule: AutomationRule; onClose: () => void }) {
+  const [logs, setLogs] = useState<AutomationLogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    apiFetch(`/automation-rules/${rule.id}/logs?limit=50`)
+      .then(setLogs)
+      .catch(() => setLogs([]))
+      .finally(() => setLoading(false))
+  }, [rule.id])
+
+  function fmt(iso: string) {
+    return new Date(iso).toLocaleString('ko-KR', { hour12: false })
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+          <div>
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">실행 이력</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{rule.name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {loading ? (
+            <div className="text-center py-12 text-gray-400 text-sm">불러오는 중...</div>
+          ) : logs.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 text-sm">
+              <div className="text-3xl mb-2">📭</div>
+              아직 실행 이력이 없습니다.
+            </div>
+          ) : (
+            <div className="divide-y dark:divide-gray-700">
+              {logs.map((log) => (
+                <div key={log.id} className="px-6 py-3 flex items-start gap-3">
+                  <span className={`mt-0.5 shrink-0 text-sm font-bold ${log.matched ? 'text-green-600' : 'text-gray-400'}`}>
+                    {log.matched ? '✓' : '—'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <a
+                        href={`/tickets/${log.ticket_iid}`}
+                        className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        #{log.ticket_iid}
+                      </a>
+                      <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded">
+                        {TRIGGER_LABEL_MAP[log.trigger_event] || log.trigger_event}
+                      </span>
+                      {log.matched && log.actions_taken && log.actions_taken.length > 0 && (
+                        <span className="text-xs text-green-700 dark:text-green-400">
+                          액션 {log.actions_taken.length}개 실행
+                        </span>
+                      )}
+                    </div>
+                    {log.matched && log.actions_taken && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {log.actions_taken.map((a, i) => (
+                          <span key={i} className="text-xs bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded">
+                            {a.type}: {a.value}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {log.error && (
+                      <p className="text-xs text-red-500 mt-1">{log.error}</p>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0 whitespace-nowrap">
+                    {fmt(log.triggered_at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AllLogsPanel() {
+  const [logs, setLogs] = useState<AutomationLogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [matchedOnly, setMatchedOnly] = useState(false)
+
+  function load(mo: boolean) {
+    setLoading(true)
+    apiFetch(`/automation-rules/logs/recent?limit=200&matched_only=${mo}`)
+      .then(setLogs)
+      .catch(() => setLogs([]))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load(matchedOnly) }, [matchedOnly])
+
+  function fmt(iso: string) {
+    return new Date(iso).toLocaleString('ko-KR', { hour12: false })
+  }
+
+  const successCount = logs.filter(l => l.matched).length
+  const failCount = logs.filter(l => !l.matched).length
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex gap-4 text-sm">
+          <span className="text-green-600 dark:text-green-400 font-medium">✓ 실행 {successCount}건</span>
+          <span className="text-gray-400 dark:text-gray-500">— 불일치 {failCount}건</span>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={matchedOnly}
+            onChange={e => setMatchedOnly(e.target.checked)}
+            className="rounded text-blue-600"
+          />
+          실행된 것만 보기
+        </label>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12 text-gray-400 text-sm">불러오는 중...</div>
+      ) : logs.length === 0 ? (
+        <div className="text-center py-12 text-gray-400 text-sm">
+          <div className="text-3xl mb-2">📭</div>
+          실행 이력이 없습니다.
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl divide-y dark:divide-gray-700">
+          {logs.map(log => (
+            <div key={log.id} className="px-4 py-3 flex items-start gap-3">
+              <span className={`mt-0.5 shrink-0 text-sm font-bold w-4 text-center ${log.matched ? 'text-green-600' : 'text-gray-400'}`}>
+                {log.matched ? '✓' : '—'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {log.rule_name && (
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{log.rule_name}</span>
+                  )}
+                  <a href={`/tickets/${log.ticket_iid}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                    #{log.ticket_iid}
+                  </a>
+                  <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">
+                    {TRIGGER_LABEL_MAP[log.trigger_event] || log.trigger_event}
+                  </span>
+                  {log.matched && log.actions_taken && log.actions_taken.length > 0 && (
+                    <span className="text-xs text-green-700 dark:text-green-400">액션 {log.actions_taken.length}개</span>
+                  )}
+                </div>
+                {log.matched && log.actions_taken && log.actions_taken.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {log.actions_taken.map((a, i) => (
+                      <span key={i} className="text-xs bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded">
+                        {a.type}: {a.value}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {log.error && <p className="text-xs text-red-500 mt-1">{log.error}</p>}
+              </div>
+              <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0 whitespace-nowrap">{fmt(log.triggered_at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AutomationRulesPage() {
+  const [tab, setTab] = useState<'rules' | 'logs'>('rules')
   const [rules, setRules] = useState<AutomationRule[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -87,6 +281,7 @@ export default function AutomationRulesPage() {
   const [form, setForm] = useState({ ...EMPTY_RULE })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [logsRule, setLogsRule] = useState<AutomationRule | null>(null)
 
   async function loadRules() {
     setLoading(true)
@@ -220,21 +415,41 @@ export default function AutomationRulesPage() {
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">자동화 규칙</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">이벤트 발생 시 자동으로 실행할 액션을 정의합니다.</p>
         </div>
+        {tab === 'rules' && (
+          <button
+            onClick={openCreate}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+          >
+            + 새 규칙
+          </button>
+        )}
+      </div>
+
+      {/* 탭 */}
+      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg w-fit">
         <button
-          onClick={openCreate}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+          onClick={() => setTab('rules')}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === 'rules' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
         >
-          + 새 규칙
+          규칙 목록
+        </button>
+        <button
+          onClick={() => setTab('logs')}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === 'logs' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+        >
+          전체 실행 이력
         </button>
       </div>
 
-      {error && (
+      {tab === 'logs' && <AllLogsPanel />}
+
+      {tab === 'rules' && error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg p-3 text-sm">
           {error}
         </div>
       )}
 
-      {loading ? (
+      {tab === 'rules' && loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map(i => (
             <div key={i} className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-4 animate-pulse">
@@ -243,7 +458,7 @@ export default function AutomationRulesPage() {
             </div>
           ))}
         </div>
-      ) : rules.length === 0 ? (
+      ) : tab === 'rules' && rules.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl p-12 text-center">
           <div className="text-4xl mb-3">🤖</div>
           <p className="text-gray-500 dark:text-gray-400 text-sm">등록된 자동화 규칙이 없습니다.</p>
@@ -251,7 +466,7 @@ export default function AutomationRulesPage() {
             첫 번째 규칙 만들기
           </button>
         </div>
-      ) : (
+      ) : tab === 'rules' ? (
         <div className="space-y-3">
           {rules.map(rule => (
             <div
@@ -303,6 +518,7 @@ export default function AutomationRulesPage() {
                   >
                     {rule.is_active ? '비활성화' : '활성화'}
                   </button>
+                  <button onClick={() => setLogsRule(rule)} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1">이력</button>
                   <button onClick={() => openEdit(rule)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline px-2 py-1">수정</button>
                   <button onClick={() => handleDelete(rule.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1">삭제</button>
                 </div>
@@ -310,7 +526,7 @@ export default function AutomationRulesPage() {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Form modal */}
       {showForm && (
@@ -325,7 +541,7 @@ export default function AutomationRulesPage() {
 
             <div className="overflow-y-auto flex-1 p-6 space-y-5">
               {/* 기본 정보 */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">규칙 이름 *</label>
                   <input
@@ -479,6 +695,10 @@ export default function AutomationRulesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {logsRule && (
+        <AutomationLogsModal rule={logsRule} onClose={() => setLogsRule(null)} />
       )}
     </div>
   )

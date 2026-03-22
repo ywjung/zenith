@@ -18,6 +18,7 @@
 stages:
   - lint
   - test
+  - e2e
   - build
   - deploy
 
@@ -123,7 +124,7 @@ test:backend:
     - cd itsm-api
     - pip install -r requirements-dev.txt --quiet
   script:
-    - pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml -x
+    - pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --junitxml=test-results.xml -x
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     when: always
@@ -133,6 +134,44 @@ test:backend:
         path: itsm-api/coverage.xml
       junit: itsm-api/test-results.xml
     expire_in: 2 weeks
+
+# Alembic 마이그레이션 검증 — 실제 PostgreSQL에 모든 마이그레이션 순차 적용 후
+# alembic check로 미반영 마이그레이션 0건 확인.
+# SQLite 기반 pytest와 분리하여 DB 마이그레이션 누락을 사전 차단.
+migrate:check:
+  stage: test
+  image: python:3.12-slim
+  <<: [*python-cache, *rules-lint-test]
+  needs: [lint:backend]
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: itsm_test
+    POSTGRES_USER: itsm
+    POSTGRES_PASSWORD: itsm_test_pw
+    DATABASE_URL: "postgresql://itsm:itsm_test_pw@postgres/itsm_test"
+    SECRET_KEY: "ci-alembic-check-secret-key-32ch"
+    GITLAB_API_URL: "http://localhost"
+    GITLAB_PROJECT_TOKEN: "test-token"
+    GITLAB_PROJECT_ID: "1"
+    ENVIRONMENT: "development"
+    TOKEN_ENCRYPTION_KEY: ""
+  before_script:
+    - apt-get update -qq && apt-get install -y --no-install-recommends postgresql-client > /dev/null
+    - cd itsm-api
+    - pip install -r requirements.txt --quiet
+    - |
+      echo "▶ PostgreSQL 준비 대기..."
+      until pg_isready -h postgres -p 5432 -U itsm; do
+        sleep 1
+      done
+      echo "✅ PostgreSQL 준비 완료"
+  script:
+    - alembic upgrade head
+    - alembic check
+    - echo "✅ Alembic 마이그레이션 전체 검증 완료 (미반영 0건)"
+  allow_failure: false
 
 test:frontend:
   stage: test
@@ -151,6 +190,49 @@ test:frontend:
         coverage_format: cobertura
         path: itsm-web/coverage/cobertura-coverage.xml
     expire_in: 2 weeks
+
+# =============================================================================
+# E2E — Playwright 브라우저 테스트
+# 배포된 스테이징 환경에 대해 e2e 디렉토리 spec 파일들을 실행한다.
+# E2E_BASE_URL, E2E_ADMIN_TOKEN 변수는 GitLab Settings > CI/CD > Variables 에 등록.
+# =============================================================================
+
+test:e2e:
+  stage: e2e
+  image: mcr.microsoft.com/playwright:v1.44.0-jammy
+  <<: *node-cache
+  needs: [test:backend, test:frontend]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "release"
+  variables:
+    # 기본값: CI 내 로컬 ITSM 서비스가 없을 경우 skip — 실제 환경에서는 아래 변수 등록
+    E2E_BASE_URL: "${E2E_BASE_URL:-http://localhost:3000}"
+    E2E_ADMIN_TOKEN: "${E2E_ADMIN_TOKEN:-}"
+    # Playwright가 브라우저를 직접 실행 (headless)
+    CI: "true"
+  before_script:
+    - cd itsm-web
+    - npm ci --prefer-offline
+    - npx playwright install --with-deps chromium
+  script:
+    - |
+      if [ -z "$E2E_BASE_URL" ] || [ "$E2E_BASE_URL" = "http://localhost:3000" ]; then
+        echo "⚠️  E2E_BASE_URL 미설정 — E2E 테스트를 건너뜁니다."
+        echo "   GitLab CI/CD Variables에 E2E_BASE_URL을 등록하면 자동 실행됩니다."
+        exit 0
+      fi
+      echo "▶ E2E 테스트 실행: $E2E_BASE_URL"
+      E2E_BASE_URL=$E2E_BASE_URL \
+      ADMIN_TOKEN=$E2E_ADMIN_TOKEN \
+        npx playwright test e2e/
+  artifacts:
+    when: always
+    paths:
+      - itsm-web/playwright-report/
+    expire_in: 2 weeks
+  allow_failure: true  # E2E 실패가 빌드 전체를 차단하지 않도록 (선택적 게이트)
 
 # =============================================================================
 # BUILD

@@ -386,3 +386,18 @@ export interface ServiceType {
   context_options: string[]
   created_at: string
 }
+
+export interface ApprovalRequest {
+  id: number
+  ticket_iid: number
+  project_id: string
+  requester_username: string
+  requester_name: string
+  approver_username: string | null
+  approver_name: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  reason: string | null
+  approved_at: string | null
+  created_at: string
+  updated_at: string
+}

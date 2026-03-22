@@ -29,3 +29,8 @@ build/
 # 프로젝트 내부 문서
 CLAUDE.md
 요구사항.md
+
+# Playwright E2E
+itsm-web/playwright-report/
+itsm-web/test-results/
+itsm-web/e2e/.auth/*.json

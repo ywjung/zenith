@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation'
 import {
   createTicket, fetchProjects, fetchProjectMembers, fetchMilestones,
   uploadFile, fetchTemplates, fetchKBArticles,
+  fetchCustomFieldDefs, setTicketCustomFields,
 } from '@/lib/api'
-import type { GitLabProject, ProjectMember, Milestone, TicketTemplate, KBArticle } from '@/types'
+import type { GitLabProject, ProjectMember, Milestone, TicketTemplate, KBArticle, CustomFieldDef } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
 import RichTextEditor from '@/components/RichTextEditor'
 import { useAuth } from '@/context/AuthContext'
@@ -88,6 +89,13 @@ function NewTicketContent() {
   const [submitting, setSubmitting] = useState(false)
   const [uploadingFiles, setUploadingFiles] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [customFieldDefs, setCustomFieldDefs] = useState<CustomFieldDef[]>([])
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({})
+
+  // 커스텀 필드 정의 로딩
+  useEffect(() => {
+    fetchCustomFieldDefs(false).then(setCustomFieldDefs).catch(() => {})
+  }, [])
 
   // 로그인 사용자 정보 자동 채우기
   useEffect(() => {
@@ -231,6 +239,14 @@ function NewTicketContent() {
         confidential,
       }
       const ticket = await createTicket(payload)
+      // 커스텀 필드 값 저장
+      if (Object.keys(customFieldValues).length > 0) {
+        try {
+          await setTicketCustomFields(ticket.iid, customFieldValues, ticket.project_id || undefined)
+        } catch {
+          // 커스텀 필드 저장 실패는 티켓 생성을 막지 않음
+        }
+      }
       const qs = ticket.project_id ? `?project_id=${ticket.project_id}` : ''
       router.push(`/tickets/${ticket.iid}${qs}`)
     } catch (err: unknown) {
@@ -598,6 +614,46 @@ function NewTicketContent() {
                   </select>
                 </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* 커스텀 필드 */}
+          {customFieldDefs.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">추가 정보</h3>
+              <div className="space-y-3">
+                {customFieldDefs.map(f => (
+                  <div key={f.id}>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      {f.label}{f.required && <span className="text-red-500 ml-0.5">*</span>}
+                    </label>
+                    {f.field_type === 'checkbox' ? (
+                      <input
+                        type="checkbox"
+                        checked={customFieldValues[f.name] === 'true'}
+                        onChange={e => setCustomFieldValues(prev => ({ ...prev, [f.name]: e.target.checked ? 'true' : 'false' }))}
+                        className="rounded border-gray-300 text-blue-600"
+                      />
+                    ) : f.field_type === 'select' ? (
+                      <select
+                        value={customFieldValues[f.name] ?? ''}
+                        onChange={e => setCustomFieldValues(prev => ({ ...prev, [f.name]: e.target.value }))}
+                        className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">선택...</option>
+                        {(f.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        type={f.field_type === 'number' ? 'number' : 'text'}
+                        value={customFieldValues[f.name] ?? ''}
+                        onChange={e => setCustomFieldValues(prev => ({ ...prev, [f.name]: e.target.value }))}
+                        className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}

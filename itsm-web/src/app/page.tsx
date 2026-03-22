@@ -37,7 +37,7 @@ function HomeContent() {
   const [search, setSearch] = useState(() => searchParams.get('q') || '')
   const [searchInput, setSearchInput] = useState(() => searchParams.get('q') || '')
   const [selectedRequester, setSelectedRequester] = useState(() => searchParams.get('assignee') || '')
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'priority'>('newest')
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'priority'>(() => (searchParams.get('sort') as 'newest' | 'oldest' | 'priority') || 'newest')
   const [fromDate, setFromDate] = useState(() => searchParams.get('from') || '')
   const [toDate, setToDate] = useState(() => searchParams.get('to') || '')
 
@@ -45,6 +45,7 @@ function HomeContent() {
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [requesters, setRequesters] = useState<{ username: string; employee_name: string }[]>([])
   const [stats, setStats] = useState<TicketStats | null>(null)
+  const [statsUpdatedAt, setStatsUpdatedAt] = useState<Date | null>(null)
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null)
 
   const [selectedIids, setSelectedIids] = useState<Set<number>>(new Set())
@@ -96,6 +97,8 @@ function HomeContent() {
     const assignee = overrides.assignee ?? selectedRequester
     const fd = overrides.from ?? fromDate
     const td = overrides.to ?? toDate
+    const sort = overrides.sort ?? sortBy
+    const proj = overrides.project ?? selectedProject
     if (s && s !== 'all') params.set('status', s)
     if (cat) params.set('category', cat)
     if (prio) params.set('priority', prio)
@@ -104,6 +107,8 @@ function HomeContent() {
     if (assignee) params.set('assignee', assignee)
     if (fd) params.set('from', fd)
     if (td) params.set('to', td)
+    if (sort && sort !== 'newest') params.set('sort', sort)
+    if (proj) params.set('project', proj)
     const qs = params.toString()
     router.replace(qs ? `/?${qs}` : '/', { scroll: false })
   }
@@ -129,7 +134,10 @@ function HomeContent() {
       let pid = ''
       if (projectList.status === 'fulfilled') {
         setProjects(projectList.value)
-        if (projectList.value.length > 1) {
+        const urlProject = searchParams.get('project')
+        if (urlProject && projectList.value.some(p => String(p.id) === urlProject)) {
+          pid = urlProject
+        } else if (projectList.value.length > 1) {
           pid = String(projectList.value[0].id)
         }
       }
@@ -159,6 +167,34 @@ function HomeContent() {
     init().catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAgent])
+
+  // 통계만 갱신 (티켓 목록 재로드 없이)
+  const refreshStats = useCallback(async () => {
+    try {
+      const s = await fetchTicketStats(selectedProject || undefined)
+      setStats(s)
+      setStatsUpdatedAt(new Date())
+    } catch { /* ignore */ }
+  }, [selectedProject])
+
+  // 60초 자동 갱신 + 탭 복귀 시 즉시 갱신
+  useEffect(() => {
+    const timer = setInterval(refreshStats, 60_000)
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshStats() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refreshStats])
+
+  // SSE 알림 수신 시 stats 갱신 (티켓 변경 이벤트 반영)
+  useEffect(() => {
+    const es = new EventSource(`${API_BASE}/notifications/stream`, { withCredentials: true })
+    es.onmessage = () => { refreshStats() }
+    es.onerror = () => {}
+    return () => es.close()
+  }, [refreshStats])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -208,7 +244,7 @@ function HomeContent() {
     e.preventDefault(); setSearch(searchInput); setPage(1); setSelectedIids(new Set()); syncUrl({ q: searchInput })
   }
   function handleProjectChange(pid: string) {
-    setSelectedProject(pid); setPage(1); setPriority(''); setSla(''); setSelectedRequester(''); setSelectedIids(new Set())
+    setSelectedProject(pid); setPage(1); setPriority(''); setSla(''); setSelectedRequester(''); setSelectedIids(new Set()); syncUrl({ project: pid })
   }
   function handleRequesterChange(username: string) {
     setSelectedRequester(username); setPage(1); setSelectedIids(new Set()); syncUrl({ assignee: username })
@@ -276,15 +312,24 @@ function HomeContent() {
     }
   }
 
-  function handleExportCsv() {
+  function _buildExportParams() {
     const params = new URLSearchParams()
     if (state && state !== 'all') params.set('state', state)
     if (category) params.set('category', category)
     if (priority) params.set('priority', priority)
     if (search) params.set('search', search)
     if (selectedProject) params.set('project_id', selectedProject)
-    const qs = params.toString()
+    return params.toString()
+  }
+
+  function handleExportCsv() {
+    const qs = _buildExportParams()
     window.open(`${API_BASE}/tickets/export/csv${qs ? `?${qs}` : ''}`, '_blank')
+  }
+
+  function handleExportXlsx() {
+    const qs = _buildExportParams()
+    window.open(`${API_BASE}/tickets/export/xlsx${qs ? `?${qs}` : ''}`, '_blank')
   }
 
   const totalPages = Math.max(1, Math.ceil(total / DEFAULT_PER_PAGE))
@@ -381,6 +426,22 @@ function HomeContent() {
             </div>
           )}
 
+          {/* 갱신 시각 + 수동 갱신 버튼 */}
+          <div className="flex flex-col items-center justify-center gap-1">
+            <button
+              onClick={refreshStats}
+              className="px-2 py-1 text-xs text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              title="지금 갱신"
+            >
+              ↻
+            </button>
+            {statsUpdatedAt && (
+              <span className="text-[10px] text-gray-300 dark:text-gray-600 whitespace-nowrap">
+                {statsUpdatedAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
+          </div>
+
           {/* 위젯 설정 버튼 */}
           <div className="relative">
             <button
@@ -437,7 +498,7 @@ function HomeContent() {
 
       {/* Status Tabs */}
       {isWidgetVisible('stats_bar') && (
-        <div className="grid grid-cols-10 gap-2 mb-5">
+        <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-5">
           {statTabs.map(tab => (
             <button
               key={tab.key}
@@ -697,6 +758,7 @@ function HomeContent() {
                     <option value="close">일괄 종료</option>
                     <option value="assign">일괄 배정</option>
                     <option value="set_priority">우선순위 변경</option>
+                    <option value="set_status">상태 변경</option>
                   </select>
                   {bulkAction === 'assign' && (
                     <input type="number" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
@@ -710,6 +772,19 @@ function HomeContent() {
                       <option value="high">높음</option>
                       <option value="medium">보통</option>
                       <option value="low">낮음</option>
+                    </select>
+                  )}
+                  {bulkAction === 'set_status' && (
+                    <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} required
+                      className="border dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 dark:text-gray-200 focus:outline-none">
+                      <option value="">선택</option>
+                      <option value="approved">승인완료</option>
+                      <option value="in_progress">처리 중</option>
+                      <option value="waiting">추가정보 대기</option>
+                      <option value="testing">테스트중</option>
+                      <option value="resolved">처리 완료</option>
+                      <option value="ready_for_release">운영배포전</option>
+                      <option value="released">운영반영완료</option>
                     </select>
                   )}
                   <button type="submit" disabled={bulkProcessing}
@@ -726,7 +801,7 @@ function HomeContent() {
               {/* Sort */}
               <select
                 value={sortBy}
-                onChange={e => setSortBy(e.target.value as 'newest' | 'oldest' | 'priority')}
+                onChange={e => { const v = e.target.value as 'newest' | 'oldest' | 'priority'; setSortBy(v); syncUrl({ sort: v }) }}
                 className="border dark:border-gray-600 rounded px-2 py-1 text-xs text-gray-600 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
               >
                 <option value="newest">최신순</option>
@@ -734,13 +809,22 @@ function HomeContent() {
                 <option value="priority">우선순위순</option>
               </select>
               {isAgent && (
-                <button
-                  onClick={handleExportCsv}
-                  className="border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-gray-700 whitespace-nowrap"
-                  title="현재 필터 기준으로 CSV 내보내기"
-                >
-                  CSV 내보내기
-                </button>
+                <div className="flex gap-1">
+                  <button
+                    onClick={handleExportCsv}
+                    className="border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-gray-700 whitespace-nowrap"
+                    title="현재 필터 기준으로 CSV 내보내기"
+                  >
+                    CSV
+                  </button>
+                  <button
+                    onClick={handleExportXlsx}
+                    className="border border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 px-3 py-1.5 rounded-md text-sm hover:bg-green-50 dark:hover:bg-green-900/30 whitespace-nowrap"
+                    title="현재 필터 기준으로 Excel 내보내기"
+                  >
+                    Excel
+                  </button>
+                </div>
               )}
               <Link href="/tickets/new"
                 className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-700 whitespace-nowrap">
@@ -799,11 +883,11 @@ function HomeContent() {
                   <th className="w-16 px-3 py-2.5 text-left">번호</th>
                   <th className="px-3 py-2.5 text-left">제목</th>
                   <th className="w-24 px-3 py-2.5 text-left">상태</th>
-                  <th className="w-20 px-3 py-2.5 text-left">우선순위</th>
-                  <th className="w-24 px-3 py-2.5 text-left">카테고리</th>
-                  <th className="w-28 px-3 py-2.5 text-left">담당자</th>
-                  <th className="w-28 px-3 py-2.5 text-left">SLA</th>
-                  <th className="w-20 px-3 py-2.5 text-left">등록일</th>
+                  <th className="w-20 px-3 py-2.5 text-left hidden sm:table-cell">우선순위</th>
+                  <th className="w-24 px-3 py-2.5 text-left hidden md:table-cell">카테고리</th>
+                  <th className="w-28 px-3 py-2.5 text-left hidden md:table-cell">담당자</th>
+                  <th className="w-28 px-3 py-2.5 text-left hidden lg:table-cell">SLA</th>
+                  <th className="w-20 px-3 py-2.5 text-left hidden sm:table-cell">등록일</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
@@ -850,23 +934,23 @@ function HomeContent() {
                       <td className="w-24 px-3 py-3">
                         <StatusBadge status={ticket.status} />
                       </td>
-                      <td className="w-20 px-3 py-3">
+                      <td className="w-20 px-3 py-3 hidden sm:table-cell">
                         <PriorityBadge priority={ticket.priority} />
                       </td>
-                      <td className="w-24 px-3 py-3">
+                      <td className="w-24 px-3 py-3 hidden md:table-cell">
                         <CategoryBadge category={ticket.category} />
                       </td>
-                      <td className="w-28 px-3 py-3">
+                      <td className="w-28 px-3 py-3 hidden md:table-cell">
                         {ticket.assignee_name ? (
                           <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">{formatName(ticket.assignee_name)}</span>
                         ) : (
                           <span className="text-xs text-gray-300 dark:text-gray-600">미배정</span>
                         )}
                       </td>
-                      <td className="w-28 px-3 py-3">
+                      <td className="w-28 px-3 py-3 hidden lg:table-cell">
                         <SlaBadge priority={ticket.priority} createdAt={ticket.created_at} state={ticket.state} slaDeadline={ticket.sla_deadline} />
                       </td>
-                      <td className="w-20 px-3 py-3 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                      <td className="w-20 px-3 py-3 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap hidden sm:table-cell">
                         {formatDate(ticket.created_at)}
                       </td>
                     </tr>

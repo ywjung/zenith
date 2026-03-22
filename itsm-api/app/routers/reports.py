@@ -200,7 +200,55 @@ def export_report(
         q = q.filter(DailyStatsSnapshot.project_id == project_id)
 
     rows = q.all()
+    date_str = datetime.now().strftime("%Y%m%d")
 
+    if format == "xlsx":
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment
+        except ImportError:
+            raise HTTPException(status_code=501, detail="openpyxl 라이브러리가 설치되지 않았습니다.")
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "ITSM 보고서"
+
+        headers = ["날짜", "프로젝트", "당일 신규", "접수됨", "처리 중(대기·완료 포함)", "누적 종료", "SLA 위반 누적"]
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="1E40AF", end_color="1E40AF", fill_type="solid")
+
+        for col_idx, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center")
+
+        for row_idx, r in enumerate(rows, 2):
+            ws.cell(row=row_idx, column=1, value=str(r.snapshot_date))
+            ws.cell(row=row_idx, column=2, value=r.project_id or "")
+            ws.cell(row=row_idx, column=3, value=r.total_new)
+            ws.cell(row=row_idx, column=4, value=r.total_open)
+            ws.cell(row=row_idx, column=5, value=r.total_in_progress)
+            ws.cell(row=row_idx, column=6, value=r.total_closed)
+            ws.cell(row=row_idx, column=7, value=r.total_breached)
+
+        # 컬럼 너비 자동 조정
+        col_widths = [12, 20, 12, 10, 22, 12, 16]
+        for col_idx, width in enumerate(col_widths, 1):
+            ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = width
+
+        xlsx_buf = io.BytesIO()
+        wb.save(xlsx_buf)
+        xlsx_buf.seek(0)
+
+        filename = f"itsm_report_{date_str}.xlsx"
+        return StreamingResponse(
+            iter([xlsx_buf.read()]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # 기본: CSV
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["날짜", "프로젝트", "당일신규", "접수됨", "처리중(대기·완료포함)", "누적종료", "SLA위반누적"])
@@ -215,7 +263,7 @@ def export_report(
             r.total_breached,
         ])
 
-    filename = f"itsm_report_{datetime.now().strftime('%Y%m%d')}.csv"
+    filename = f"itsm_report_{date_str}.csv"
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -714,3 +762,51 @@ def get_dora_metrics(
             "description": "재오픈 후 재완료까지 평균 복구 시간",
         },
     }
+
+
+@router.get("/sla/heatmap")
+def get_sla_heatmap(
+    weeks: int = Query(default=12, ge=4, le=52),
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_agent),
+):
+    """주차별 SLA 위반 히트맵 데이터 반환.
+
+    최근 N주 동안 각 날짜의 SLA 위반 건수를 반환한다.
+    응답: [{"date": "YYYY-MM-DD", "breached": int, "total": int}, ...]
+    """
+    today_d = date.today()
+    # 월요일 기준으로 weeks * 7일 전으로 맞춤
+    start_dow = today_d.weekday()  # 0=월 … 6=일
+    # 이번 주 월요일
+    this_monday = today_d - timedelta(days=start_dow)
+    since = this_monday - timedelta(weeks=weeks - 1)
+
+    rows = (
+        db.query(DailyStatsSnapshot)
+        .filter(DailyStatsSnapshot.snapshot_date >= since)
+        .order_by(DailyStatsSnapshot.snapshot_date)
+        .all()
+    )
+
+    # 날짜별로 여러 프로젝트 행을 합산
+    from collections import defaultdict
+    by_date: dict[str, dict] = defaultdict(lambda: {"breached": 0, "total": 0})
+    for r in rows:
+        key = str(r.snapshot_date)
+        by_date[key]["breached"] += r.total_breached or 0
+        by_date[key]["total"] += (r.total_open or 0) + (r.total_in_progress or 0) + (r.total_closed or 0)
+
+    # since ~ today 범위 내 모든 날짜를 채움 (스냅샷 없는 날은 0)
+    result = []
+    cursor = since
+    while cursor <= today_d:
+        key = str(cursor)
+        result.append({
+            "date": key,
+            "breached": by_date[key]["breached"],
+            "total": by_date[key]["total"],
+        })
+        cursor += timedelta(days=1)
+
+    return result
