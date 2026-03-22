@@ -23,7 +23,7 @@
     "@tiptap/extension-table-header": "^2.11.7",
     "@tiptap/extension-table-row": "^2.11.7",
     "@tiptap/react": "^2.11.7",
-    "@tiptap/starter-kit": "^2.11.7",
+    "@tiptap/starter-kit": "^3.20.4",
     "@tiptap/suggestion": "^2.27.2",
     "isomorphic-dompurify": "^3.5.1",
     "lowlight": "^3.3.0",
