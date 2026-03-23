@@ -4049,13 +4049,13 @@ export default function HelpPage() {
       <div className="border-t dark:border-gray-700 bg-white dark:bg-gray-900 mt-8">
         <div className="w-full px-4 py-6 text-center text-xs text-gray-400 dark:text-gray-500 space-y-1">
           <div>
-            <Link href="http://localhost:8111/docs" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Swagger UI</Link>
+            <Link href="/docs" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Swagger UI</Link>
             {' · '}
-            <Link href="http://localhost:8111/redoc" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">ReDoc</Link>
+            <Link href="/redoc" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">ReDoc</Link>
             {' · '}
-            <Link href="http://localhost:9090" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Prometheus</Link>
+            <Link href="/prometheus/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Prometheus</Link>
             {' · '}
-            <Link href="http://localhost:3001" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Grafana</Link>
+            <Link href="/grafana/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Grafana</Link>
           </div>
           <div>ZENITH · Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Alembic 52단계</div>
         </div>
