@@ -176,6 +176,16 @@ const SECURITY_FEATURES: { emoji: string; title: string; desc: string; isNew?: b
   { emoji: '🚚', title: '서버 이전 자동화 스크립트 (scripts/migrate.sh)', desc: 'scripts/migrate.sh 를 실행하면 사전 요구사항 확인(ssh·rsync·openssl·pg_dump), 운영 서버 상태 체크, PostgreSQL 덤프 + AES-256-CBC 암호화 백업, Docker 볼륨 tar 백업, rsync 전송, 원격 docker compose 배포, 헬스체크 자동 검증까지 일괄 처리됩니다. 오류 발생 시 롤백이 자동 실행됩니다.', isNew: true },
   { emoji: '🪣', title: 'MinIO 오브젝트 스토리지 활성화',                 desc: 'KB 파일 첨부 업로드가 GitLab 전용에서 MinIO 우선 → GitLab 폴백 구조로 변경되었습니다. MINIO_ENDPOINT 환경변수를 설정하면 itsm-attachments 버킷에 파일이 저장되며, MinIO 미설정 시 기존 GitLab Upload API로 자동 폴백합니다. scripts/migrate_files_to_minio.py로 레거시 파일 일괄 마이그레이션이 가능합니다.', isNew: true },
   { emoji: '🌐', title: 'i18n 다국어 지원 기반 구축 (ko/en)',              desc: '한국어(기본)·영어 번역 파일(messages/ko.json, messages/en.json)을 추가하고 헤더에 🌐 언어 전환 버튼을 배치했습니다. 선택한 언어는 localStorage에 저장되어 새로고침 후에도 유지됩니다. common, nav, ticket, auth, sla, role 등 핵심 UI 문자열의 한/영 번역이 포함됩니다.', isNew: true },
+  { emoji: '🔗', title: 'WebSocket 실시간 티켓 협업',                      desc: 'ConnectionManager(ws_manager.py)로 티켓별 룸(room) 관리를 구현했습니다. 티켓 상세 화면에서 현재 접속 중인 사용자 아바타 목록과 타이핑 인디케이터("홍길동 님이 입력 중...")를 실시간으로 표시합니다. JWT 토큰 검증, 연결 해제 시 뷰어 목록 자동 갱신이 포함됩니다.', isNew: true },
+  { emoji: '📱', title: 'PWA 지원 (홈 화면 설치 + 오프라인)',               desc: 'manifest.json(앱 이름·아이콘·단축키), Service Worker(/sw.js)로 정적 에셋 캐시와 오프라인 폴백(/offline.html)을 구현했습니다. beforeinstallprompt 이벤트로 홈 화면 설치 배너를 표시합니다. iOS Safari용 apple-touch-icon·apple-mobile-web-app-capable 메타 태그를 포함합니다.', isNew: true },
+  { emoji: '✉️', title: '다크모드 지원 이메일 템플릿',                      desc: '@media (prefers-color-scheme: dark) CSS를 포함한 HTML 이메일 템플릿(email_templates.py)으로 교체했습니다. 티켓 생성·상태변경·SLA 경고·SLA 위반·승인 요청·승인 결과·댓글·담당자 배정 8종의 render_* 함수를 제공합니다. 기존 DB Jinja2 템플릿 폴백은 그대로 유지됩니다.', isNew: true },
+  { emoji: '🌍', title: 'next-intl Provider + useTranslations() 적용',     desc: 'IntlContext.tsx로 NextIntlClientProvider를 앱 전체에 주입합니다. Header 네비게이션 8개 링크, 티켓 목록 우선순위·상태 레이블 12개에 useTranslations() 훅을 실제 적용했습니다. i18n.d.ts 타입 선언으로 번역 키 자동완성·타입 검사가 동작합니다.', isNew: true },
+  { emoji: '🔮', title: 'SLA 예측 모델 (해결 시각 예측)',                   desc: '과거 종료 티켓의 priority·category·담당자별 중위수 해결 시간을 statistics.median()으로 계산합니다. GET /tickets/{iid}/sla-prediction API로 예상 해결 시각과 신뢰도(high 50건↑·medium 10-49건·low 1-9건·default)를 반환합니다. 티켓 상세 SLA 섹션에 "예상 해결: N시간 후" 표시.', isNew: true },
+  { emoji: '🔄', title: 'Celery 모니터링 관리자 UI (/admin/celery)',        desc: '관리자 사이드바 "Celery 모니터링" 메뉴에서 워커 상태·큐 현황·태스크 통계·최근 실패 태스크(10건)를 30초 자동 새로고침으로 확인합니다. Flower API(/admin/celery/flower/*)를 백엔드에서 프록시하여 내부망 보안을 유지합니다.', isNew: true },
+  { emoji: '🗑️', title: 'DB 정리 자동화 UI (/admin/db-cleanup)',           desc: '관리자가 90일+ 감사 로그, 읽은 알림 30일+, KB 구버전(최신 5개 초과)을 건수 미리보기 후 확인 모달을 통해 안전하게 삭제합니다. VACUUM ANALYZE 버튼으로 DB 최적화 실행 및 소요 시간 확인. 세션 내 실행 이력이 누적 표시됩니다.', isNew: true },
+  { emoji: '📡', title: 'OpenTelemetry 분산 추적 (opt-in)',                desc: 'OTEL_ENABLED=true 환경변수로 FastAPI·SQLAlchemy·Celery 자동 계측을 활성화합니다. docker compose --profile tracing up으로 otel-collector 서비스를 포함해 실행합니다. 트레이스는 OTLP gRPC(4317)로 전송되며 Prometheus 메트릭도 동시에 수집됩니다.', isNew: true },
+  { emoji: '📊', title: 'Grafana Web Vitals 대시보드 (6번째)',              desc: 'Prometheus web_vitals_value 메트릭을 시각화하는 6번째 Grafana 대시보드(06-web-vitals.json)를 추가했습니다. LCP·FID·CLS·TTFB·FCP·INP Gauge 패널(Good/Needs Improvement/Poor 임계값 색상), 등급 분포 Bar chart, 시간별 LCP 추이 Time series로 구성됩니다.', isNew: true },
+  { emoji: '🧪', title: 'E2E 티켓 CRUD·칸반 시나리오 추가',                desc: 'itsm-web/e2e/tickets-crud.spec.ts(목록 로드·등록 폼·글로벌 검색·상세 접근·API 응답)와 kanban.spec.ts(컬럼 확인·필터·네비게이션·API)를 추가했습니다. 기존 auth.json storageState 기반 인증 재사용, 환경 차이 흡수를 위한 fallback assertion 적용.', isNew: true },
 ]
 
 /* ─── 워크플로우 & SLA 데이터 ────────────────────────────────────────── */
@@ -3931,6 +3941,7 @@ function TabAbout() {
             { version: 'v1.5',   desc: '보안 강화(IP 허용목록·JWT 블랙리스트), 승인 워크플로우, 티켓 유형 관리, 다크모드 FOUC 수정' },
             { version: 'v1.6',   desc: '테스트 커버리지 97%·CI 95% 강제, Grafana 알림 대시보드, Rate Limit 메트릭, Next.js 번들 최적화, API 계약 테스트' },
             { version: 'v1.7',   desc: 'Celery 실패 Prometheus·Slack, DB 슬로우 쿼리 메트릭, Web Vitals 수집, MinIO 스토리지, 서버 이전 스크립트, i18n 한/영 다국어 지원' },
+            { version: 'v1.8',   desc: 'WebSocket 실시간 협업, PWA 홈 화면 설치, 다크모드 이메일 템플릿, SLA 예측 모델, Celery 모니터링 UI, DB 정리 UI, OTel 분산 추적, Grafana Web Vitals 대시보드' },
           ].map(v => (
             <div key={v.version} className="flex items-start gap-3 text-sm">
               <span className="shrink-0 font-mono font-bold text-blue-600 dark:text-blue-400 w-12">{v.version}</span>

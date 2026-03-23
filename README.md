@@ -1637,6 +1637,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 - **테스트**: pytest 1,713개 통과 · 코드 커버리지 97%+ · CI --cov-fail-under=95 강제
 - **Grafana 대시보드**: 5개 자동 프로비저닝 (알림 & 인시던트 대시보드 추가)
 - **v1.7 추가**: Celery 실패 메트릭·Slack, DB 슬로우 쿼리 감지, Web Vitals 수집, MinIO 스토리지, 서버 이전 자동화, i18n 한/영
+- **v1.8 추가**: WebSocket 실시간 협업, PWA 홈 화면 설치, 다크모드 이메일 템플릿, SLA 예측 모델, Celery 모니터링 UI, DB 정리 UI, OpenTelemetry 분산 추적, Grafana Web Vitals 대시보드, E2E 테스트 확대
 
 ### 마이그레이션 이력
 
@@ -1721,6 +1722,15 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **서버 이전 자동화** | `scripts/migrate.sh` — 사전 점검, PG 덤프 + AES-256-CBC 암호화, 볼륨 백업, rsync 전송, 원격 배포, 헬스체크·롤백 일괄 자동화 |
 | **MinIO 스토리지 활성화** | KB 첨부 업로드 MinIO 우선 → GitLab 폴백 구조. `MINIO_ENDPOINT` 환경변수로 활성화. `scripts/migrate_files_to_minio.py`로 레거시 파일 마이그레이션 |
 | **i18n 한/영 다국어 지원** | `messages/ko.json` · `messages/en.json` 번역 파일 + `src/lib/i18n.ts` 유틸리티. 헤더 🌐 언어 전환 버튼(localStorage 저장), `next-intl` 기반 |
+| **WebSocket 실시간 협업** | 티켓 상세 페이지에 현재 접속자 아바타 표시 + 입력 중 인디케이터 (`/ws/tickets/{iid}`) — JWT 쿼리파라미터 인증, FastAPI 네이티브 WebSocket |
+| **PWA 홈 화면 설치** | `manifest.json` + Service Worker (Cache First/Network First 전략) — 오프라인 폴백 페이지, 홈 화면 추가 배너 (`beforeinstallprompt`) |
+| **다크모드 이메일 템플릿** | `@media (prefers-color-scheme: dark)` 적용 반응형 이메일 HTML — 티켓 생성·상태 변경·SLA 위반 등 9개 이메일 유형 일괄 적용 |
+| **SLA 예측 모델** | 과거 해결 시간 중앙값 기반 `predict_resolution()` — 우선순위별 기본값 + 신뢰도(high/medium/low) 반환 (`GET /tickets/{iid}/sla-prediction`) |
+| **Celery 모니터링 UI** | `/admin/celery` — 워커 상태·큐 길이·최근 실패 태스크 실시간 조회 (Flower API 내부 프록시, 30초 자동 갱신) |
+| **DB 정리 UI** | `/admin/db-cleanup` — 오래된 감사로그·알림·KB 버전 미리보기·삭제 + VACUUM ANALYZE 원클릭 실행 |
+| **OpenTelemetry 분산 추적** | FastAPIInstrumentor·SQLAlchemyInstrumentor 자동 계장 — OTLP gRPC → OTel Collector → Jaeger/Tempo 전송 (`--profile tracing`) |
+| **Grafana Web Vitals 대시보드** | `06-web-vitals.json` 자동 프로비저닝 — LCP·FID·CLS·TTFB·FCP·INP 게이지·타임시리즈·바차트 8개 패널 |
+| **E2E 테스트 확대** | Playwright 티켓 CRUD·칸반·KB 시나리오 추가 — 로그인 storageState 재사용, 역할별 선택자, CI fallback 어설션 |
 
 ### 주요 버그 수정 이력
 

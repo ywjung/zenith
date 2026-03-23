@@ -55,7 +55,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { href: '/admin/api-keys', label: 'API 키', icon: '🔑', desc: '외부 시스템 인증 키' },
       { href: '/admin/labels', label: 'GitLab 라벨 동기화', icon: '🏷️', desc: '라벨 현황 확인 · 수동 동기화' },
       { href: '/admin/search-index', label: '전문검색 색인', icon: '🔎', desc: '검색 색인 현황 · 수동 동기화' },
-      { href: '/admin/db-cleanup', label: 'DB 보존 정책', icon: '🗑️', desc: '만료 토큰·로그 자동 정리' },
+      { href: '/admin/db-cleanup', label: 'DB 정리', icon: '🗑️', desc: '로그·알림·KB 버전 선택 정리' },
     ],
   },
   {
@@ -64,6 +64,7 @@ const MENU_GROUPS: MenuGroup[] = [
     adminOnly: true,
     items: [
       { href: '/admin/monitoring', label: '시스템 모니터링', icon: '📊', desc: 'Celery 작업 · 성능 지표' },
+      { href: '/admin/celery', label: 'Celery 모니터링', icon: '🔄', desc: '워커 · 큐 · 태스크 상세 현황' },
     ],
   },
   {

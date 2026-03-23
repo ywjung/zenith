@@ -37,6 +37,7 @@
     "title": "티켓",
     "new": "새 티켓",
     "status": {
+      "all": "전체",
       "open": "접수",
       "in_progress": "처리중",
       "testing": "테스트중",

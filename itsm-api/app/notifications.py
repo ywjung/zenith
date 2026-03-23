@@ -233,7 +233,7 @@ def notify_ticket_created(ticket: dict) -> None:
     if not recipients:
         return
 
-    # DB 템플릿 우선 사용, 없으면 하드코딩 폴백
+    # DB 템플릿 우선 사용, 없으면 email_templates 폴백
     ctx = {
         "iid": iid, "title": title, "employee_name": employee,
         "priority": priority, "category": category,
@@ -244,17 +244,10 @@ def notify_ticket_created(ticket: dict) -> None:
     if rendered:
         subject, body = rendered
     else:
-        subject = f"[ITSM] 새 티켓 #{iid}: {ticket.get('title', '')}"
-        body = f"""
-        <h2>새 티켓이 등록됐습니다</h2>
-        <table>
-          <tr><td><b>티켓 번호</b></td><td>#{iid}</td></tr>
-          <tr><td><b>제목</b></td><td>{title}</td></tr>
-          <tr><td><b>신청자</b></td><td>{employee}</td></tr>
-          <tr><td><b>우선순위</b></td><td>{priority}</td></tr>
-          <tr><td><b>카테고리</b></td><td>{category}</td></tr>
-        </table>
-        """
+        from .email_templates import render_ticket_created
+        ticket_ctx = dict(ctx)
+        ticket_ctx["portal_url"] = f"{settings.FRONTEND_URL}/tickets/{iid}"
+        subject, body = render_ticket_created(ticket_ctx)
     send_email(recipients, subject, body)
     tg_msg = (
         f"🎫 <b>새 티켓 등록</b>\n"
@@ -316,13 +309,13 @@ def notify_status_changed(ticket: dict, old_status: str, new_status: str, actor_
         if rendered:
             subject, body = rendered
         else:
-            subject = f"[ITSM] 티켓 #{iid} 상태 변경: {status_map.get(new_status, new_status)}"
-            body = f"""
-            <h2>티켓 상태가 변경됐습니다</h2>
-            <p>티켓 #{iid}: <b>{title}</b></p>
-            <p>상태: {status_map.get(old_status, old_status)} → <b>{status_map.get(new_status, new_status)}</b></p>
-            <p>처리자: {actor_name_e}</p>
-            """
+            from .email_templates import render_ticket_status_changed
+            ticket_ctx = {
+                "iid": iid,
+                "title": title,
+                "portal_url": f"{settings.FRONTEND_URL}/tickets/{iid}",
+            }
+            subject, body = render_ticket_status_changed(ticket_ctx, old_status, new_status, actor_name_e)
         send_email(recipients, subject, body)
     old_ko = status_map.get(old_status, old_status)
     new_ko = status_map.get(new_status, new_status)
@@ -381,13 +374,6 @@ def notify_comment_added(ticket: dict, comment_body: str, author_name: str, is_i
     title = html.escape(str(ticket.get("title", "")))  # H-2
     author_name_e = html.escape(str(author_name))
     comment_preview = html.escape(comment_body[:500])
-    subject = f"[ITSM] 티켓 #{iid} 새 댓글"
-    body = f"""
-    <h2>티켓에 새 댓글이 달렸습니다</h2>
-    <p>티켓 #{iid}: <b>{title}</b></p>
-    <p>작성자: {author_name_e}</p>
-    <p>{comment_preview}</p>
-    """
 
     recipients: list[str] = []
     employee_email = ticket.get("employee_email")
@@ -401,19 +387,29 @@ def notify_comment_added(ticket: dict, comment_body: str, author_name: str, is_i
             recipients.append(email)
 
     if recipients:
+        from .email_templates import render_comment_added
+        settings = get_settings()
+        ticket_ctx = {
+            "iid": iid,
+            "title": title,
+            "portal_url": f"{settings.FRONTEND_URL}/tickets/{iid}",
+        }
+        subject, body = render_comment_added(ticket_ctx, author_name_e, comment_preview)
         send_email(recipients, subject, body)
 
 
 def notify_assigned(assignee_email: str, ticket: dict, actor_name: str) -> None:
+    settings = get_settings()
     iid = ticket.get("iid", "?")
     title = html.escape(str(ticket.get("title", "")))  # H-2
     actor_name_e = html.escape(str(actor_name))
-    subject = f"[ITSM] 티켓 #{iid} 담당자로 배정됐습니다"
-    body = f"""
-    <h2>담당자로 배정됐습니다</h2>
-    <p>티켓 #{iid}: <b>{title}</b></p>
-    <p>배정자: {actor_name_e}</p>
-    """
+    from .email_templates import render_assigned
+    ticket_ctx = {
+        "iid": iid,
+        "title": title,
+        "portal_url": f"{settings.FRONTEND_URL}/tickets/{iid}",
+    }
+    subject, body = render_assigned(ticket_ctx, assignee_name="", actor_name=actor_name_e)
     send_email(assignee_email, subject, body)
 
 
@@ -425,12 +421,13 @@ def notify_sla_warning(ticket_iid: int, project_id: str, minutes_left: int) -> N
     if not recipients:
         return
 
-    subject = f"[ITSM] ⏰ SLA 임박 경고 - 티켓 #{ticket_iid} ({minutes_left}분 남음)"
-    body = f"""
-    <h2>SLA 기한이 임박했습니다</h2>
-    <p>티켓 #{ticket_iid} (프로젝트 {project_id})의 SLA 기한까지 <b>{minutes_left}분</b> 남았습니다.</p>
-    <p>즉시 처리가 필요합니다.</p>
-    """
+    from .email_templates import render_sla_warning
+    ticket_ctx = {
+        "iid": ticket_iid,
+        "project_id": project_id,
+        "portal_url": f"{settings.FRONTEND_URL}/tickets/{ticket_iid}",
+    }
+    subject, body = render_sla_warning(ticket_ctx, remaining_minutes=minutes_left)
     send_email(recipients, subject, body)
     send_telegram(
         f"⏰ <b>SLA 임박 경고</b>\n"
@@ -449,12 +446,13 @@ def notify_sla_breach(ticket_iid: int, project_id: str, assignee_email: Optional
     if not recipients:
         return
 
-    subject = f"[ITSM] ⚠️ SLA 초과 - 티켓 #{ticket_iid}"
-    body = f"""
-    <h2>SLA 기한이 초과됐습니다</h2>
-    <p>티켓 #{ticket_iid} (프로젝트 {project_id})의 SLA 기한이 지났습니다.</p>
-    <p>즉시 처리가 필요합니다.</p>
-    """
+    from .email_templates import render_sla_breached
+    ticket_ctx = {
+        "iid": ticket_iid,
+        "project_id": project_id,
+        "portal_url": f"{settings.FRONTEND_URL}/tickets/{ticket_iid}",
+    }
+    subject, body = render_sla_breached(ticket_ctx)
     send_email(recipients, subject, body)
     send_telegram(
         f"⚠️ <b>SLA 초과 경고</b>\n"
@@ -564,19 +562,14 @@ def notify_approval_requested(
     if not settings.NOTIFICATION_ENABLED or not settings.SMTP_HOST:
         return
 
-    subject = f"[ITSM] 티켓 #{ticket_iid} 승인 요청"
     frontend = settings.FRONTEND_URL.rstrip("/")
-    body = f"""\
-안녕하세요 {approver_name}님,
-
-{requester_name}님이 티켓 #{ticket_iid}에 대한 승인을 요청했습니다.
-
-아래 링크에서 요청 내용을 확인하고 승인 또는 반려해 주세요:
-{frontend}/tickets/{ticket_iid}
-
-감사합니다.
-ITSM 시스템
-"""
+    from .email_templates import render_approval_requested
+    ticket_ctx = {
+        "iid": ticket_iid,
+        "title": "",
+        "portal_url": f"{frontend}/tickets/{ticket_iid}",
+    }
+    subject, body = render_approval_requested(ticket_ctx, approver_name=approver_name, requester_name=requester_name)
     try:
         _send_email(approver_email, subject, body)
     except Exception as e:
@@ -596,21 +589,20 @@ def notify_approval_decided(
     if not settings.NOTIFICATION_ENABLED or not settings.SMTP_HOST:
         return
 
-    decision_ko = "승인" if decision == "approved" else "반려"
-    subject = f"[ITSM] 티켓 #{ticket_iid} {decision_ko} 완료"
     frontend = settings.FRONTEND_URL.rstrip("/")
-    reason_line = f"\n사유: {reason}" if reason else ""
-    body = f"""\
-안녕하세요 {requester_name}님,
-
-티켓 #{ticket_iid}이(가) {decision_ko}되었습니다.
-처리자: {decider_name}{reason_line}
-
-티켓 확인: {frontend}/tickets/{ticket_iid}
-
-감사합니다.
-ITSM 시스템
-"""
+    from .email_templates import render_approval_decided
+    ticket_ctx = {
+        "iid": ticket_iid,
+        "title": "",
+        "portal_url": f"{frontend}/tickets/{ticket_iid}",
+    }
+    subject, body = render_approval_decided(
+        ticket_ctx,
+        requester_name=requester_name,
+        decision=decision,
+        decider_name=decider_name,
+        reason=reason,
+    )
     try:
         _send_email(requester_email, subject, body)
     except Exception as e:

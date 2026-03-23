@@ -991,3 +991,64 @@ def update_ticket_sla(
     record.breached = False
     db.commit()
     return _sla_to_dict(record)
+
+
+@crud_router.get("/{iid}/sla-prediction")
+def get_sla_prediction(
+    iid: int,
+    project_id: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_developer),
+):
+    """과거 데이터 기반 티켓 해결 시간 예측 (중위수 통계 모델).
+
+    오픈 티켓에서만 유의미하나, 종료된 티켓에도 응답은 반환한다.
+    과거 데이터가 없어도 priority 기본값으로 응답한다.
+    """
+    from ...sla_prediction import predict_resolution as _predict
+    from datetime import timezone as _tz
+
+    pid = project_id or get_settings().GITLAB_PROJECT_ID
+
+    try:
+        issue = gitlab_client.get_issue(iid, project_id=pid)
+    except Exception as e:
+        logger.error("Failed to fetch issue #%s for SLA prediction: %s", iid, e)
+        raise HTTPException(status_code=502, detail="티켓 정보를 불러오는 중 오류가 발생했습니다.")
+
+    labels = issue.get("labels", [])
+    priority = "medium"
+    category = None
+    for label in labels:
+        if label.startswith("prio::"):
+            priority = label.removeprefix("prio::")
+        elif label.startswith("category::"):
+            category = label.removeprefix("category::")
+
+    assignee_id: Optional[int] = None
+    assignees = issue.get("assignees") or []
+    if assignees:
+        assignee_id = assignees[0].get("id")
+
+    created_at_str = issue.get("created_at", "")
+    try:
+        from datetime import datetime as _dt
+        created_at = _dt.fromisoformat(created_at_str.replace("Z", "+00:00"))
+    except Exception:
+        created_at = _dt.now(_tz.utc)
+
+    try:
+        result = _predict(
+            db=db,
+            iid=iid,
+            project_id=pid,
+            priority=priority,
+            created_at=created_at,
+            category=category,
+            assignee_id=assignee_id,
+        )
+    except Exception as e:
+        logger.error("SLA prediction failed for ticket #%s: %s", iid, e)
+        raise HTTPException(status_code=500, detail="SLA 예측 중 오류가 발생했습니다.")
+
+    return result

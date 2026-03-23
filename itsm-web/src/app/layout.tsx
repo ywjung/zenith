@@ -5,10 +5,12 @@ import { AuthProvider } from '@/context/AuthContext'
 import { ServiceTypesProvider } from '@/context/ServiceTypesContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { RoleLabelsProvider } from '@/context/RoleLabelsContext'
+import { IntlProvider } from '@/context/IntlContext'
 import Header from '@/components/Header'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import KeyboardShortcuts from '@/components/KeyboardShortcuts'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
+import PWAInstallPrompt from '@/components/PWAInstallPrompt'
 
 export const metadata: Metadata = {
   title: 'ZENITH',
@@ -16,13 +18,13 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
-    title: 'ZENITH ITSM',
+    statusBarStyle: 'black-translucent',
+    title: 'ZENITH',
   },
   icons: {
     icon: [
       { url: '/icon', type: 'image/png', sizes: '32x32' },
-      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon.svg', type: 'image/svg+xml' },
     ],
     shortcut: '/icon',
     apple: '/icons/icon-192.png',
@@ -42,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200">
         <ThemeProvider>
+        <IntlProvider>
         <AuthProvider>
           <RoleLabelsProvider>
           <ServiceTypesProvider>
@@ -54,10 +57,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               ZENITH · IT 서비스 관리 플랫폼
             </footer>
             <KeyboardShortcuts />
+            <PWAInstallPrompt />
             <WebVitalsReporter />
           </ServiceTypesProvider>
           </RoleLabelsProvider>
         </AuthProvider>
+        </IntlProvider>
         </ThemeProvider>
       </body>
     </html>

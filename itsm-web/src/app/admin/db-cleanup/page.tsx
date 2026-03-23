@@ -1,135 +1,447 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { API_BASE } from '@/lib/constants'
+
+interface PreviewData {
+  old_audit_logs: number
+  orphan_notifications: number
+  old_kb_revisions: number
+  policy: {
+    audit_log_retention_days: number
+    notification_retention_days: number
+    kb_revision_keep_count: number
+  }
+}
+
+interface CleanupResult {
+  deleted: number
+  duration_ms: number
+}
+
+interface HistoryEntry {
+  timestamp: string
+  label: string
+  deleted?: number
+  duration_ms: number
+  error?: string
+}
 
 async function apiFetch<T = unknown>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    ...opts,
+  const res = await fetch(`${API_BASE}${path}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(opts?.headers ?? {}) },
+    ...opts,
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail ?? `HTTP ${res.status}`)
+    throw new Error((err as { detail?: string }).detail ?? `HTTP ${res.status}`)
   }
-  return res.json()
+  return res.json() as Promise<T>
 }
 
-interface CleanupStats {
-  expired_refresh_tokens: number
-  expired_guest_tokens: number
-  old_read_notifications: number
-  old_audit_logs: number
-  policy: {
-    refresh_token_ttl_days: string
-    guest_token_ttl_days: string
-    notification_retention_days: number
-    audit_log_retention_days: number
-    schedule: string
-  }
+function formatNumber(n: number) {
+  return n.toLocaleString('ko-KR')
+}
+
+function formatDuration(ms: number) {
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleString('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+interface ConfirmModal {
+  open: boolean
+  title: string
+  description: string
+  onConfirm: () => void
 }
 
 export default function DbCleanupPage() {
-  const [stats, setStats] = useState<CleanupStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [running, setRunning] = useState(false)
-  const [lastRun, setLastRun] = useState<string | null>(null)
+  const [preview, setPreview] = useState<PreviewData | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(true)
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
-  async function loadStats() {
+  const [runningKey, setRunningKey] = useState<string | null>(null)
+  const [vacuumRunning, setVacuumRunning] = useState(false)
+
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+
+  const [modal, setModal] = useState<ConfirmModal>({
+    open: false,
+    title: '',
+    description: '',
+    onConfirm: () => {},
+  })
+
+  async function loadPreview() {
+    setPreviewLoading(true)
+    setPreviewError(null)
     try {
-      const data = await apiFetch<CleanupStats>('/admin/db-cleanup/stats')
-      setStats(data)
-    } catch {
-      // ignore
+      const data = await apiFetch<PreviewData>('/admin/db-cleanup/preview')
+      setPreview(data)
+    } catch (e: unknown) {
+      setPreviewError(e instanceof Error ? e.message : '불러오기 실패')
     } finally {
-      setLoading(false)
+      setPreviewLoading(false)
     }
   }
 
-  useEffect(() => { loadStats() }, [])
+  useEffect(() => {
+    loadPreview()
+  }, [])
 
-  async function handleRun() {
-    if (!confirm('만료 데이터 정리를 즉시 실행하시겠습니까?')) return
-    setRunning(true)
+  function openConfirm(title: string, description: string, onConfirm: () => void) {
+    setModal({ open: true, title, description, onConfirm })
+  }
+
+  function closeModal() {
+    setModal(prev => ({ ...prev, open: false }))
+  }
+
+  async function runCleanup(key: string, endpoint: string, label: string) {
+    setRunningKey(key)
+    const started = Date.now()
     try {
-      await apiFetch('/admin/db-cleanup/run', { method: 'POST' })
-      setLastRun(new Date().toLocaleString('ko-KR'))
-      await loadStats()
-    } catch (e) {
-      alert(e instanceof Error ? e.message : '실행 실패')
+      const result = await apiFetch<CleanupResult>(`/admin/db-cleanup/${endpoint}`, { method: 'POST' })
+      setHistory(prev => [
+        {
+          timestamp: new Date().toISOString(),
+          label,
+          deleted: result.deleted,
+          duration_ms: result.duration_ms,
+        },
+        ...prev,
+      ])
+      await loadPreview()
+    } catch (e: unknown) {
+      setHistory(prev => [
+        {
+          timestamp: new Date().toISOString(),
+          label,
+          duration_ms: Date.now() - started,
+          error: e instanceof Error ? e.message : '실행 실패',
+        },
+        ...prev,
+      ])
     } finally {
-      setRunning(false)
+      setRunningKey(null)
     }
   }
 
-  const cards = stats ? [
-    { label: '만료된 RefreshToken', value: stats.expired_refresh_tokens, desc: 'expires_at 초과' },
-    { label: '만료된 GuestToken', value: stats.expired_guest_tokens, desc: 'expires_at 초과' },
-    { label: '오래된 읽음 알림', value: stats.old_read_notifications, desc: `${stats.policy.notification_retention_days}일 초과` },
-    { label: '오래된 감사 로그', value: stats.old_audit_logs, desc: `${stats.policy.audit_log_retention_days}일 초과` },
-  ] : []
+  async function runVacuum() {
+    setVacuumRunning(true)
+    const started = Date.now()
+    try {
+      const result = await apiFetch<{ duration_ms: number }>('/admin/db-cleanup/vacuum', { method: 'POST' })
+      setHistory(prev => [
+        {
+          timestamp: new Date().toISOString(),
+          label: 'VACUUM ANALYZE',
+          duration_ms: result.duration_ms,
+        },
+        ...prev,
+      ])
+    } catch (e: unknown) {
+      setHistory(prev => [
+        {
+          timestamp: new Date().toISOString(),
+          label: 'VACUUM ANALYZE',
+          duration_ms: Date.now() - started,
+          error: e instanceof Error ? e.message : '실행 실패',
+        },
+        ...prev,
+      ])
+    } finally {
+      setVacuumRunning(false)
+    }
+  }
+
+  const cleanupTasks = preview
+    ? [
+        {
+          key: 'audit-logs',
+          endpoint: 'audit-logs',
+          label: '감사 로그 정리',
+          desc: `${preview.policy.audit_log_retention_days}일 이상 경과한 감사 로그를 삭제합니다.`,
+          count: preview.old_audit_logs,
+          countLabel: `감사 로그 (${preview.policy.audit_log_retention_days}일+)`,
+          icon: '🔍',
+          confirmDesc: `${preview.policy.audit_log_retention_days}일 이상된 감사 로그 ${formatNumber(preview.old_audit_logs)}건을 영구 삭제합니다.`,
+        },
+        {
+          key: 'notifications',
+          endpoint: 'notifications',
+          label: '읽은 알림 정리',
+          desc: `읽음 처리된 알림 중 ${preview.policy.notification_retention_days}일 이상된 항목을 삭제합니다.`,
+          count: preview.orphan_notifications,
+          countLabel: `읽은 알림 (${preview.policy.notification_retention_days}일+)`,
+          icon: '🔔',
+          confirmDesc: `${preview.policy.notification_retention_days}일 이상된 읽음 알림 ${formatNumber(preview.orphan_notifications)}건을 영구 삭제합니다.`,
+        },
+        {
+          key: 'kb-revisions',
+          endpoint: 'kb-revisions',
+          label: 'KB 구버전 정리',
+          desc: `KB 문서당 최신 ${preview.policy.kb_revision_keep_count}개 버전만 유지하고 나머지를 삭제합니다.`,
+          count: preview.old_kb_revisions,
+          countLabel: `초과 KB 버전 (최신 ${preview.policy.kb_revision_keep_count}개 초과)`,
+          icon: '📚',
+          confirmDesc: `KB 문서당 최신 ${preview.policy.kb_revision_keep_count}개 이외의 구버전 ${formatNumber(preview.old_kb_revisions)}건을 영구 삭제합니다.`,
+        },
+      ]
+    : []
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">DB 보존 정책 관리</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            만료된 토큰, 오래된 알림·감사로그를 자동으로 정리합니다.
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">DB 정리 자동화</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            오래된 로그·알림·KB 버전을 선택적으로 정리하고 DB를 최적화합니다.
           </p>
         </div>
         <button
-          onClick={handleRun}
-          disabled={running}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
+          onClick={loadPreview}
+          disabled={previewLoading}
+          className="text-sm border dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
         >
-          {running ? '실행 중…' : '지금 정리 실행'}
+          🔄 새로고침
         </button>
       </div>
 
-      {lastRun && (
-        <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 rounded-lg text-sm text-green-700 dark:text-green-400">
-          ✅ {lastRun}에 정리 작업을 큐에 등록했습니다. 백그라운드에서 실행됩니다.
+      {/* 오류 */}
+      {previewError && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg p-3 text-sm">
+          미리보기 불러오기 실패: {previewError}
         </div>
       )}
 
-      {loading ? (
-        <div className="text-center py-12 text-gray-400">로딩 중…</div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            {cards.map((c) => (
-              <div key={c.label} className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{c.label}</p>
-                <p className={`text-3xl font-bold ${c.value > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'}`}>
-                  {c.value.toLocaleString()}
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{c.desc}</p>
+      {/* 미리보기 섹션 */}
+      <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-5 space-y-3">
+        <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">정리 대상 현황</h3>
+        {previewLoading ? (
+          <div className="grid grid-cols-3 gap-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="animate-pulse">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-1" />
+                <div className="h-7 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
               </div>
             ))}
           </div>
-
-          {stats && (
-            <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-6">
-              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">보존 정책</h2>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-gray-500 dark:text-gray-400 border-b dark:border-gray-700">
-                    <th className="text-left pb-2">대상</th>
-                    <th className="text-left pb-2">정책</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y dark:divide-gray-700">
-                  <tr><td className="py-2 text-gray-700 dark:text-gray-300">RefreshToken</td><td className="py-2 text-gray-500">{stats.policy.refresh_token_ttl_days}</td></tr>
-                  <tr><td className="py-2 text-gray-700 dark:text-gray-300">GuestToken</td><td className="py-2 text-gray-500">{stats.policy.guest_token_ttl_days}</td></tr>
-                  <tr><td className="py-2 text-gray-700 dark:text-gray-300">읽음 알림</td><td className="py-2 text-gray-500">{stats.policy.notification_retention_days}일 이상 경과 시 삭제</td></tr>
-                  <tr><td className="py-2 text-gray-700 dark:text-gray-300">감사 로그</td><td className="py-2 text-gray-500">{stats.policy.audit_log_retention_days}일 이상 경과 시 삭제</td></tr>
-                  <tr><td className="py-2 text-gray-700 dark:text-gray-300">자동 실행</td><td className="py-2 text-gray-500">{stats.policy.schedule}</td></tr>
-                </tbody>
-              </table>
+        ) : preview ? (
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+                감사 로그 ({preview.policy.audit_log_retention_days}일+)
+              </div>
+              <div className={`text-2xl font-bold ${preview.old_audit_logs > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                {formatNumber(preview.old_audit_logs)}건
+              </div>
             </div>
-          )}
-        </>
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+                읽은 알림 ({preview.policy.notification_retention_days}일+)
+              </div>
+              <div className={`text-2xl font-bold ${preview.orphan_notifications > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                {formatNumber(preview.orphan_notifications)}건
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+                초과 KB 버전 (최신 {preview.policy.kb_revision_keep_count}개 초과)
+              </div>
+              <div className={`text-2xl font-bold ${preview.old_kb_revisions > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                {formatNumber(preview.old_kb_revisions)}건
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* 정리 작업 카드 */}
+      <div className="space-y-3">
+        {previewLoading
+          ? [1, 2, 3].map(i => (
+              <div
+                key={i}
+                className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-5 animate-pulse"
+              >
+                <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-2" />
+                <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-2/3" />
+              </div>
+            ))
+          : cleanupTasks.map(task => (
+              <div
+                key={task.key}
+                className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-5"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="text-xl shrink-0 mt-0.5">{task.icon}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                          {task.label}
+                        </span>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            task.count > 0
+                              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                          }`}
+                        >
+                          {task.countLabel}: {formatNumber(task.count)}건
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{task.desc}</p>
+                    </div>
+                  </div>
+                  <button
+                    disabled={runningKey !== null || task.count === 0}
+                    onClick={() =>
+                      openConfirm(task.label, task.confirmDesc, () =>
+                        runCleanup(task.key, task.endpoint, task.label)
+                      )
+                    }
+                    className={`shrink-0 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                      task.count === 0
+                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                        : runningKey === task.key
+                          ? 'bg-red-400 text-white cursor-wait'
+                          : 'bg-red-600 hover:bg-red-700 text-white disabled:opacity-50'
+                    }`}
+                  >
+                    {runningKey === task.key ? '실행 중…' : '실행'}
+                  </button>
+                </div>
+              </div>
+            ))}
+      </div>
+
+      {/* VACUUM ANALYZE 카드 */}
+      <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-5 space-y-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="text-xl shrink-0 mt-0.5">🛠️</span>
+            <div>
+              <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">DB 최적화 (VACUUM ANALYZE)</div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                테이블 통계를 갱신하고 불필요한 페이지를 회수합니다. 정리 작업 후 실행하면 효과적입니다.
+              </p>
+            </div>
+          </div>
+          <button
+            disabled={vacuumRunning || runningKey !== null}
+            onClick={() =>
+              openConfirm(
+                'VACUUM ANALYZE 실행',
+                'PostgreSQL VACUUM ANALYZE를 실행합니다. 완료까지 수 초~수 분이 소요될 수 있습니다.',
+                runVacuum
+              )
+            }
+            className="shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white transition-colors"
+          >
+            {vacuumRunning ? (
+              <span className="flex items-center gap-1.5">
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                실행 중…
+              </span>
+            ) : (
+              'DB 최적화 실행'
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* 실행 이력 */}
+      {history.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-5 space-y-3">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">실행 이력 (현재 세션)</h3>
+          <div className="space-y-2">
+            {history.map((entry, idx) => (
+              <div
+                key={idx}
+                className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg ${
+                  entry.error
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                    : 'bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                <span className="shrink-0">{entry.error ? '❌' : '✅'}</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
+                  {formatTime(entry.timestamp)}
+                </span>
+                <span className="font-medium shrink-0">{entry.label}</span>
+                {entry.error ? (
+                  <span className="text-red-600 dark:text-red-400 text-xs truncate">{entry.error}</span>
+                ) : (
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">
+                    {entry.deleted !== undefined
+                      ? `${formatNumber(entry.deleted)}건 삭제`
+                      : '완료'}{' '}
+                    ({formatDuration(entry.duration_ms)})
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 확인 모달 */}
+      {modal.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-modal-title"
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4">
+            <div>
+              <h3
+                id="confirm-modal-title"
+                className="text-base font-bold text-gray-900 dark:text-gray-100"
+              >
+                {modal.title}
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{modal.description}</p>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-2 font-medium">
+                이 작업은 되돌릴 수 없습니다.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={closeModal}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  closeModal()
+                  modal.onConfirm()
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              >
+                삭제 실행
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

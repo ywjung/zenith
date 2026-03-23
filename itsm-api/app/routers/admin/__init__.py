@@ -1526,10 +1526,14 @@ from .data_export import data_export_router
 from .escalation import escalation_router
 from .email_templates import email_templates_router
 from .business_hours import business_hours_router
+from .celery_monitor import celery_monitor_router
+from .db_cleanup import db_cleanup_router
 
 router.include_router(announcements_router)
 router.include_router(api_keys_router)
 router.include_router(data_export_router)
 router.include_router(escalation_router)
 router.include_router(email_templates_router)
+router.include_router(db_cleanup_router)
 router.include_router(business_hours_router)
+router.include_router(celery_monitor_router)

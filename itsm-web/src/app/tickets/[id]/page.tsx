@@ -3,9 +3,9 @@
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { fetchTicket, fetchComments, getMyRating, updateTicket, addComment, updateComment, deleteComment, deleteTicket, fetchProjectMembers, fetchMilestones, fetchTicketCustomFields, setTicketCustomFields, uploadFile, fetchTicketLinks, createTicketLink, deleteTicketLink, fetchTimeEntries, logTime, fetchDevProjects, fetchForwards, createForward, deleteForward, fetchTicketSLA, updateTicketSLA, fetchLinkedMRs, subscribeTicketEvents, fetchWatchers, watchTicket, unwatchTicket, fetchQuickReplies, suggestKBArticles } from '@/lib/api'
+import { fetchTicket, fetchComments, getMyRating, updateTicket, addComment, updateComment, deleteComment, deleteTicket, fetchProjectMembers, fetchMilestones, fetchTicketCustomFields, setTicketCustomFields, uploadFile, fetchTicketLinks, createTicketLink, deleteTicketLink, fetchTimeEntries, logTime, fetchDevProjects, fetchForwards, createForward, deleteForward, fetchTicketSLA, updateTicketSLA, fetchLinkedMRs, subscribeTicketEvents, fetchWatchers, watchTicket, unwatchTicket, fetchQuickReplies, suggestKBArticles, fetchSLAPrediction } from '@/lib/api'
 import type { QuickReply } from '@/lib/api'
-import type { Ticket, Comment, Rating, ProjectMember, Milestone, TicketCustomFieldValue, TicketLink, TimeEntry, DevProject, ProjectForward, ForwardsResponse, SLARecord, LinkedMR } from '@/types'
+import type { Ticket, Comment, Rating, ProjectMember, Milestone, TicketCustomFieldValue, TicketLink, TimeEntry, DevProject, ProjectForward, ForwardsResponse, SLARecord, LinkedMR, SLAPrediction } from '@/types'
 import { StatusBadge, PriorityBadge, CategoryBadge, SlaBadge } from '@/components/StatusBadge'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
@@ -18,6 +18,7 @@ import RichTextEditor from '@/components/RichTextEditor'
 import ResolutionNoteModal from '@/components/ResolutionNoteModal'
 import FilePreview from '@/components/FilePreview'
 import TimelineView from '@/components/TimelineView'
+import { useTicketWS } from '@/hooks/useTicketWS'
 
 function StarDisplay({ score }: { score: number }) {
   return (
@@ -840,6 +841,7 @@ function TicketDetailContent() {
   const projectId = searchParams.get('project_id') || undefined
   const { user, isDeveloper, isAgent, isAdmin } = useAuth()
   const { serviceTypes } = useServiceTypes()
+  const { viewers, typingUsers, sendTyping } = useTicketWS(iid)
 
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
@@ -893,6 +895,7 @@ function TicketDetailContent() {
   const [slaEditDate, setSlaEditDate] = useState('')
   const [slaSaving, setSlaSaving] = useState(false)
   const [slaError, setSlaError] = useState<string | null>(null)
+  const [slaPrediction, setSlaPrediction] = useState<SLAPrediction | null>(null)
 
   // Linked tickets state
   const [links, setLinks] = useState<TicketLink[]>([])
@@ -975,6 +978,10 @@ function TicketDetailContent() {
               const deadline = rec.sla_deadline?.split('T')[0]
               setSlaEditDate(deadline && deadline >= today ? deadline : today)
             }).catch(() => {})
+            // 오픈 티켓에서만 예측 요청 (closed/resolved 제외)
+            if (t.state !== 'closed') {
+              fetchSLAPrediction(iid, t.project_id).then(setSlaPrediction).catch(() => {})
+            }
           }
           if (isAgent) {
             fetchDevProjects().then(setDevProjects).catch(() => {})
@@ -2014,11 +2021,21 @@ function TicketDetailContent() {
 
           <RichTextEditor
             value={newComment}
-            onChange={setNewComment}
+            onChange={(val) => {
+              setNewComment(val)
+              sendTyping(val.replace(/<[^>]*>/g, '').trim().length > 0)
+            }}
             placeholder="처리 내용을 입력하세요... (@로 멘션)"
             minHeight="100px"
             mentionUsers={members.map(m => ({ id: m.username, label: m.name }))}
           />
+
+          {/* 타이핑 인디케이터 */}
+          {typingUsers.length > 0 && (
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 italic">
+              {typingUsers.join(', ')} 님이 입력 중...
+            </p>
+          )}
 
           {/* 파일 첨부 */}
           <div className="mt-2">
@@ -2491,6 +2508,30 @@ function TicketDetailContent() {
                   <span className="text-green-700 dark:text-green-400">{new Date(slaRecord.resolved_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
                 </div>
               )}
+              {slaPrediction && !slaRecord.resolved_at && (
+                <div className="flex justify-between items-start pt-1 border-t dark:border-gray-700">
+                  <span className="text-gray-500 dark:text-gray-400">예상 해결</span>
+                  <div className="text-right">
+                    <span className="text-gray-700 dark:text-gray-300">
+                      {new Date(slaPrediction.predicted_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+                    </span>
+                    <span className={`ml-1 px-1 py-0.5 rounded text-[10px] ${
+                      slaPrediction.confidence === 'high'
+                        ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                        : slaPrediction.confidence === 'medium'
+                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'
+                        : slaPrediction.confidence === 'low'
+                        ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                    }`}>
+                      {slaPrediction.confidence === 'high' ? '높은 신뢰도'
+                        : slaPrediction.confidence === 'medium' ? '중간 신뢰도'
+                        : slaPrediction.confidence === 'low' ? '낮은 신뢰도'
+                        : '기본값'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             {isAgent && (
               <div>
@@ -2948,6 +2989,29 @@ function TicketDetailContent() {
                 🗑️ 티켓 삭제
               </button>
             )}
+          </div>
+        )}
+
+        {/* 현재 접속자 */}
+        {viewers.length > 0 && (
+          <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+              현재 접속 중
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {viewers.map((v) => (
+                <div
+                  key={v.id}
+                  title={v.name}
+                  className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-semibold uppercase shrink-0"
+                >
+                  {v.name.charAt(0)}
+                </div>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
+              {viewers.map((v) => v.name).join(', ')}
+            </p>
           </div>
         )}
 

@@ -191,6 +191,14 @@ export interface SLARecord {
   total_paused_seconds: number
 }
 
+export interface SLAPrediction {
+  predicted_hours: number
+  predicted_at: string
+  confidence: 'high' | 'medium' | 'low' | 'default'
+  sample_count: number
+  basis: string
+}
+
 export interface NotificationItem {
   id: number
   title: string

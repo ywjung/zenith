@@ -16,11 +16,13 @@ import { StatusBadge, PriorityBadge, CategoryBadge, SlaBadge } from '@/component
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
+import { useTranslations } from 'next-intl'
 
 
 function HomeContent() {
   const { isAgent, user } = useAuth()
   const { serviceTypes, getLabel, getEmoji } = useServiceTypes()
+  const t = useTranslations()
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -343,21 +345,26 @@ function HomeContent() {
 
   const hasActiveFilters = !!(category || priority || sla || search || selectedRequester || fromDate || toDate || (state && state !== 'all'))
 
-  const PRIORITY_LABEL: Record<string, string> = { critical: '긴급', high: '높음', medium: '보통', low: '낮음' }
+  const PRIORITY_LABEL: Record<string, string> = {
+    critical: t('ticket.priority.critical'),
+    high:     t('ticket.priority.high'),
+    medium:   t('ticket.priority.medium'),
+    low:      t('ticket.priority.low'),
+  }
   const SLA_LABEL: Record<string, string> = { over: 'SLA 초과', imminent: 'SLA 임박', warning: 'SLA 주의', good: 'SLA 여유' }
 
   // Stat tabs config
   const statTabs = [
-    { key: 'all',               label: '전체',        count: stats?.all ?? total,            ring: 'ring-gray-400',   active: 'bg-gray-100 border-gray-400',    num: 'text-gray-800'   },
-    { key: 'open',              label: '접수됨',      count: stats?.open ?? 0,               ring: 'ring-yellow-400', active: 'bg-yellow-50 border-yellow-400', num: 'text-yellow-700' },
-    { key: 'approved',          label: '승인완료',    count: stats?.approved ?? 0,           ring: 'ring-teal-400',   active: 'bg-teal-50 border-teal-400',     num: 'text-teal-700'   },
-    { key: 'in_progress',       label: '처리중',      count: stats?.in_progress ?? 0,        ring: 'ring-blue-400',   active: 'bg-blue-50 border-blue-400',     num: 'text-blue-700'   },
-    { key: 'waiting',           label: '대기중',      count: stats?.waiting ?? 0,            ring: 'ring-orange-400', active: 'bg-orange-50 border-orange-400', num: 'text-orange-700' },
-    { key: 'resolved',          label: '처리완료',    count: stats?.resolved ?? 0,           ring: 'ring-purple-400', active: 'bg-purple-50 border-purple-400', num: 'text-purple-700' },
-    { key: 'testing',           label: '테스트중',    count: stats?.testing ?? 0,            ring: 'ring-violet-400', active: 'bg-violet-50 border-violet-400', num: 'text-violet-700' },
-    { key: 'ready_for_release', label: '운영배포전',  count: stats?.ready_for_release ?? 0,  ring: 'ring-amber-400',  active: 'bg-amber-50 border-amber-400',   num: 'text-amber-700'  },
-    { key: 'released',          label: '운영반영완료', count: stats?.released ?? 0,          ring: 'ring-indigo-400', active: 'bg-indigo-50 border-indigo-400', num: 'text-indigo-700' },
-    { key: 'closed',            label: '종료',        count: stats?.closed ?? 0,             ring: 'ring-green-400',  active: 'bg-green-50 border-green-400',   num: 'text-green-700'  },
+    { key: 'all',               label: t('ticket.status.all'),               count: stats?.all ?? total,            ring: 'ring-gray-400',   active: 'bg-gray-100 border-gray-400',    num: 'text-gray-800'   },
+    { key: 'open',              label: t('ticket.status.open'),              count: stats?.open ?? 0,               ring: 'ring-yellow-400', active: 'bg-yellow-50 border-yellow-400', num: 'text-yellow-700' },
+    { key: 'approved',          label: '승인완료',                           count: stats?.approved ?? 0,           ring: 'ring-teal-400',   active: 'bg-teal-50 border-teal-400',     num: 'text-teal-700'   },
+    { key: 'in_progress',       label: t('ticket.status.in_progress'),       count: stats?.in_progress ?? 0,        ring: 'ring-blue-400',   active: 'bg-blue-50 border-blue-400',     num: 'text-blue-700'   },
+    { key: 'waiting',           label: t('ticket.status.waiting'),           count: stats?.waiting ?? 0,            ring: 'ring-orange-400', active: 'bg-orange-50 border-orange-400', num: 'text-orange-700' },
+    { key: 'resolved',          label: t('ticket.status.resolved'),          count: stats?.resolved ?? 0,           ring: 'ring-purple-400', active: 'bg-purple-50 border-purple-400', num: 'text-purple-700' },
+    { key: 'testing',           label: t('ticket.status.testing'),           count: stats?.testing ?? 0,            ring: 'ring-violet-400', active: 'bg-violet-50 border-violet-400', num: 'text-violet-700' },
+    { key: 'ready_for_release', label: t('ticket.status.ready_for_release'), count: stats?.ready_for_release ?? 0,  ring: 'ring-amber-400',  active: 'bg-amber-50 border-amber-400',   num: 'text-amber-700'  },
+    { key: 'released',          label: '운영반영완료',                       count: stats?.released ?? 0,           ring: 'ring-indigo-400', active: 'bg-indigo-50 border-indigo-400', num: 'text-indigo-700' },
+    { key: 'closed',            label: t('ticket.status.closed'),            count: stats?.closed ?? 0,             ring: 'ring-green-400',  active: 'bg-green-50 border-green-400',   num: 'text-green-700'  },
   ]
 
   const slaOver = stats?.sla_over ?? 0

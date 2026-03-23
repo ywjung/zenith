@@ -1,12 +1,12 @@
 {
   "name": "ZENITH ITSM",
   "short_name": "ZENITH",
-  "description": "GitLab 기반 IT 서비스 관리 포털",
+  "description": "IT 서비스 관리 플랫폼",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1d4ed8",
+  "background_color": "#0f172a",
   "theme_color": "#1d4ed8",
-  "orientation": "any",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -25,10 +25,10 @@
     {
       "name": "새 티켓",
       "url": "/tickets/new",
-      "description": "새 지원 티켓 등록"
+      "description": "IT 지원 요청 등록"
     },
     {
-      "name": "티켓 목록",
+      "name": "내 티켓",
       "url": "/",
       "description": "티켓 목록 보기"
     }

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { formatName } from '@/lib/utils'
@@ -12,6 +13,7 @@ import LocaleSwitcher from './LocaleSwitcher'
 export default function Header() {
   const { user, logout, isAgent, isAdmin } = useAuth()
   const { theme, setTheme } = useTheme()
+  const t = useTranslations()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   function cycleTheme() {
@@ -42,12 +44,12 @@ export default function Header() {
         <nav className="hidden md:flex items-center gap-3 text-sm flex-shrink-0">
           {user ? (
             <>
-              <Link href="/" className="hover:underline opacity-90 whitespace-nowrap">티켓</Link>
-              <Link href="/kb" className="hover:underline opacity-90 whitespace-nowrap">지식베이스</Link>
-              <Link href="/kanban" className="hover:underline opacity-90 whitespace-nowrap">칸반</Link>
-              {isAgent && <Link href="/reports" className="hover:underline opacity-90 whitespace-nowrap">리포트</Link>}
-              {isAgent && <Link href="/admin" className="hover:underline opacity-90 whitespace-nowrap">관리</Link>}
-              <Link href="/help" className="hover:underline opacity-90 whitespace-nowrap">도움말</Link>
+              <Link href="/" className="hover:underline opacity-90 whitespace-nowrap">{t('nav.tickets')}</Link>
+              <Link href="/kb" className="hover:underline opacity-90 whitespace-nowrap">{t('nav.kb')}</Link>
+              <Link href="/kanban" className="hover:underline opacity-90 whitespace-nowrap">{t('nav.kanban')}</Link>
+              {isAgent && <Link href="/reports" className="hover:underline opacity-90 whitespace-nowrap">{t('nav.reports')}</Link>}
+              {isAgent && <Link href="/admin" className="hover:underline opacity-90 whitespace-nowrap">{t('nav.admin')}</Link>}
+              <Link href="/help" className="hover:underline opacity-90 whitespace-nowrap">{t('nav.help')}</Link>
               {process.env.NEXT_PUBLIC_GITLAB_URL && (
                 <a
                   href={process.env.NEXT_PUBLIC_GITLAB_URL}
@@ -58,7 +60,7 @@ export default function Header() {
               <Link
                 href="/tickets/new"
                 className="bg-white dark:bg-gray-700 text-blue-700 dark:text-gray-100 px-3 py-1.5 rounded-md font-semibold hover:bg-blue-50 dark:hover:bg-gray-600 transition-colors whitespace-nowrap text-xs"
-              >+ 새 티켓</Link>
+              >+ {t('ticket.new')}</Link>
               <NotificationBell />
               <button
                 onClick={cycleTheme}
@@ -85,7 +87,7 @@ export default function Header() {
                     className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
                     <span>👤</span>
-                    <span>내 프로필</span>
+                    <span>{t('nav.profile')}</span>
                   </Link>
                   <Link
                     href="/profile/sessions"
@@ -100,7 +102,7 @@ export default function Header() {
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                   >
                     <span>↩</span>
-                    <span>로그아웃</span>
+                    <span>{t('nav.logout')}</span>
                   </button>
                 </div>
               </div>
@@ -134,16 +136,16 @@ export default function Header() {
       {/* 모바일 드롭다운 메뉴 */}
       {mobileMenuOpen && user && (
         <div className="md:hidden bg-blue-800 dark:bg-gray-900 border-t border-blue-600 dark:border-gray-800 px-4 py-3 space-y-2 text-sm">
-          <Link href="/" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🎫 티켓 목록</Link>
-          <Link href="/tickets/new" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>+ 새 티켓 등록</Link>
-          <Link href="/kb" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📚 지식베이스</Link>
-          <Link href="/kanban" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🗂 칸반</Link>
-          {isAgent && <Link href="/reports" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📊 리포트</Link>}
-          {isAgent && <Link href="/admin" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>⚙️ 관리</Link>}
-          <Link href="/help" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>❓ 도움말</Link>
+          <Link href="/" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🎫 {t('nav.tickets')}</Link>
+          <Link href="/tickets/new" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>+ {t('ticket.new')}</Link>
+          <Link href="/kb" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📚 {t('nav.kb')}</Link>
+          <Link href="/kanban" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🗂 {t('nav.kanban')}</Link>
+          {isAgent && <Link href="/reports" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📊 {t('nav.reports')}</Link>}
+          {isAgent && <Link href="/admin" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>⚙️ {t('nav.admin')}</Link>}
+          <Link href="/help" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>❓ {t('nav.help')}</Link>
           <div className="border-t border-blue-600 dark:border-gray-700 pt-2 flex items-center justify-between">
             <span className="text-blue-200 dark:text-gray-400 text-xs">{user.name} ({user.role})</span>
-            <button onClick={logout} className="text-blue-300 dark:text-gray-400 hover:text-white dark:hover:text-gray-200 text-xs underline">로그아웃</button>
+            <button onClick={logout} className="text-blue-300 dark:text-gray-400 hover:text-white dark:hover:text-gray-200 text-xs underline">{t('nav.logout')}</button>
           </div>
         </div>
       )}

@@ -37,6 +37,7 @@
     "title": "Ticket",
     "new": "New Ticket",
     "status": {
+      "all": "All",
       "open": "Open",
       "in_progress": "In Progress",
       "testing": "Testing",

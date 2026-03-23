@@ -301,6 +301,11 @@ export function updateTicketSLA(iid: number, slaDueDate: string, projectId?: str
   })
 }
 
+export function fetchSLAPrediction(iid: number, projectId?: string): Promise<import('@/types').SLAPrediction> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<import('@/types').SLAPrediction>(`/tickets/${iid}/sla-prediction${qs}`)
+}
+
 export function bulkUpdateTickets(data: {
   iids: number[]
   project_id: string
@@ -829,5 +834,62 @@ export function fetchNotificationPrefs(): Promise<Record<string, { email: boolea
 
 export function updateNotificationPrefs(prefs: Record<string, { email: boolean; inapp: boolean }>): Promise<Record<string, { email: boolean; inapp: boolean }>> {
   return request('/notifications/prefs', { method: 'PUT', body: JSON.stringify(prefs) })
+}
+
+// ---------------------------------------------------------------------------
+// Celery 모니터링 (Flower API 프록시)
+// ---------------------------------------------------------------------------
+
+export interface CeleryWorker {
+  name: string
+  status: 'online' | 'offline'
+  active_tasks: number
+  reserved_tasks: number
+  processed: number
+  concurrency: number
+  prefetch_count: number
+  heartbeat_expires: number
+}
+
+export interface CeleryTask {
+  uuid: string
+  name: string
+  state: string
+  received: number | null
+  started: number | null
+  succeeded: number | null
+  failed: number | null
+  retried: number | null
+  runtime: number | null
+  worker: string
+  exception: string
+  traceback: string
+  args: string
+  kwargs: string
+}
+
+export interface CeleryFlowerStats {
+  workers: Array<{
+    name: string
+    status: 'online' | 'offline'
+    active_tasks: number
+    processed: number
+  }>
+  queues: Record<string, number>
+  total_active: number
+  total_processed: number
+  total_failed_recent: number
+}
+
+export function fetchCeleryFlowerStats(): Promise<CeleryFlowerStats> {
+  return request<CeleryFlowerStats>('/admin/celery/flower/stats')
+}
+
+export function fetchCeleryFlowerWorkers(): Promise<CeleryWorker[]> {
+  return request<CeleryWorker[]>('/admin/celery/flower/workers')
+}
+
+export function fetchCeleryFlowerTasks(state: string = 'ALL', limit: number = 20): Promise<CeleryTask[]> {
+  return request<CeleryTask[]>(`/admin/celery/flower/tasks?state=${state}&limit=${limit}`)
 }
 

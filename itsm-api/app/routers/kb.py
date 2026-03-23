@@ -528,6 +528,7 @@ async def upload_kb_attachment(
     request: Request,
     file: UploadFile = File(...),
     project_id: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
     _user: dict = Depends(require_pl),
 ):
     """KB 아티클용 파일 첨부 업로드.
@@ -541,8 +542,9 @@ async def upload_kb_attachment(
         ALLOWED_MIME_TYPES,
         _validate_magic_bytes,
         _strip_image_metadata,
-        _scan_with_clamav,
     )
+    from ..clamav import scan_bytes as _clam_scan
+    from ..audit import write_audit_log
     from .. import gitlab_client
 
     content = await file.read()
@@ -556,8 +558,19 @@ async def upload_kb_attachment(
     _validate_magic_bytes(content, mime)
     # 이미지 EXIF 메타데이터 제거
     content = _strip_image_metadata(content, mime)
-    # ClamAV 바이러스 스캔 (helpers에서 이미 import됨)
-    _scan_with_clamav(content, file.filename or "file")
+    # ClamAV 바이러스 스캔
+    fname = file.filename or "file"
+    is_safe, detail = _clam_scan(content, fname)
+    if not is_safe:
+        write_audit_log(
+            db, _user, "kb.upload.infected", "kb_file", fname,
+            new_value={"virus": detail, "filename": fname},
+            request=request,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=f"파일에서 악성코드가 감지되었습니다: {detail}",
+        )
 
     # MinIO 우선 업로드 시도, 미설정 또는 실패 시 GitLab 폴백
     from .. import storage as _storage

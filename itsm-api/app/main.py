@@ -806,3 +806,67 @@ def _check_label_drift() -> str:
         logger.warning("Label drift check error: %s", e)
         _label_drift_last_result = "check_failed"
         return _label_drift_last_result
+
+
+# ── WebSocket: 티켓 실시간 협업 ───────────────────────────────────────────────
+from fastapi import WebSocket, WebSocketDisconnect, Query as _WSQuery
+from .ws_manager import manager as _ws_manager
+
+
+@app.websocket("/ws/tickets/{ticket_iid}")
+async def ticket_ws(
+    websocket: WebSocket,
+    ticket_iid: str,
+    token: str = _WSQuery(..., description="JWT access token (itsm_token cookie value)"),
+):
+    """티켓 실시간 협업 WebSocket.
+
+    연결 시 token 쿼리 파라미터로 JWT를 검증하고,
+    접속자 목록(viewers)과 타이핑 인디케이터(typing)를 브로드캐스트한다.
+    """
+    from jose import jwt as _jose_jwt, JWTError as _JoseJWTError
+    from .config import get_settings as _ws_get_settings
+    from .auth import ALGORITHM as _JWT_ALGORITHM
+
+    _ws_settings = _ws_get_settings()
+
+    # JWT 검증
+    try:
+        payload = _jose_jwt.decode(token, _ws_settings.SECRET_KEY, algorithms=[_JWT_ALGORITHM])
+    except _JoseJWTError:
+        await websocket.close(code=1008)
+        return
+
+    user_id_raw = payload.get("sub", "")
+    username: str = payload.get("name") or payload.get("username") or user_id_raw
+    try:
+        user_id = int(user_id_raw)
+    except (ValueError, TypeError):
+        await websocket.close(code=1008)
+        return
+
+    await _ws_manager.connect(websocket, ticket_iid, user_id, username)
+    try:
+        while True:
+            try:
+                data = await websocket.receive_json()
+            except Exception:
+                break
+
+            msg_type = data.get("type")
+
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+
+            elif msg_type == "typing":
+                is_typing: bool = bool(data.get("is_typing", False))
+                await _ws_manager.broadcast_to_room(
+                    ticket_iid,
+                    {"type": "typing", "user": username, "is_typing": is_typing},
+                    exclude_ws=websocket,
+                )
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await _ws_manager.disconnect(websocket, ticket_iid)

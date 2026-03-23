@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#1d4ed8"/>
+  <!-- Star / zenith symbol -->
+  <polygon
+    points="256,80 290,190 410,190 315,258 348,368 256,300 164,368 197,258 102,190 222,190"
+    fill="#ffffff"
+    opacity="0.15"
+  />
+  <!-- Z letterform -->
+  <text
+    x="256"
+    y="330"
+    font-family="system-ui, -apple-system, sans-serif"
+    font-size="240"
+    font-weight="800"
+    text-anchor="middle"
+    fill="#ffffff"
+  >Z</text>
+</svg>

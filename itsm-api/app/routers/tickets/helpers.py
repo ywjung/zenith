@@ -256,35 +256,20 @@ def _strip_image_metadata(content: bytes, mime: str) -> bytes:
 
 
 def _scan_with_clamav(content: bytes, filename: str) -> None:
-    """ClamAV TCP 소켓으로 바이러스 스캔. 위협 탐지 시 400 raise."""
+    """ClamAV 바이러스 스캔. 위협 탐지 시 422 raise.
+
+    app.clamav.scan_bytes()에 위임한다. ClamAV 연결 불가 시 업로드를 허용한다 (fail-open).
+    """
     settings = get_settings()
     if not getattr(settings, "CLAMAV_ENABLED", True):
         return
-    strict_mode = getattr(settings, "CLAMAV_STRICT", True)
-    host = getattr(settings, "CLAMAV_HOST", "clamav")
-    port = int(getattr(settings, "CLAMAV_PORT", 3310))
-    try:
-        import socket as _sock
-        with _sock.create_connection((host, port), timeout=5) as s:
-            s.sendall(b"nINSTREAM\n")
-            chunk_size = len(content)
-            s.sendall(chunk_size.to_bytes(4, "big") + content)
-            s.sendall(b"\x00\x00\x00\x00")
-            response = s.recv(1024).decode("utf-8", errors="replace").strip()
-        if "OK" not in response:
-            logger.error("ClamAV threat detected in %s: %s", filename, response)
-            raise HTTPException(status_code=400, detail="파일에서 악성코드가 감지됐습니다.")
-        logger.debug("ClamAV scan passed: %s", filename)
-    except HTTPException:
-        raise
-    except Exception as e:
-        if strict_mode:
-            logger.error("ClamAV scan failed (fail-closed): %s — %s", filename, e)
-            raise HTTPException(
-                status_code=503,
-                detail="바이러스 스캔 서비스에 연결할 수 없습니다. 잠시 후 다시 시도하세요.",
-            )
-        logger.warning("ClamAV scan skipped (fail-open, CLAMAV_STRICT=false): %s — %s", filename, e)
+    from ...clamav import scan_bytes as _clam_scan
+    is_safe, detail = _clam_scan(content, filename)
+    if not is_safe:
+        raise HTTPException(
+            status_code=422,
+            detail=f"파일에서 악성코드가 감지되었습니다: {detail}",
+        )
 
 
 # ---------------------------------------------------------------------------

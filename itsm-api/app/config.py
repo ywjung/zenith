@@ -97,11 +97,11 @@ class Settings(BaseSettings):
 
     # ClamAV 바이러스 스캔
     CLAMAV_ENABLED: bool = True
-    CLAMAV_HOST: str = "clamav"
+    CLAMAV_HOST: str = "itsm-clamav-1"
     CLAMAV_PORT: int = 3310
-    # CLAMAV_STRICT=true (기본): ClamAV 연결 실패 시 업로드 거부 (fail-closed)
-    # CLAMAV_STRICT=false: 개발 환경에서 ClamAV 없이도 업로드 허용 (fail-open)
-    CLAMAV_STRICT: bool = True
+    # CLAMAV_STRICT는 레거시 설정 — clamav.py 모듈은 항상 fail-open으로 동작한다.
+    # helpers._scan_with_clamav 호환성을 위해 유지.
+    CLAMAV_STRICT: bool = False
 
     # MinIO / S3 호환 오브젝트 스토리지 — 설정 시 GitLab 업로드 대체
     # MINIO_ENDPOINT 미설정 시 기존 GitLab 업로드 방식 사용
