@@ -329,10 +329,10 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.retention.time=30d'
-      - '--web.external-url=/prometheus'
-      - '--web.route-prefix=/'
+      - '--web.external-url=http://localhost:${APP_PORT:-8111}/prometheus/'
+      - '--web.route-prefix=/prometheus/'
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/prometheus/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -348,7 +348,7 @@ services:
       # 운영 시 반드시 .env에 GRAFANA_PASSWORD=<strong_password> 설정 필요
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
       GF_AUTH_DISABLE_SIGNUP: "true"
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-%(protocol)s://%(domain)s/grafana}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:${APP_PORT:-8111}/grafana/}
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_AUTH_BASIC_ENABLED: "true"
       GF_AUTH_DISABLE_LOGIN_FORM: "false"
