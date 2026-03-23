@@ -935,7 +935,7 @@ cd itsm-web && npm audit
 | `evaluation_interval` | **60s** | — |
 | `tsdb.retention.time` | 30d | 30일 시계열 보관 |
 
-### 자동 프로비저닝 대시보드 (4개)
+### 자동 프로비저닝 대시보드 (5개)
 
 | 대시보드 | 내용 |
 |---------|------|
@@ -943,6 +943,7 @@ cd itsm-web && npm audit
 | **ZENITH 성능 분석** | P50/P90/P95/P99 레이턴시, 엔드포인트별 처리량, 요청·응답 크기 |
 | **ZENITH SLA 모니터링** | 가용성 %, Apdex 점수, 에러 버짓, P95 SLO 준수율, 장애 이력 |
 | **ZENITH 메뉴별 운영 현황** | 티켓·KB·칸반·리포트·관리 메뉴 기준 비즈니스 KPI (27개 커스텀 메트릭) |
+| **ZENITH 알림 & 인시던트** | Firing/Pending/Critical 알림 수, 알림 목록 테이블, 5xx 오류율, API 가용성 |
 
 ### 비즈니스 메트릭 (5분 주기 DB 집계)
 
@@ -1360,8 +1361,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev
 # 백엔드 통합 테스트 (pytest · SQLite 인메모리 + Redis Mock)
 cd itsm-api && pytest tests/ -v
 
-# 커버리지 포함 실행
-cd itsm-api && pytest tests/ --cov=app --cov-report=term-missing
+# 커버리지 포함 실행 (97%+, CI --cov-fail-under=95 강제)
+cd itsm-api && pytest tests/ --cov=app --cov-report=term-missing --cov-fail-under=95
 
 # E2E 테스트 (Playwright · 로컬 실행)
 # 1. 토큰 생성 및 Redis 등록
@@ -1628,11 +1629,13 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ## 20. 버전 이력
 
-### 현재 버전 (2026-03-21)
+### 현재 버전 (2026-03-23)
 
 - **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22 · Celery 5
 - **DB 마이그레이션**: 55단계 (0001~0055)
 - **API 엔드포인트**: 160개+
+- **테스트**: pytest 1,713개 통과 · 코드 커버리지 97%+ · CI --cov-fail-under=95 강제
+- **Grafana 대시보드**: 5개 자동 프로비저닝 (알림 & 인시던트 대시보드 추가)
 
 ### 마이그레이션 이력
 
@@ -1704,7 +1707,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **성능** | 타임라인 Redis 캐시 60초 → 1.5~4초 → ~17ms |
 | **병목 개선** | 티켓 목록 초기 로드: 272ms → 176ms (35% 단축) |
 | **네트워크** | nginx gzip 압축 (JSON 응답 90% 압축, 53 KB → 5 KB) |
-| **모니터링** | 비즈니스 KPI 27개 Prometheus 커스텀 메트릭 + Grafana 대시보드 4개 |
+| **모니터링** | 비즈니스 KPI 27개 Prometheus 커스텀 메트릭 + Grafana 대시보드 5개 + Rate Limit 메트릭 |
 | **보안 (4차 감사)** | XFF 신뢰 프록시 처리 · DOMPurify 적용 · SECRET_KEY 기본값 차단 · Sudo 재인증 범위 확대 · CSV Formula Injection 방어 · 감사로그 필터 allowlist · 이메일 XSS 이스케이프 · Webhook 제어문자 제거 · KB LIKE 메타문자 이스케이프 · 인앱 알림 링크 검증 · Prometheus/Grafana localhost 전용 · CORS 와일드카드 프로덕션 차단 · Refresh Token 30일→7일 · nginx Metrics Token envsubst |
 | **보안** | itsm-api 컨테이너 non-root 실행 (`appuser`) |
 | **의존성 취약점 스캔** | GitHub Actions CI에서 pip-audit(Python) + npm audit(Node.js) + Trivy(Docker) 자동 스캔 — push/PR/주간 cron 실행. Dependabot으로 pip·npm·docker·Actions 의존성 주간 자동 PR 생성 |

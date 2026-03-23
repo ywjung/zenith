@@ -645,6 +645,33 @@ try:
 except ImportError:
     logger.warning("prometheus-fastapi-instrumentator not installed, metrics disabled")
 
+# Rate Limit 429 카운터 미들웨어
+try:
+    from prometheus_client import Counter as _PrometheusCounter
+    from starlette.middleware.base import BaseHTTPMiddleware as _BaseHTTPMiddleware
+    from starlette.requests import Request as _Request
+
+    _rate_limited_counter = _PrometheusCounter(
+        "http_rate_limited_requests_total",
+        "Total number of HTTP requests rejected due to rate limiting (429)",
+        ["method", "path"],
+    )
+
+    class _RateLimitMetricsMiddleware(_BaseHTTPMiddleware):
+        async def dispatch(self, request: _Request, call_next):
+            response = await call_next(request)
+            if response.status_code == 429:
+                _rate_limited_counter.labels(
+                    method=request.method,
+                    path=request.url.path,
+                ).inc()
+            return response
+
+    app.add_middleware(_RateLimitMetricsMiddleware)
+    logger.info("Rate limit metrics middleware enabled")
+except Exception as _rl_err:
+    logger.warning("Rate limit metrics middleware not available: %s", _rl_err)
+
 # 비즈니스 KPI 메트릭 — 5분 주기 DB 집계
 try:
     from .business_metrics import start_background_refresh

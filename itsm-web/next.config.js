@@ -14,11 +14,41 @@ const nextConfig = {
   output: 'standalone',
   // jsdom reads CSS files via fs.readFileSync at runtime — must NOT be bundled
   serverExternalPackages: ['jsdom', 'isomorphic-dompurify'],
+
+  // 이미지 최적화: WebP/AVIF 자동 변환, 원격 도메인 허용
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.gitlab.com' },
+      { protocol: 'http', hostname: 'localhost' },
+      { protocol: 'http', hostname: '127.0.0.1' },
+    ],
+    minimumCacheTTL: 3600,
+  },
+
+  // 번들 압축 최적화
+  compress: true,
+
+  // 실험적 기능: 패키지 import 최적화 (트리쉐이킹 강화)
+  experimental: {
+    optimizePackageImports: [
+      '@tiptap/react',
+      '@tiptap/starter-kit',
+      '@hello-pangea/dnd',
+      'react-markdown',
+    ],
+  },
+
   async headers() {
     return [
       {
         source: '/(.*)',
         headers: securityHeaders,
+      },
+      // 정적 자산 장기 캐시
+      {
+        source: '/_next/static/(.*)',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
       },
     ]
   },

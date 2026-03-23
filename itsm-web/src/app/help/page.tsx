@@ -164,6 +164,11 @@ const SECURITY_FEATURES: { emoji: string; title: string; desc: string; isNew?: b
   { emoji: '🌍', title: 'CORS 와일드카드 프로덕션 차단',            desc: 'CORS_ORIGINS에 *(전체 허용)를 설정한 채로 ENVIRONMENT=production으로 시작하면 서버 시작 실패로 처리됩니다. 개발 환경에서는 경고만 출력하고, 프로덕션에서는 명시적 출처 설정을 강제합니다.', isNew: true },
   { emoji: '🔬', title: '의존성 취약점 자동 스캔 (pip-audit / npm audit)', desc: 'GitHub Actions CI에서 pip-audit(Python 패키지)과 npm audit(Node.js 패키지)를 자동 실행합니다. push/PR 시마다 known CVE를 탐지하고, Trivy로 Docker 이미지 취약점도 스캔합니다. Dependabot 설정으로 pip·npm·docker·GitHub Actions 의존성 업데이트 PR이 매주 자동 생성됩니다.', isNew: true },
   { emoji: '🧪', title: '통합 테스트 스위트 (pytest + FastAPI TestClient)', desc: 'itsm-api/tests/ 하위에 65개 통합 테스트를 구성했습니다. SQLite 인메모리 DB(StaticPool)와 Redis 목(Mock)으로 외부 의존성 없이 로컬·CI에서 실행 가능합니다. RBAC 권한 검증, CRUD 흐름, 보안 입력 검증(LIKE 메타문자, CRLF 주입 등) 항목을 포함합니다. GitHub Actions tests.yml에서 PR마다 자동 실행됩니다.', isNew: true },
+  { emoji: '📈', title: 'Rate Limit 메트릭 Prometheus 노출',               desc: 'Rate Limiting(429) 응답을 http_rate_limited_requests_total Prometheus Counter로 자동 집계합니다. HTTP 메서드·경로 레이블로 세분화되어 Grafana에서 어느 엔드포인트에서 속도 제한이 발생하는지 시각화할 수 있습니다.', isNew: true },
+  { emoji: '🚀', title: 'Next.js 번들 최적화 (이미지·트리쉐이킹·캐시)',  desc: 'Next.js 프론트엔드에 여러 최적화를 적용했습니다. 이미지 자동 AVIF/WebP 변환(minimumCacheTTL 3600s), 정적 에셋 1년 불변 캐시(/_next/static/), experimental.optimizePackageImports로 @tiptap/react·@hello-pangea/dnd·react-markdown 번들 트리쉐이킹을 강화했습니다.', isNew: true },
+  { emoji: '📋', title: 'API 계약 테스트 (test_api_contracts.py)',         desc: '10개 주요 엔드포인트(GET /tickets/, GET /tickets/{iid}, POST /admin/custom-fields 등)에 대한 응답 스키마 계약 테스트를 추가했습니다. 필수 키 존재 여부를 검증해 API 인터페이스 변경 시 즉시 감지합니다.', isNew: true },
+  { emoji: '🎯', title: 'CI 커버리지 95% 임계값 강제',                   desc: 'pytest --cov-fail-under=95 옵션을 CI에 추가하여 전체 코드 커버리지가 95% 미만이면 빌드가 자동 실패합니다. export.py(66%→100%), comments.py(79%→100%), helpers.py(82%→100%) 등 주요 모듈 커버리지를 대폭 개선했습니다.', isNew: true },
+  { emoji: '🔔', title: 'Grafana 알림 & 인시던트 대시보드',               desc: 'Prometheus ALERTS 메트릭을 시각화하는 5번째 Grafana 대시보드를 추가했습니다. Firing/Pending/Critical/Warning 알림 수, 알림 목록 테이블, 심각도 분포 파이차트, API 가용성 타임시리즈, HTTP 5xx 오류율 패널로 구성됩니다.', isNew: true },
 ]
 
 /* ─── 워크플로우 & SLA 데이터 ────────────────────────────────────────── */
@@ -419,7 +424,7 @@ const COMPARISON_SECTIONS: { category: string; rows: { feature: string; itsm: st
     rows: [
       { feature: 'Docker Compose 배포',                    itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '❌' },
       { feature: 'Prometheus 메트릭 (/metrics)',            itsm: '✅', zammad: '⚠️', glpi: '❌', jira: '✅', sn: '✅' },
-      { feature: 'Grafana 자동 프로비저닝 대시보드 4개',   itsm: '✅', zammad: '❌', glpi: '❌', jira: '✅', sn: '✅', isNew: true },
+      { feature: 'Grafana 자동 프로비저닝 대시보드 5개',   itsm: '✅', zammad: '❌', glpi: '❌', jira: '✅', sn: '✅', isNew: true },
       { feature: 'ClamAV 바이러스 스캔 (상시)',            itsm: '✅', zammad: '❌', glpi: '⚠️', jira: '❌', sn: '✅', isNew: true },
       { feature: 'PostgreSQL 자동 백업',                   itsm: '✅', zammad: '⚠️', glpi: '⚠️', jira: '✅', sn: '✅' },
       { feature: 'GitLab CI/CD 파이프라인',                itsm: '✅', zammad: '⚠️', glpi: '❌', jira: '✅', sn: '✅' },
@@ -818,6 +823,7 @@ const SW_COMPONENTS = [
       '대시보드 2: ITSM 성능 분석 (P50/P90/P95/P99 레이턴시, 처리량)',
       '대시보드 3: ITSM SLA 모니터링 (가용성/Apdex/에러버짓/P95 SLO)',
       '대시보드 4: ITSM 메뉴별 운영 현황 (비즈니스 KPI 27종 — 티켓·KB·칸반·리포트·관리)',
+      '대시보드 5: ITSM 알림 & 인시던트 (Firing/Pending/Critical 알림 현황, 5xx 오류율, API 가용성)',
       '자동 프로비저닝 (항상 기동)',
     ],
   },
@@ -1672,7 +1678,7 @@ function TabFeatures() {
             <NewBadge />
             <span className="text-sm text-gray-600 dark:text-gray-400">Prometheus(:9090)와 Grafana(:3001)는 별도 profile 없이 항상 기동됩니다.</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               {
                 title: 'ITSM 운영 대시보드',
@@ -1691,6 +1697,12 @@ function TabFeatures() {
                 icon: '🎯',
                 color: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20',
                 items: ['서비스 가용성 (Availability)', 'Apdex 점수 (사용자 만족도 지수)', '에러 버짓 트래킹', 'SLA 위반 건수 추이'],
+              },
+              {
+                title: 'ITSM 알림 & 인시던트',
+                icon: '🔔',
+                color: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20',
+                items: ['Firing/Pending/Critical 알림 수', '알림 목록 테이블 (심각도 컬러)', 'HTTP 5xx 오류율 타임시리즈', 'API 가용성 그래프'],
               },
             ].map((d) => (
               <div key={d.title} className={`border-2 rounded-xl p-4 ${d.color}`}>
@@ -2645,8 +2657,8 @@ function TabPerf() {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {[
-                { item: 'pytest 전체 테스트', result: '✅ 1,634 passed', note: '0 failed · 848 warnings' },
-                { item: '코드 커버리지', result: '✅ 93%', note: '10,043 statements (전체), 726 missed' },
+                { item: 'pytest 전체 테스트', result: '✅ 1,713 passed', note: '0 failed · 902 warnings' },
+                { item: '코드 커버리지', result: '✅ 97%', note: '10,058 statements (전체), 347 missed · --cov-fail-under=95 CI 강제' },
                 { item: 'celery_app.py 임포트', result: '✅ 정상', note: 'Redis 브로커 연결 설정 포함' },
                 { item: '_dispatch_notification 래퍼', result: '✅ 정상', note: 'delay() 실패 시 BackgroundTasks fallback' },
                 { item: 'SLA warning 비동기화', result: '✅ 적용', note: 'sla.py → send_sla_warning.delay()' },
@@ -2858,13 +2870,13 @@ function TabPerf() {
             { emoji: '✅', label: 'DB 마이그레이션', desc: '0052 (최신) · CI alembic check 통과' },
             { emoji: '✅', label: 'DB 제약조건', desc: '비정상 0건' },
             { emoji: '✅', label: 'Prometheus 스크레이프', desc: 'itsm-api: up' },
-            { emoji: '✅', label: 'Grafana 대시보드', desc: '4개 자동 프로비저닝' },
+            { emoji: '✅', label: 'Grafana 대시보드', desc: '5개 자동 프로비저닝 (알림 대시보드 포함)' },
             { emoji: '✅', label: 'Celery Worker', desc: '--concurrency=4, healthcheck ping' },
             { emoji: '✅', label: 'Flower 모니터링', desc: 'mher/flower:2.0 (포트 5555)' },
             { emoji: '✅', label: '보안 헤더 7종', desc: 'CSP·HSTS·X-Frame 등' },
             { emoji: '✅', label: 'npm 취약점', desc: 'high/critical 없음 (low 4건)' },
             { emoji: '✅', label: '비즈니스 메트릭', desc: '27개 샘플 수집 중' },
-            { emoji: '✅', label: '테스트 커버리지', desc: '93%+ (pytest 1,634 + E2E 11 스펙 파일)' },
+            { emoji: '✅', label: '테스트 커버리지', desc: '97%+ (pytest 1,713 · CI --cov-fail-under=95 강제)' },
             { emoji: '⚠️', label: 'SECRET_KEY', desc: '운영 배포 전 반드시 교체 필요' },
           ].map((item) => (
             <div key={item.label} className={`flex items-start gap-3 rounded-lg border p-3 ${item.emoji === '⚠️' ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
@@ -3910,6 +3922,7 @@ function TabAbout() {
             { version: 'v1.3',   desc: 'testing 상태 추가, PL 역할(5단계 RBAC), 알림 채널 ON/OFF 관리' },
             { version: 'v1.4',   desc: '칸반 종료됨 컬럼 접기/펼치기, 감사 로그 액션 레이블 정확도 개선, 역할별 시작 가이드 도움말 추가' },
             { version: 'v1.5',   desc: '보안 강화(IP 허용목록·JWT 블랙리스트), 승인 워크플로우, 티켓 유형 관리, 다크모드 FOUC 수정' },
+            { version: 'v1.6',   desc: '테스트 커버리지 97%·CI 95% 강제, Grafana 알림 대시보드, Rate Limit 메트릭, Next.js 번들 최적화, API 계약 테스트' },
           ].map(v => (
             <div key={v.version} className="flex items-start gap-3 text-sm">
               <span className="shrink-0 font-mono font-bold text-blue-600 dark:text-blue-400 w-12">{v.version}</span>
