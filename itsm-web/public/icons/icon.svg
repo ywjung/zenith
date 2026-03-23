@@ -1,20 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <!-- Background -->
-  <rect width="512" height="512" rx="96" fill="#1d4ed8"/>
-  <!-- Star / zenith symbol -->
+  <!-- Background: dark blue, rounded corners (same as header bar) -->
+  <rect width="512" height="512" rx="80" fill="#1d4ed8"/>
+  <!-- Yellow star (scaled from header: 32px → 512px, factor 16) -->
   <polygon
-    points="256,80 290,190 410,190 315,258 348,368 256,300 164,368 197,258 102,190 222,190"
-    fill="#ffffff"
-    opacity="0.15"
+    points="256,64 275.2,134.4 345.6,134.4 291.2,176 310.4,246.4 256,204.8 201.6,246.4 220.8,176 166.4,134.4 236.8,134.4"
+    fill="#FCD34D"
   />
-  <!-- Z letterform -->
-  <text
-    x="256"
-    y="330"
-    font-family="system-ui, -apple-system, sans-serif"
-    font-size="240"
-    font-weight="800"
-    text-anchor="middle"
-    fill="#ffffff"
-  >Z</text>
+  <!-- White Z/lightning stroke (scaled from header path: M9 18.5H22L9 26H23, strokeWidth 2.2 → 35) -->
+  <path
+    d="M144 296H352L144 416H368"
+    stroke="white"
+    stroke-width="35"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>

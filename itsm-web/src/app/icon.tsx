@@ -19,24 +19,17 @@ export default function Icon() {
           gap: 2,
         }}
       >
-        {/* zenith point - 황금 다이아몬드 */}
-        <div
-          style={{
-            width: 10,
-            height: 10,
-            background: '#FCD34D',
-            transform: 'rotate(45deg)',
-            borderRadius: 2,
-          }}
-        />
+        {/* 황금 별 */}
+        <div style={{ fontSize: 13, lineHeight: 1 }}>⭐</div>
         {/* Z 레터 */}
         <div
           style={{
             color: 'white',
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: 900,
             fontFamily: 'sans-serif',
             lineHeight: 1,
+            marginTop: -1,
           }}
         >
           Z
