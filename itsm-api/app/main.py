@@ -693,7 +693,8 @@ try:
     from fastapi import Request as _VitalsRequest
     from fastapi.responses import Response as _VitalsResponse
 
-    @app.post("/api/vitals", include_in_schema=False)
+    # nginx: /api/vitals → itsm-api:8000/vitals (prefix stripped)
+    @app.post("/vitals", include_in_schema=False)
     async def receive_web_vitals(request: _VitalsRequest) -> _VitalsResponse:
         try:
             data = await request.json()
@@ -705,7 +706,7 @@ try:
             pass
         return _VitalsResponse(status_code=204)
 
-    logger.info("Web Vitals endpoint enabled at POST /api/vitals")
+    logger.info("Web Vitals endpoint enabled at POST /vitals (public: /api/vitals)")
 except Exception as _wv_err:
     logger.warning("Web Vitals endpoint init failed: %s", _wv_err)
 

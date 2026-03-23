@@ -1,7 +1,7 @@
 {
   "uid": "itsm-alerts",
   "title": "ITSM 알림 & 인시던트 대시보드",
-  "description": "Prometheus 알림 규칙 상태 시각화 — firing/pending/resolved 알림 현황",
+  "description": "API 가용성, 오류율, 슬로우 쿼리, 알림 현황 — 실시간 인시던트 모니터링",
   "tags": ["itsm", "alerts", "incidents"],
   "timezone": "browser",
   "refresh": "30s",
@@ -11,13 +11,43 @@
     "time_options": ["1h", "3h", "6h", "12h", "24h", "7d"]
   },
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "panels": [
     {
       "id": 1,
-      "title": "🔴 현재 Firing 알림 수",
+      "title": "🟢 API 가용성",
       "type": "stat",
-      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "up{job=\"itsm-api\"}",
+          "legendFormat": "API"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "mappings": [
+            {"options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}, "type": "value"}
+          ],
+          "unit": "short"
+        }
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 2,
+      "title": "⚠️ Firing 알림 수",
+      "type": "stat",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -36,51 +66,21 @@
               {"color": "red", "value": 3}
             ]
           },
-          "unit": "short",
-          "mappings": [{"type": "value", "options": {"0": {"text": "정상", "color": "green"}}}]
+          "unit": "short"
         }
       },
-      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"}
-    },
-    {
-      "id": 2,
-      "title": "🟡 Pending 알림 수",
-      "type": "stat",
-      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "count(ALERTS{alertstate=\"pending\"}) or vector(0)",
-          "legendFormat": "Pending"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 1},
-              {"color": "orange", "value": 5}
-            ]
-          },
-          "unit": "short",
-          "mappings": [{"type": "value", "options": {"0": {"text": "없음", "color": "green"}}}]
-        }
-      },
-      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"}
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "auto"}
     },
     {
       "id": 3,
-      "title": "Critical 알림 수",
+      "title": "🐌 DB 슬로우 쿼리 (누적)",
       "type": "stat",
-      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "count(ALERTS{alertstate=\"firing\", severity=\"critical\"}) or vector(0)",
-          "legendFormat": "Critical"
+          "expr": "db_slow_queries_total",
+          "legendFormat": "슬로우 쿼리"
         }
       ],
       "fieldConfig": {
@@ -90,25 +90,53 @@
             "mode": "absolute",
             "steps": [
               {"color": "green", "value": null},
-              {"color": "red", "value": 1}
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 50}
             ]
           },
-          "unit": "short",
-          "mappings": [{"type": "value", "options": {"0": {"text": "없음", "color": "green"}}}]
+          "unit": "short"
         }
       },
-      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"}
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "auto"}
     },
     {
       "id": 4,
-      "title": "Warning 알림 수",
+      "title": "📨 미읽 알림 수",
       "type": "stat",
-      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "count(ALERTS{alertstate=\"firing\", severity=\"warning\"}) or vector(0)",
-          "legendFormat": "Warning"
+          "expr": "itsm_notifications_total{read=\"false\"}",
+          "legendFormat": "미읽"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 20},
+              {"color": "red", "value": 100}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 5,
+      "title": "📊 HTTP 5xx 오류율 (%)",
+      "type": "stat",
+      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "100 * sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
+          "legendFormat": "5xx율"
         }
       ],
       "fieldConfig": {
@@ -119,141 +147,25 @@
             "steps": [
               {"color": "green", "value": null},
               {"color": "yellow", "value": 1},
-              {"color": "orange", "value": 3}
+              {"color": "red", "value": 5}
             ]
           },
-          "unit": "short",
-          "mappings": [{"type": "value", "options": {"0": {"text": "없음", "color": "green"}}}]
+          "unit": "percent",
+          "decimals": 2
         }
       },
-      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"}
-    },
-    {
-      "id": 5,
-      "title": "Firing 알림 목록",
-      "type": "table",
-      "gridPos": {"x": 0, "y": 4, "w": 24, "h": 8},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "ALERTS{alertstate=\"firing\"}",
-          "legendFormat": "{{alertname}}",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {"custom": {"align": "auto", "displayMode": "auto"}},
-        "overrides": [
-          {
-            "matcher": {"id": "byName", "options": "severity"},
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-background"
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {"type": "value", "options": {"critical": {"color": "red", "text": "🔴 Critical"}}},
-                  {"type": "value", "options": {"warning": {"color": "orange", "text": "🟡 Warning"}}}
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {"id": "byName", "options": "alertstate"},
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-background"
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {"type": "value", "options": {"firing": {"color": "red", "text": "🔴 Firing"}}},
-                  {"type": "value", "options": {"pending": {"color": "yellow", "text": "🟡 Pending"}}}
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true,
-        "sortBy": [{"displayName": "severity", "desc": true}]
-      },
-      "transformations": [
-        {"id": "organize", "options": {"excludeByName": {"Time": true, "Value": true, "__name__": true, "instance": true, "job": true}, "renameByName": {"alertname": "알림명", "alertstate": "상태", "severity": "심각도"}}}
-      ]
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "auto"}
     },
     {
       "id": 6,
-      "title": "알림 그룹별 현황",
-      "type": "bargauge",
-      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+      "title": "⏱ API 평균 응답시간 (ms)",
+      "type": "stat",
+      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "count by (alertname) (ALERTS{alertstate=\"firing\"})",
-          "legendFormat": "{{alertname}}",
-          "instant": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]
-          }
-        }
-      },
-      "options": {
-        "reduceOptions": {"calcs": ["lastNotNull"]},
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true
-      }
-    },
-    {
-      "id": 7,
-      "title": "알림 심각도 분포",
-      "type": "piechart",
-      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "count by (severity) (ALERTS{alertstate=\"firing\"})",
-          "legendFormat": "{{severity}}",
-          "instant": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {"unit": "short"},
-        "overrides": [
-          {"matcher": {"id": "byName", "options": "critical"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
-          {"matcher": {"id": "byName", "options": "warning"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]}
-        ]
-      },
-      "options": {
-        "reduceOptions": {"calcs": ["lastNotNull"]},
-        "pieType": "donut",
-        "tooltip": {"mode": "single"},
-        "legend": {"displayMode": "table", "placement": "right"}
-      }
-    },
-    {
-      "id": 8,
-      "title": "API 가용성 (ITSMApiDown 알림 역수)",
-      "type": "timeseries",
-      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "up{job=\"itsm-api\"}",
-          "legendFormat": "API Up"
+          "expr": "1000 * sum(rate(http_request_duration_seconds_sum[5m])) / sum(rate(http_request_duration_seconds_count[5m]))",
+          "legendFormat": "응답시간"
         }
       ],
       "fieldConfig": {
@@ -261,68 +173,188 @@
           "color": {"mode": "thresholds"},
           "thresholds": {
             "mode": "absolute",
-            "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 300},
+              {"color": "red", "value": 1000}
+            ]
           },
-          "unit": "short",
-          "min": 0,
-          "max": 1,
-          "custom": {"lineWidth": 2, "fillOpacity": 20}
+          "unit": "ms",
+          "decimals": 0
         }
       },
-      "options": {"tooltip": {"mode": "single"}, "legend": {"displayMode": "list"}}
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 7,
+      "title": "📈 HTTP 요청 처리량 (req/s)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum(rate(http_requests_total{status=~\"2..\"}[1m]))",
+          "legendFormat": "2xx (성공)"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum(rate(http_requests_total{status=~\"4..\"}[1m]))",
+          "legendFormat": "4xx (클라이언트 오류)"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[1m]))",
+          "legendFormat": "5xx (서버 오류)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {"lineWidth": 2, "fillOpacity": 10}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "2xx (성공)"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "4xx (클라이언트 오류)"}, "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "5xx (서버 오류)"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]}
+        ]
+      },
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 8,
+      "title": "⏱ API P95 응답시간 추이",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {"lineWidth": 2},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.3},
+              {"color": "red", "value": 1}
+            ]
+          }
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "P95"}, "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "P99"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]}
+        ]
+      },
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
     },
     {
       "id": 9,
-      "title": "HTTP 5xx 오류율 (HighErrorRate 트리거)",
+      "title": "🔔 알림 현황 (읽음/미읽음)",
       "type": "timeseries",
-      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 7},
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
-          "legendFormat": "5xx 오류율"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "custom": {"lineWidth": 2, "fillOpacity": 10},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.05}, {"color": "red", "value": 0.20}]
-          }
-        }
-      },
-      "options": {"tooltip": {"mode": "single"}, "legend": {"displayMode": "list"}}
-    },
-    {
-      "id": 10,
-      "title": "알림 히스토리 (firing 지속 시간)",
-      "type": "timeseries",
-      "gridPos": {"x": 0, "y": 28, "w": 24, "h": 8},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
-          "legendFormat": "Firing 알림 수"
+          "expr": "itsm_notifications_total{read=\"true\"}",
+          "legendFormat": "읽은 알림"
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "count(ALERTS{alertstate=\"pending\"}) or vector(0)",
-          "legendFormat": "Pending 알림 수"
+          "expr": "itsm_notifications_total{read=\"false\"}",
+          "legendFormat": "미읽 알림"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": {"lineWidth": 2, "fillOpacity": 15, "stacking": {"mode": "none"}}
+          "custom": {"lineWidth": 2, "fillOpacity": 15}
         },
         "overrides": [
-          {"matcher": {"id": "byName", "options": "Firing 알림 수"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
-          {"matcher": {"id": "byName", "options": "Pending 알림 수"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]}
+          {"matcher": {"id": "byName", "options": "읽은 알림"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "미읽 알림"}, "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]}
         ]
       },
-      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list"}}
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 10,
+      "title": "🐌 DB 슬로우 쿼리 추이 (500ms+)",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 7},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "increase(db_slow_queries_total[5m])",
+          "legendFormat": "5분간 슬로우 쿼리"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"lineWidth": 2, "fillOpacity": 20},
+          "color": {"fixedColor": "red", "mode": "fixed"}
+        }
+      },
+      "options": {"tooltip": {"mode": "single"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 11,
+      "title": "🏥 엔드포인트별 오류율 Top 10",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 19, "w": 14, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "topk(10, sum by (handler, status) (rate(http_requests_total{status=~\"[45]..\"}[10m])))",
+          "legendFormat": "{{handler}} [{{status}}]",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "reqps"},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "handler"}, "properties": [{"id": "displayName", "value": "엔드포인트"}]},
+          {"matcher": {"id": "byName", "options": "status"}, "properties": [{"id": "displayName", "value": "상태코드"}]},
+          {"matcher": {"id": "byName", "options": "Value"}, "properties": [{"id": "displayName", "value": "오류율 (req/s)"}]}
+        ]
+      },
+      "options": {"sortBy": [{"displayName": "Value", "desc": true}]}
+    },
+    {
+      "id": 12,
+      "title": "🚦 Rate Limit 차단 추이",
+      "type": "timeseries",
+      "gridPos": {"x": 14, "y": 19, "w": 10, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum(rate(http_rate_limited_requests_total[1m]))",
+          "legendFormat": "429 차단 (req/s)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {"lineWidth": 2, "fillOpacity": 20},
+          "color": {"fixedColor": "purple", "mode": "fixed"}
+        }
+      },
+      "options": {"tooltip": {"mode": "single"}, "legend": {"displayMode": "list", "placement": "bottom"}}
     }
   ]
 }
