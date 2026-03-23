@@ -1636,6 +1636,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 - **API 엔드포인트**: 160개+
 - **테스트**: pytest 1,713개 통과 · 코드 커버리지 97%+ · CI --cov-fail-under=95 강제
 - **Grafana 대시보드**: 5개 자동 프로비저닝 (알림 & 인시던트 대시보드 추가)
+- **v1.7 추가**: Celery 실패 메트릭·Slack, DB 슬로우 쿼리 감지, Web Vitals 수집, MinIO 스토리지, 서버 이전 자동화, i18n 한/영
 
 ### 마이그레이션 이력
 
@@ -1713,6 +1714,13 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **의존성 취약점 스캔** | GitHub Actions CI에서 pip-audit(Python) + npm audit(Node.js) + Trivy(Docker) 자동 스캔 — push/PR/주간 cron 실행. Dependabot으로 pip·npm·docker·Actions 의존성 주간 자동 PR 생성 |
 | **통합 테스트 스위트** | pytest + FastAPI TestClient 기반 1562개 통합 테스트 전량 통과 — SQLite 인메모리 DB(StaticPool) + Redis Mock으로 외부 의존성 없이 실행 가능. RBAC 권한, CRUD 흐름, 보안 입력 검증 포함. GitHub Actions tests.yml에서 PR마다 자동 실행 |
 | **CI/CD** | 3-환경 파이프라인 (개발기·테스트기·운영기) — 태그 기반 자동/수동 배포 |
+| **Celery 실패 메트릭·알림** | `celery_task_failures_total` Prometheus Counter + Slack Incoming Webhook 자동 알림. 태스크명·ID·예외 메시지 포함, Slack 전송 실패는 사일런트 처리 |
+| **Prometheus 알림 규칙 강화** | `alert_rules.yml` 5개 규칙 추가 (CeleryTaskFailureRate·Critical, DatabaseSlowQueryRate, RedisMemoryHigh·Critical) — 총 24개 운영 |
+| **DB 슬로우 쿼리 자동 감지** | SQLAlchemy `after_cursor_execute` 이벤트로 500ms+ 쿼리 감지 → `db_slow_queries_total` Counter 자동 증가. Grafana에서 실시간 모니터링 |
+| **Web Vitals Prometheus 수집** | 프론트엔드 LCP·FID·CLS·TTFB·FCP·INP 지표를 `useReportWebVitals` → `POST /api/vitals` → `web_vitals_value` Gauge로 수집 |
+| **서버 이전 자동화** | `scripts/migrate.sh` — 사전 점검, PG 덤프 + AES-256-CBC 암호화, 볼륨 백업, rsync 전송, 원격 배포, 헬스체크·롤백 일괄 자동화 |
+| **MinIO 스토리지 활성화** | KB 첨부 업로드 MinIO 우선 → GitLab 폴백 구조. `MINIO_ENDPOINT` 환경변수로 활성화. `scripts/migrate_files_to_minio.py`로 레거시 파일 마이그레이션 |
+| **i18n 한/영 다국어 지원** | `messages/ko.json` · `messages/en.json` 번역 파일 + `src/lib/i18n.ts` 유틸리티. 헤더 🌐 언어 전환 버튼(localStorage 저장), `next-intl` 기반 |
 
 ### 주요 버그 수정 이력
 

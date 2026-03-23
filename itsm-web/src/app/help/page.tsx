@@ -169,6 +169,13 @@ const SECURITY_FEATURES: { emoji: string; title: string; desc: string; isNew?: b
   { emoji: '📋', title: 'API 계약 테스트 (test_api_contracts.py)',         desc: '10개 주요 엔드포인트(GET /tickets/, GET /tickets/{iid}, POST /admin/custom-fields 등)에 대한 응답 스키마 계약 테스트를 추가했습니다. 필수 키 존재 여부를 검증해 API 인터페이스 변경 시 즉시 감지합니다.', isNew: true },
   { emoji: '🎯', title: 'CI 커버리지 95% 임계값 강제',                   desc: 'pytest --cov-fail-under=95 옵션을 CI에 추가하여 전체 코드 커버리지가 95% 미만이면 빌드가 자동 실패합니다. export.py(66%→100%), comments.py(79%→100%), helpers.py(82%→100%) 등 주요 모듈 커버리지를 대폭 개선했습니다.', isNew: true },
   { emoji: '🔔', title: 'Grafana 알림 & 인시던트 대시보드',               desc: 'Prometheus ALERTS 메트릭을 시각화하는 5번째 Grafana 대시보드를 추가했습니다. Firing/Pending/Critical/Warning 알림 수, 알림 목록 테이블, 심각도 분포 파이차트, API 가용성 타임시리즈, HTTP 5xx 오류율 패널로 구성됩니다.', isNew: true },
+  { emoji: '🚨', title: 'Celery 태스크 실패 Prometheus + Slack 알림',     desc: 'Celery 비동기 태스크 실패 시 celery_task_failures_total Prometheus Counter가 자동 증가하고, Slack Incoming Webhook으로 실패 알림이 발송됩니다. 태스크명·ID·예외 메시지(300자)를 포함하며, Slack 전송 실패는 조용히 무시되어 서비스에 영향을 주지 않습니다.', isNew: true },
+  { emoji: '📐', title: 'Prometheus 알림 규칙 강화 (Celery·DB·Redis)',    desc: 'alert_rules.yml에 5개 알림 규칙을 추가했습니다. CeleryTaskFailureRate(0.1/s 5분↑ warning), CeleryTaskFailureCritical(0.5/s 2분↑ critical), DatabaseSlowQueryRate(0.05/s 5분↑), RedisMemoryHigh(80% warning), RedisMemoryCritical(95% critical). 총 24개 알림 규칙이 운영됩니다.', isNew: true },
+  { emoji: '🐢', title: 'DB 슬로우 쿼리 Prometheus 메트릭 자동 감지',    desc: 'SQLAlchemy after_cursor_execute 이벤트로 500ms 초과 쿼리를 자동 감지하여 db_slow_queries_total Counter를 증가시킵니다. N+1 쿼리, 미인덱스 컬럼 풀스캔 등 성능 문제를 Prometheus·Grafana에서 실시간 모니터링합니다.', isNew: true },
+  { emoji: '📱', title: 'Next.js Web Vitals Prometheus 수집',              desc: '프론트엔드 성능 지표(LCP·FID·CLS·TTFB·FCP·INP)를 useReportWebVitals → POST /api/vitals → web_vitals_value Gauge로 수집합니다. navigator.sendBeacon으로 페이지 전환 시에도 손실 없이 전송되며, Grafana에서 metric_name·rating 레이블로 시각화할 수 있습니다.', isNew: true },
+  { emoji: '🚚', title: '서버 이전 자동화 스크립트 (scripts/migrate.sh)', desc: 'scripts/migrate.sh 를 실행하면 사전 요구사항 확인(ssh·rsync·openssl·pg_dump), 운영 서버 상태 체크, PostgreSQL 덤프 + AES-256-CBC 암호화 백업, Docker 볼륨 tar 백업, rsync 전송, 원격 docker compose 배포, 헬스체크 자동 검증까지 일괄 처리됩니다. 오류 발생 시 롤백이 자동 실행됩니다.', isNew: true },
+  { emoji: '🪣', title: 'MinIO 오브젝트 스토리지 활성화',                 desc: 'KB 파일 첨부 업로드가 GitLab 전용에서 MinIO 우선 → GitLab 폴백 구조로 변경되었습니다. MINIO_ENDPOINT 환경변수를 설정하면 itsm-attachments 버킷에 파일이 저장되며, MinIO 미설정 시 기존 GitLab Upload API로 자동 폴백합니다. scripts/migrate_files_to_minio.py로 레거시 파일 일괄 마이그레이션이 가능합니다.', isNew: true },
+  { emoji: '🌐', title: 'i18n 다국어 지원 기반 구축 (ko/en)',              desc: '한국어(기본)·영어 번역 파일(messages/ko.json, messages/en.json)을 추가하고 헤더에 🌐 언어 전환 버튼을 배치했습니다. 선택한 언어는 localStorage에 저장되어 새로고침 후에도 유지됩니다. common, nav, ticket, auth, sla, role 등 핵심 UI 문자열의 한/영 번역이 포함됩니다.', isNew: true },
 ]
 
 /* ─── 워크플로우 & SLA 데이터 ────────────────────────────────────────── */
@@ -3923,6 +3930,7 @@ function TabAbout() {
             { version: 'v1.4',   desc: '칸반 종료됨 컬럼 접기/펼치기, 감사 로그 액션 레이블 정확도 개선, 역할별 시작 가이드 도움말 추가' },
             { version: 'v1.5',   desc: '보안 강화(IP 허용목록·JWT 블랙리스트), 승인 워크플로우, 티켓 유형 관리, 다크모드 FOUC 수정' },
             { version: 'v1.6',   desc: '테스트 커버리지 97%·CI 95% 강제, Grafana 알림 대시보드, Rate Limit 메트릭, Next.js 번들 최적화, API 계약 테스트' },
+            { version: 'v1.7',   desc: 'Celery 실패 Prometheus·Slack, DB 슬로우 쿼리 메트릭, Web Vitals 수집, MinIO 스토리지, 서버 이전 스크립트, i18n 한/영 다국어 지원' },
           ].map(v => (
             <div key={v.version} className="flex items-start gap-3 text-sm">
               <span className="shrink-0 font-mono font-bold text-blue-600 dark:text-blue-400 w-12">{v.version}</span>

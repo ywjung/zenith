@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext'
 import { formatName } from '@/lib/utils'
 import NotificationBell from './NotificationBell'
 import GlobalSearch from './GlobalSearch'
+import LocaleSwitcher from './LocaleSwitcher'
 
 export default function Header() {
   const { user, logout, isAgent, isAdmin } = useAuth()
@@ -66,6 +67,7 @@ export default function Header() {
               >
                 {themeIcon}
               </button>
+              <LocaleSwitcher />
               <div className="relative flex items-center gap-2 border-l border-blue-500 dark:border-gray-700 pl-3 group">
                 <button className="flex items-center gap-2 cursor-pointer">
                   <span className="opacity-90 text-sm whitespace-nowrap">{formatName(user.name)}</span>
