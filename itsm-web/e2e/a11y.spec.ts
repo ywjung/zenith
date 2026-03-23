@@ -40,12 +40,10 @@ test.describe('접근성(a11y) 감사 — 주요 페이지', () => {
       await page.waitForTimeout(500);
 
       await injectAxe(page);
-      const violations = await getViolations(page, null, {
-        axeOptions: {
-          runOnly: {
-            type: 'tag',
-            values: ['wcag2a', 'wcag2aa'],
-          },
+      const violations = await getViolations(page, undefined, {
+        runOnly: {
+          type: 'tag',
+          values: ['wcag2a', 'wcag2aa'],
         },
       });
 
@@ -91,9 +89,10 @@ test.describe('접근성(a11y) 감사 — 어드민 페이지', () => {
       await page.waitForTimeout(500);
 
       await injectAxe(page);
-      const violations = await getViolations(page, null, {
-        axeOptions: {
-          runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] },
+      const violations = await getViolations(page, undefined, {
+        runOnly: {
+          type: 'tag',
+          values: ['wcag2a', 'wcag2aa'],
         },
       });
 
@@ -123,9 +122,10 @@ test.describe('접근성(a11y) — 색상 대비', () => {
     await page.waitForTimeout(500);
 
     await injectAxe(page);
-    const violations = await getViolations(page, null, {
-      axeOptions: {
-        runOnly: { type: 'rule', values: ['color-contrast'] },
+    const violations = await getViolations(page, undefined, {
+      runOnly: {
+        type: 'rule',
+        values: ['color-contrast'],
       },
     });
 
@@ -199,9 +199,10 @@ test.describe('접근성(a11y) — ARIA 구조', () => {
       .catch(() => {});
 
     await injectAxe(page);
-    const violations = await getViolations(page, null, {
-      axeOptions: {
-        runOnly: { type: 'rule', values: ['image-alt'] },
+    const violations = await getViolations(page, undefined, {
+      runOnly: {
+        type: 'rule',
+        values: ['image-alt'],
       },
     });
 

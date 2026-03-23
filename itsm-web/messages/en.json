@@ -1,0 +1,93 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "close": "Close",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "reset": "Reset",
+    "refresh": "Refresh",
+    "yes": "Yes",
+    "no": "No",
+    "unknown": "Unknown",
+    "noData": "No data available",
+    "error": "An error occurred",
+    "success": "Completed successfully"
+  },
+  "nav": {
+    "home": "Home",
+    "tickets": "Tickets",
+    "kanban": "Kanban",
+    "kb": "Knowledge Base",
+    "reports": "Reports",
+    "admin": "Admin",
+    "notifications": "Notifications",
+    "help": "Help",
+    "profile": "Profile",
+    "logout": "Logout"
+  },
+  "ticket": {
+    "title": "Ticket",
+    "new": "New Ticket",
+    "status": {
+      "open": "Open",
+      "in_progress": "In Progress",
+      "testing": "Testing",
+      "waiting": "Waiting",
+      "resolved": "Resolved",
+      "closed": "Closed",
+      "pending_approval": "Pending Approval",
+      "ready_for_release": "Ready for Release"
+    },
+    "priority": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "category": {
+      "hardware": "Hardware",
+      "software": "Software",
+      "network": "Network",
+      "account": "Account",
+      "other": "Other"
+    },
+    "fields": {
+      "subject": "Subject",
+      "description": "Description",
+      "assignee": "Assignee",
+      "priority": "Priority",
+      "category": "Category",
+      "status": "Status",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "sla": "SLA"
+    }
+  },
+  "auth": {
+    "login": "Login",
+    "loginWith": "Login with GitLab",
+    "logout": "Logout",
+    "welcome": "Welcome to ZENITH ITSM"
+  },
+  "sla": {
+    "onTime": "On Time",
+    "warning": "Warning",
+    "breached": "Breached",
+    "paused": "Paused"
+  },
+  "role": {
+    "user": "User",
+    "developer": "Developer",
+    "pl": "Project Lead",
+    "agent": "IT Agent",
+    "admin": "Administrator"
+  }
+}

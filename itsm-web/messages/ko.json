@@ -1,0 +1,93 @@
+{
+  "common": {
+    "loading": "로딩 중...",
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "edit": "편집",
+    "create": "생성",
+    "search": "검색",
+    "close": "닫기",
+    "confirm": "확인",
+    "back": "뒤로",
+    "next": "다음",
+    "submit": "제출",
+    "reset": "초기화",
+    "refresh": "새로고침",
+    "yes": "예",
+    "no": "아니오",
+    "unknown": "알 수 없음",
+    "noData": "데이터가 없습니다",
+    "error": "오류가 발생했습니다",
+    "success": "완료되었습니다"
+  },
+  "nav": {
+    "home": "홈",
+    "tickets": "티켓",
+    "kanban": "칸반",
+    "kb": "지식베이스",
+    "reports": "리포트",
+    "admin": "관리",
+    "notifications": "알림",
+    "help": "도움말",
+    "profile": "프로필",
+    "logout": "로그아웃"
+  },
+  "ticket": {
+    "title": "티켓",
+    "new": "새 티켓",
+    "status": {
+      "open": "접수",
+      "in_progress": "처리중",
+      "testing": "테스트중",
+      "waiting": "대기중",
+      "resolved": "처리완료",
+      "closed": "종료",
+      "pending_approval": "승인대기",
+      "ready_for_release": "운영배포전"
+    },
+    "priority": {
+      "critical": "긴급",
+      "high": "높음",
+      "medium": "보통",
+      "low": "낮음"
+    },
+    "category": {
+      "hardware": "하드웨어",
+      "software": "소프트웨어",
+      "network": "네트워크",
+      "account": "계정",
+      "other": "기타"
+    },
+    "fields": {
+      "subject": "제목",
+      "description": "내용",
+      "assignee": "담당자",
+      "priority": "우선순위",
+      "category": "카테고리",
+      "status": "상태",
+      "createdAt": "생성일",
+      "updatedAt": "수정일",
+      "sla": "SLA"
+    }
+  },
+  "auth": {
+    "login": "로그인",
+    "loginWith": "GitLab으로 로그인",
+    "logout": "로그아웃",
+    "welcome": "ZENITH ITSM에 오신 것을 환영합니다"
+  },
+  "sla": {
+    "onTime": "정상",
+    "warning": "주의",
+    "breached": "위반",
+    "paused": "일시정지"
+  },
+  "role": {
+    "user": "일반 사용자",
+    "developer": "IT 개발자",
+    "pl": "IT PL",
+    "agent": "IT 에이전트",
+    "admin": "시스템 관리자"
+  }
+}

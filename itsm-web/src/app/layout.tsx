@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { WebVitalsReporter } from './web-vitals'
 import { AuthProvider } from '@/context/AuthContext'
 import { ServiceTypesProvider } from '@/context/ServiceTypesContext'
 import { ThemeProvider } from '@/context/ThemeContext'
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               ZENITH · IT 서비스 관리 플랫폼
             </footer>
             <KeyboardShortcuts />
+            <WebVitalsReporter />
           </ServiceTypesProvider>
           </RoleLabelsProvider>
         </AuthProvider>

@@ -114,6 +114,7 @@ class KBRevision(Base):
     category = Column(String(100), nullable=True)
     tags = Column(JSONB, nullable=True)
     editor_name = Column(String(200), nullable=True)
+    change_summary = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

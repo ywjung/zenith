@@ -681,6 +681,35 @@ except Exception as _bm_err:
     logger.warning("Business metrics init failed: %s", _bm_err)
 
 
+# ── Web Vitals 수신 엔드포인트 ────────────────────────────────────────────────
+try:
+    from prometheus_client import Gauge as _VitalsGauge
+    _web_vitals_gauge = _VitalsGauge(
+        "web_vitals_value",
+        "Latest Web Vitals metric value reported by frontend",
+        ["metric_name", "rating"],
+    )
+
+    from fastapi import Request as _VitalsRequest
+    from fastapi.responses import Response as _VitalsResponse
+
+    @app.post("/api/vitals", include_in_schema=False)
+    async def receive_web_vitals(request: _VitalsRequest) -> _VitalsResponse:
+        try:
+            data = await request.json()
+            name = str(data.get("name", "unknown"))
+            value = float(data.get("value", 0))
+            rating = str(data.get("rating", "unknown"))
+            _web_vitals_gauge.labels(metric_name=name, rating=rating).set(value)
+        except Exception:
+            pass
+        return _VitalsResponse(status_code=204)
+
+    logger.info("Web Vitals endpoint enabled at POST /api/vitals")
+except Exception as _wv_err:
+    logger.warning("Web Vitals endpoint init failed: %s", _wv_err)
+
+
 @app.get("/health", tags=["system"])
 def health():
     from fastapi.responses import JSONResponse

@@ -2,6 +2,7 @@
 
 개발/스테이징 환경에서 느린 쿼리와 잠재적 N+1 패턴을 감지합니다.
 SLOW_QUERY_THRESHOLD_MS 환경 변수로 임계값 조정 (기본: 200ms).
+500ms 이상 쿼리는 Prometheus db_slow_queries_total 카운터도 증가시킵니다.
 """
 import logging
 import time
@@ -9,10 +10,19 @@ from collections import defaultdict
 from contextlib import contextmanager
 from threading import local
 
+from prometheus_client import Counter as _PrometheusCounter
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
+
+# Prometheus: 슬로우 쿼리 카운터 (500ms 이상)
+db_slow_queries_total = _PrometheusCounter(
+    "db_slow_queries_total",
+    "Total number of slow DB queries exceeding 500ms",
+)
+
+_PROMETHEUS_THRESHOLD_MS = 500  # Prometheus 카운터용 임계값 (로그 임계값과 별개)
 
 _local = local()
 _SLOW_THRESHOLD_MS = 200
@@ -35,12 +45,18 @@ def _before_execute(conn, cursor, statement, parameters, context, executemany):
 def _after_execute(conn, cursor, statement, parameters, context, executemany):
     elapsed_ms = (time.perf_counter() - conn.info["query_start_time"].pop()) * 1000
 
-    # 느린 쿼리 로그
+    # 느린 쿼리 로그 (SLOW_QUERY_THRESHOLD_MS 기준)
     threshold = _get_threshold_ms()
     if elapsed_ms > threshold:
-        # SELECT 쿼리만 첫 120자 포함
         snippet = statement.strip()[:120].replace("\n", " ")
         logger.warning("SLOW QUERY %.1f ms: %s", elapsed_ms, snippet)
+
+    # Prometheus 카운터 (500ms 이상만 계산)
+    if elapsed_ms > _PROMETHEUS_THRESHOLD_MS:
+        try:
+            db_slow_queries_total.inc()
+        except Exception:
+            pass
 
     # N+1 감지: 같은 요청 내에서 동일 테이블을 반복 쿼리
     counter = getattr(_local, "query_counter", None)

@@ -7,8 +7,16 @@ import logging
 
 from celery import Celery, signals
 from celery.schedules import crontab
+from prometheus_client import Counter as _PrometheusCounter
 
 from .config import get_settings
+
+# ── Celery 태스크 실패 Prometheus 카운터 ────────────────────────────────────
+celery_task_failures_total = _PrometheusCounter(
+    "celery_task_failures_total",
+    "Total number of Celery task failures",
+    ["task_name"],
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +87,7 @@ celery_app = _make_celery()
 # ── 태스크 실패 시그널 핸들러 ────────────────────────────────────────────────
 @signals.task_failure.connect
 def on_task_failure(sender=None, task_id=None, exception=None, traceback=None, **kwargs):
-    """태스크 실패 시 ERROR 레벨 로그를 남긴다."""
+    """태스크 실패 시 ERROR 로그 + Prometheus 카운터 증가 + Slack 알림."""
     task_name = sender.name if sender else "unknown"
     logger.error(
         "Celery task FAILED | task=%s id=%s exception=%s",
@@ -88,6 +96,23 @@ def on_task_failure(sender=None, task_id=None, exception=None, traceback=None, *
         repr(exception),
         exc_info=False,
     )
+    # Prometheus 카운터
+    try:
+        celery_task_failures_total.labels(task_name=task_name).inc()
+    except Exception:
+        pass
+    # Slack 알림 (SLACK_ENABLED=true 이고 SLACK_WEBHOOK_URL 설정된 경우에만)
+    try:
+        from .notifications import send_slack as _send_slack  # noqa: PLC0415
+        exc_str = repr(exception)[:300]
+        _send_slack(
+            f"🚨 *Celery 태스크 실패*\n"
+            f"• 태스크: `{task_name}`\n"
+            f"• ID: `{task_id}`\n"
+            f"• 오류: `{exc_str}`"
+        )
+    except Exception as slack_err:
+        logger.debug("Celery failure Slack notify skipped: %s", slack_err)
 
 
 @signals.task_retry.connect

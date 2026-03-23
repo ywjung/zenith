@@ -559,6 +559,21 @@ async def upload_kb_attachment(
     # ClamAV 바이러스 스캔 (helpers에서 이미 import됨)
     _scan_with_clamav(content, file.filename or "file")
 
+    # MinIO 우선 업로드 시도, 미설정 또는 실패 시 GitLab 폴백
+    from .. import storage as _storage
+    minio_result = _storage.upload_file(content, file.filename or "file", mime)
+    if minio_result:
+        return {
+            "markdown": f"![{file.filename}]({minio_result['url']})" if mime.startswith("image/") else f"[{file.filename}]({minio_result['url']})",
+            "url": minio_result["url"],
+            "full_path": minio_result["url"],
+            "proxy_path": minio_result["url"],
+            "name": file.filename,
+            "size": len(content),
+            "mime": mime,
+            "storage": "minio",
+        }
+
     pid = project_id or get_settings().GITLAB_PROJECT_ID
     try:
         result = gitlab_client.upload_file(pid, file.filename or "file", content, mime)
@@ -570,6 +585,7 @@ async def upload_kb_attachment(
             "name": file.filename,
             "size": len(content),
             "mime": mime,
+            "storage": "gitlab",
         }
     except Exception as e:
         import logging

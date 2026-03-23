@@ -231,3 +231,61 @@ groups:
         annotations:
           summary: "디스크 사용률 95% 초과 — 즉시 정리 필요"
           description: "마운트: {{ $labels.mountpoint }}, 잔여 공간: {{ $value | humanize }}"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 6. Celery / DB / Redis 알림 규칙
+  # ────────────────────────────────────────────────────────────────────────────
+  - name: itsm_celery_db_redis
+    rules:
+      # ─── Celery 태스크 실패율 ──────────────────────────────────────────────
+      - alert: CeleryTaskFailureRate
+        expr: |
+          rate(celery_task_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery 태스크 실패율 높음 (5분 기준 0.1/s 초과)"
+          description: "태스크: {{ $labels.task_name }}, 실패율: {{ $value | humanize }}/s"
+
+      - alert: CeleryTaskFailureCritical
+        expr: |
+          rate(celery_task_failures_total[5m]) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Celery 태스크 실패율 위험 (0.5/s 초과)"
+          description: "태스크: {{ $labels.task_name }}, 실패율: {{ $value | humanize }}/s"
+
+      # ─── DB 슬로우 쿼리 ────────────────────────────────────────────────────
+      - alert: DatabaseSlowQueryRate
+        expr: |
+          rate(db_slow_queries_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB 슬로우 쿼리(500ms+) 빈발 — 쿼리 최적화 필요"
+          description: "슬로우 쿼리 발생률: {{ $value | humanize }}/s"
+
+      # ─── Redis 메모리 ──────────────────────────────────────────────────────
+      - alert: RedisMemoryHigh
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis 메모리 사용량 80% 초과"
+          description: "메모리 사용률: {{ $value | humanizePercentage }}"
+
+      - alert: RedisMemoryCritical
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis 메모리 95% 초과 — OOM 위험"
+          description: "메모리 사용률: {{ $value | humanizePercentage }}, 즉시 조치 필요"

@@ -9,7 +9,7 @@ test.describe('승인 대기 목록', () => {
     // 승인 대기(pending_approval) 상태 필터가 있는지 확인
     const statusFilter = page.getByRole('combobox').first();
     if (await statusFilter.isVisible()) {
-      await statusFilter.selectOption({ label: /승인 대기|pending/i });
+      await statusFilter.selectOption({ label: '승인 대기' }).catch(() => statusFilter.selectOption({ label: 'pending' }));
       await page.waitForTimeout(600);
     }
     await expect(page.locator('main')).toBeVisible();
