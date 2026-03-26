@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -9,7 +9,7 @@ ARG NEXT_PUBLIC_GITLAB_URL
 ENV NEXT_PUBLIC_GITLAB_URL=$NEXT_PUBLIC_GITLAB_URL
 RUN npm run build
 
-FROM node:22-alpine
+FROM node:25-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
