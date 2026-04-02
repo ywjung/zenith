@@ -24,7 +24,7 @@
     ]
   },
   "dependencies": {
-    "@hello-pangea/dnd": "^16.6.0",
+    "@hello-pangea/dnd": "^18.0.1",
     "@tiptap/extension-code-block-lowlight": "^2.11.7",
     "@tiptap/extension-image": "^2.11.7",
     "@tiptap/extension-mention": "^2.27.2",
