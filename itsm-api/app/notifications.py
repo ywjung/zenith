@@ -105,10 +105,14 @@ def send_email(to: str | list[str], subject: str, body_html: str) -> None:
 
     recipients = [to] if isinstance(to, str) else to
 
+    # SEC: CRLF 인젝션 방지 — 이메일 헤더에 개행 문자 삽입 시 추가 헤더 주입 가능
+    def _sanitize_header(value: str) -> str:
+        return value.replace("\r", "").replace("\n", " ").strip()
+
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = settings.SMTP_FROM
-    msg["To"] = ", ".join(recipients)
+    msg["Subject"] = _sanitize_header(subject)
+    msg["From"] = _sanitize_header(settings.SMTP_FROM)
+    msg["To"] = _sanitize_header(", ".join(recipients))
     msg.attach(MIMEText(body_html, "html", "utf-8"))
 
     last_exc: Exception | None = None

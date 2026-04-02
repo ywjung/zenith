@@ -6,6 +6,7 @@ import type { UserRole } from '@/types'
 import { useAuth } from '@/context/AuthContext'
 import { useRoleLabels } from '@/context/RoleLabelsContext'
 import { ROLES, API_BASE } from '@/lib/constants'
+import { useTranslations } from 'next-intl'
 
 type Session = {
   id: number
@@ -55,6 +56,7 @@ function getInitials(name?: string, username?: string): string {
 function AdminUsersContent() {
   const { isAdmin } = useAuth()
   const ROLE_LABELS = useRoleLabels()
+  const t = useTranslations('admin')
   const [users, setUsers] = useState<UserRole[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -77,7 +79,7 @@ function AdminUsersContent() {
     return (
       <div className="text-center py-20">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500">관리자 권한이 필요합니다.</p>
+        <p className="text-gray-500">{t('common.no_permission')}</p>
       </div>
     )
   }
@@ -92,7 +94,7 @@ function AdminUsersContent() {
         prev.map((u) => u.gitlab_user_id === gitlabUserId ? { ...u, role: newRole as UserRole['role'] } : u)
       )
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '역할 변경에 실패했습니다.')
+      alert(e instanceof Error ? e.message : t('users.role_change_failed'))
     } finally {
       setSaving(null)
     }
@@ -112,10 +114,10 @@ function AdminUsersContent() {
         setExpandedUserId(gitlabUserId)
       } else {
         const err = await r.json().catch(() => ({}))
-        alert((err as { detail?: string }).detail || `세션 로드 실패 (HTTP ${r.status})`)
+        alert((err as { detail?: string }).detail || t('users.session_load_error', { status: r.status }))
       }
     } catch {
-      alert('세션 정보를 불러오는 중 오류가 발생했습니다.')
+      alert(t('users.session_load_failed'))
     } finally {
       setSessionsLoading(null)
     }
@@ -134,10 +136,10 @@ function AdminUsersContent() {
         }))
       } else {
         const err = await r.json().catch(() => ({}))
-        alert(err.detail || '세션 해제에 실패했습니다.')
+        alert(err.detail || t('users.session_revoke_failed'))
       }
     } catch {
-      alert('세션 해제 중 오류가 발생했습니다.')
+      alert(t('users.session_revoke_error'))
     }
   }
 
@@ -162,6 +164,14 @@ function AdminUsersContent() {
 
   return (
     <div>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+          {t('users.title')}
+        </h1>
+      </div>
       {/* Role stats */}
       <div className="grid grid-cols-5 gap-3 mb-6">
         {ROLES.map((role) => (
@@ -192,7 +202,7 @@ function AdminUsersContent() {
           <span className="text-gray-400">🔍</span>
           <input
             type="text"
-            placeholder="이름, 아이디, 이메일, 소속 검색..."
+            placeholder={t('users.search_placeholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1 text-sm focus:outline-none text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500 dark:bg-gray-800"
@@ -203,25 +213,25 @@ function AdminUsersContent() {
                 onClick={() => setRoleFilter('')}
                 className="text-xs text-blue-600 hover:text-blue-800"
               >
-                필터 해제
+                {t('common.filter_clear')}
               </button>
             )}
-            <span className="text-xs text-gray-400 dark:text-gray-500">{filtered.length}명</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">{t('users.count', { n: filtered.length })}</span>
           </div>
         </div>
 
         {loading ? (
-          <div className="text-center py-16 text-gray-400">불러오는 중...</div>
+          <div className="text-center py-16 text-gray-400">{t('common.loading')}</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">사용자</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">이메일</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">소속</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">가입일</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400 w-52">ITSM 역할</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">세션</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">{t('users.col_user')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">{t('users.col_email')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">{t('users.col_org')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">{t('users.col_joined')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400 w-52">{t('users.col_role')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">{t('users.col_session')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -260,7 +270,7 @@ function AdminUsersContent() {
                           ))}
                         </select>
                         {saving === u.gitlab_user_id && (
-                          <span className="text-xs text-gray-400 dark:text-gray-500 animate-pulse">저장 중...</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500 animate-pulse">{t('users.saving_role')}</span>
                         )}
                       </div>
                     </td>
@@ -270,10 +280,10 @@ function AdminUsersContent() {
                         className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
                       >
                         {sessionsLoading === u.gitlab_user_id
-                          ? '로딩중...'
+                          ? t('users.session_loading')
                           : expandedUserId === u.gitlab_user_id
-                          ? '접기'
-                          : '세션 보기'}
+                          ? t('users.session_collapse')
+                          : t('users.session_view')}
                       </button>
                     </td>
                   </tr>
@@ -281,14 +291,14 @@ function AdminUsersContent() {
                     <tr key={`sessions-${u.id}`}>
                       <td colSpan={6} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
                         {(sessions[u.gitlab_user_id] ?? []).length === 0 ? (
-                          <p className="text-xs text-gray-400">활성 세션 없음</p>
+                          <p className="text-xs text-gray-400">{t('users.session_none')}</p>
                         ) : (
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="text-gray-500 dark:text-gray-400">
-                                <th className="text-left pb-2 font-medium">기기</th>
-                                <th className="text-left pb-2 font-medium">IP</th>
-                                <th className="text-left pb-2 font-medium">마지막 사용</th>
+                                <th className="text-left pb-2 font-medium">{t('users.session_col_device')}</th>
+                                <th className="text-left pb-2 font-medium">{t('users.session_col_ip')}</th>
+                                <th className="text-left pb-2 font-medium">{t('users.session_col_last_used')}</th>
                                 <th className="pb-2" />
                               </tr>
                             </thead>
@@ -307,7 +317,7 @@ function AdminUsersContent() {
                                       onClick={() => revokeSession(u.gitlab_user_id, s.id)}
                                       className="text-xs px-2 py-1 border border-red-200 dark:border-red-800 text-red-500 dark:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
                                     >
-                                      강제 종료
+                                      {t('users.session_revoke')}
                                     </button>
                                   </td>
                                 </tr>
@@ -323,7 +333,7 @@ function AdminUsersContent() {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">
-                    {search || roleFilter ? '검색 결과가 없습니다.' : '등록된 사용자가 없습니다.'}
+                    {search || roleFilter ? t('common.no_results') : t('users.no_users')}
                   </td>
                 </tr>
               )}

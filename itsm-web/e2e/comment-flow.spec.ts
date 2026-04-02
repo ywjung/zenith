@@ -61,14 +61,16 @@ test.describe('댓글 입력 및 제출', () => {
       return;
     }
 
-    await editor.click();
-    await editor.fill(commentText);
+    // PWA install prompt 등 오버레이를 무시하고 force click
+    await editor.click({ force: true });
+    // pressSequentially triggers Tiptap keyboard events; fill() alone may not update editor state
+    await editor.pressSequentially(commentText, { delay: 20 });
 
     // 제출 버튼 클릭
     const submitBtn = page.getByRole('button', { name: /댓글|comment|전송|제출|등록|저장/i }).first();
     const hasBtn = await submitBtn.isVisible().catch(() => false);
     if (hasBtn) {
-      await submitBtn.click();
+      await submitBtn.click({ force: true });
       await page.waitForTimeout(1000);
     }
 
@@ -86,8 +88,16 @@ test.describe('댓글 입력 및 제출', () => {
       return;
     }
 
-    // 빈 상태로 제출 시도
-    await submitBtn.click();
+    // 빈 상태에서는 버튼이 disabled 이거나, 클릭해도 제출되지 않아야 함
+    const isDisabled = await submitBtn.isDisabled().catch(() => false);
+    if (isDisabled) {
+      // disabled 버튼 → 빈 댓글 방어 로직 정상 동작
+      await expect(page.locator('main')).toBeVisible();
+      return;
+    }
+
+    // 비활성화 방식이 다른 경우 force-click 시도
+    await submitBtn.click({ force: true });
     await page.waitForTimeout(500);
 
     // 페이지가 유지되어야 함 (에러 또는 그대로)
@@ -126,7 +136,7 @@ test.describe('내부 메모 / 공개 댓글 구분', () => {
     const hasToggle = await toggleBtn.isVisible().catch(() => false);
 
     if (hasToggle) {
-      await toggleBtn.click();
+      await toggleBtn.click({ force: true });
       await page.waitForTimeout(300);
       // 토글 후에도 페이지가 유지되어야 함
       await expect(page.locator('main')).toBeVisible();

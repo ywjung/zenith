@@ -3,7 +3,7 @@ import logging
 from typing import Optional, List
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -55,11 +55,21 @@ def list_faq(
     category: Optional[str] = None,
     active_only: bool = Query(default=True),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    request: Request = None,
 ):
-    """FAQ 목록 조회. active_only=false는 agent 이상만 허용."""
-    role = current_user.get("role", "user")
-    is_agent = role in ("agent", "admin", "pl")
+    """FAQ 목록 조회. 공개 접근 가능(active_only=true). active_only=false는 agent 이상만."""
+    # 인증이 있으면 역할 확인, 없으면 일반 사용자 취급 (공개 접근 허용)
+    is_agent = False
+    try:
+        from ..auth import get_current_user as _get_user
+        current_user = _get_user(request)
+        role = current_user.get("role", "user")
+        is_agent = role in ("agent", "admin", "pl")
+    except HTTPException:
+        # 인증 없음(401) 또는 권한 부족(403) — 공개 접근으로 처리
+        pass
+    except Exception:
+        logger.warning("FAQ: unexpected error during optional auth", exc_info=True)
 
     q = db.query(FaqItem)
     if active_only or not is_agent:

@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { fetchServiceTypes } from '@/lib/api'
 import type { ServiceType } from '@/types'
+import { useAuth } from './AuthContext'
 
 interface ServiceTypesCtx {
   serviceTypes: ServiceType[]
@@ -31,6 +32,7 @@ const FALLBACK: Record<string, { label: string; emoji: string }> = {
 
 export function ServiceTypesProvider({ children }: { children: React.ReactNode }) {
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
+  const { user } = useAuth()
 
   const load = useCallback(() => {
     fetchServiceTypes()
@@ -38,7 +40,8 @@ export function ServiceTypesProvider({ children }: { children: React.ReactNode }
       .catch(() => {/* not authenticated yet, context stays empty */})
   }, [])
 
-  useEffect(() => { load() }, [load])
+  // 사용자가 인증된 후에만 호출 — 미인증 시 403 콘솔 오류 방지
+  useEffect(() => { if (user) load() }, [user, load])
 
   // value / label / description 모두로 조회
   // - value: 숫자 "1","2" (서비스 타입 ID)

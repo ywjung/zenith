@@ -79,7 +79,12 @@ export default function AdminLabelsPage() {
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">GitLab 라벨 동기화 관리</h2>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              </svg>
+              GitLab 라벨 동기화 관리
+            </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               ITSM에서 사용하는 모든 라벨이 GitLab 프로젝트·그룹에 존재하는지 확인하고 동기화합니다.
             </p>

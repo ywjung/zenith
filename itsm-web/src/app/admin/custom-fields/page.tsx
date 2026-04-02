@@ -133,10 +133,15 @@ export default function CustomFieldsPage() {
   if (!isAdmin) return <div className="p-6 text-gray-500">관리자 권한이 필요합니다.</div>
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">커스텀 필드 관리</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <svg className="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            커스텀 필드 관리
+          </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">티켓에 추가할 커스텀 필드를 정의합니다.</p>
         </div>
         <button

@@ -42,7 +42,7 @@ FAKE_ISSUE = {
 
 
 def _make_token(role="user", user_id="42", include_gitlab_token=True):
-    from jose import jwt as _jwt
+    import jwt as _jwt
     payload = {
         "sub": user_id,
         "role": role,

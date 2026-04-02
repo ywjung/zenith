@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { API_BASE } from '@/lib/constants'
-import { Suspense } from 'react'
 
 function CallbackContent() {
   const params = useSearchParams()
@@ -19,7 +18,7 @@ function CallbackContent() {
     const state = params.get('state')
     const error = params.get('error')
 
-    // URL에서 code/state 파라미터 제거 — 주소창 노출 방지
+    // URL에서 code/state 제거 — 주소창 노출 방지 (보안)
     window.history.replaceState({}, '', '/auth/callback')
 
     if (error || !code || !state) {
@@ -33,9 +32,9 @@ function CallbackContent() {
       credentials: 'include',
       body: JSON.stringify({ code, state }),
     })
-      .then((res) => {
+      .then(res => {
         if (res.ok) {
-          // window.location으로 전체 새로고침 — AuthProvider가 재마운트되어 최신 쿠키 반영
+          // window.location으로 전체 새로고침 — AuthProvider 재마운트로 최신 쿠키 반영
           window.location.replace('/')
         } else {
           router.replace('/login?error=auth_failed')
@@ -47,11 +46,33 @@ function CallbackContent() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-gray-600 text-sm font-medium">로그인 처리 중...</p>
-        <p className="text-gray-400 text-xs mt-1">잠시만 기다려 주세요</p>
+    <div className="fixed inset-0 z-[999] flex items-center justify-center"
+      style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}
+    >
+      <div className="flex flex-col items-center gap-5">
+        {/* ZENITH logo */}
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl"
+          style={{ background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)', boxShadow: '0 0 30px rgba(59,130,246,0.4)' }}
+        >
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-9 h-9">
+            <polygon
+              points="16,3 17.4,8 22.5,8 18.5,11.2 19.9,16.2 16,13 12.1,16.2 13.5,11.2 9.5,8 14.6,8"
+              fill="#FCD34D"
+            />
+            <path d="M8 19H23.5L8 28H24" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+
+        {/* Spinner */}
+        <div className="relative w-10 h-10">
+          <div className="absolute inset-0 rounded-full border-2 border-slate-700" />
+          <div className="absolute inset-0 rounded-full border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+        </div>
+
+        <div className="text-center">
+          <p className="text-white text-sm font-medium">로그인 처리 중</p>
+          <p className="text-slate-500 text-xs mt-1">잠시만 기다려 주세요...</p>
+        </div>
       </div>
     </div>
   )
@@ -59,7 +80,14 @@ function CallbackContent() {
 
 export default function CallbackPage() {
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <div className="fixed inset-0 z-[999] flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}>
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
       <CallbackContent />
     </Suspense>
   )

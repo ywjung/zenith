@@ -1,8 +1,9 @@
 """Non-endpoint helper functions shared across ticket sub-modules."""
 import concurrent.futures
-import html as _html
+import hashlib as _hashlib
 import logging
 import re as _re_shared
+from html.parser import HTMLParser as _HTMLParser
 from typing import Optional
 
 from fastapi import BackgroundTasks, HTTPException
@@ -127,14 +128,25 @@ def _dispatch_notification(background_tasks: BackgroundTasks, celery_task, fallb
 # 캐시 무효화
 # ---------------------------------------------------------------------------
 
+def _make_list_cache_key(project_id: Optional[str], ver: int, **params: object) -> str:
+    """파라미터를 SHA-256으로 해시해 짧은 Redis 키를 반환한다.
+    Redis 권장 키 길이(≤1 KB)를 초과하는 검색어 등을 안전하게 처리."""
+    raw = f"{project_id or ''}:{ver}:" + ":".join(f"{k}={v}" for k, v in sorted(params.items()))
+    digest = _hashlib.sha256(raw.encode()).hexdigest()[:32]
+    return f"itsm:tl:{project_id or 'all'}:v{ver}:{digest}"
+
+
 def _invalidate_ticket_list_cache(project_id: Optional[str] = None) -> None:
     """티켓 목록 캐시 버전을 증가 + 구 버전 캐시 키를 즉시 삭제한다."""
     _r = _get_redis()
     if _r:
         pid_part = project_id or ''
+        # 구형 키(itsm:tickets:) 와 신형 키(itsm:tl:) 동시 삭제
         _scan_delete(_r, f"itsm:tickets:{pid_part}:v*")
+        _scan_delete(_r, f"itsm:tl:{pid_part or 'all'}:v*")
         if pid_part:
             _scan_delete(_r, "itsm:tickets::v*")
+            _scan_delete(_r, "itsm:tl:all:v*")
         _r.incr(f"itsm:tickets:v:{pid_part or 'all'}")
         _r.expire(f"itsm:tickets:v:{pid_part or 'all'}", 3600)
         if pid_part:
@@ -276,13 +288,98 @@ def _scan_with_clamav(content: bytes, filename: str) -> None:
 # 댓글 sanitizer
 # ---------------------------------------------------------------------------
 
+# TipTap 에서 생성되는 안전한 HTML 태그/속성 허용 목록
+_ALLOWED_TAGS: frozenset[str] = frozenset({
+    "p", "br", "hr", "blockquote", "pre",
+    "strong", "b", "em", "i", "u", "s", "code",
+    "ul", "ol", "li",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "a", "span", "div",
+    "table", "thead", "tbody", "tr", "th", "td",
+    "img",
+})
+# 태그별 허용 속성 (없는 태그는 속성 없이 재생성)
+_ALLOWED_ATTRS: dict[str, frozenset[str]] = {
+    "a":   frozenset({"href", "title", "target", "rel"}),
+    "img": frozenset({"src", "alt", "width", "height"}),
+    "th":  frozenset({"colspan", "rowspan"}),
+    "td":  frozenset({"colspan", "rowspan"}),
+    "span": frozenset({"class"}),
+    "div":  frozenset({"class"}),
+    "p":    frozenset({"class"}),
+}
+_SAFE_HREF_SCHEMES = ("http://", "https://", "mailto:", "#")
+
+
+class _AllowlistSanitizer(_HTMLParser):
+    """TipTap HTML 를 허용된 태그/속성만 남기고 재조립한다.
+
+    - 허용 목록에 없는 태그: 열기/닫기 태그 제거, 텍스트 내용은 유지
+    - script / style / iframe 등 위험 태그: 내용까지 삭제
+    - href 속성: http/https/mailto/# 로 시작하는 경우만 유지
+    """
+    _STRIP_CONTENT_TAGS: frozenset[str] = frozenset({"script", "style", "iframe", "object", "embed", "frame"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._out: list[str] = []
+        self._strip_depth: int = 0  # strip-content 태그 depth
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._STRIP_CONTENT_TAGS:
+            self._strip_depth += 1
+            return
+        if self._strip_depth:
+            return
+        if tag not in _ALLOWED_TAGS:
+            return
+        allowed_a = _ALLOWED_ATTRS.get(tag, frozenset())
+        attr_str = ""
+        for name, value in attrs:
+            if name not in allowed_a:
+                continue
+            value = value or ""
+            if name == "href" and not any(value.startswith(s) for s in _SAFE_HREF_SCHEMES):
+                continue
+            if name == "src" and not any(value.startswith(s) for s in ("http://", "https://", "data:image/")):
+                continue
+            attr_str += f' {name}="{value}"'
+        self._out.append(f"<{tag}{attr_str}>")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._STRIP_CONTENT_TAGS:
+            if self._strip_depth > 0:
+                self._strip_depth -= 1
+            return
+        if self._strip_depth:
+            return
+        if tag in _ALLOWED_TAGS:
+            self._out.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if not self._strip_depth:
+            self._out.append(data)
+
+    def get_result(self) -> str:
+        return "".join(self._out)
+
+
 def _sanitize_comment(text: str) -> str:
-    """Strip dangerous HTML from comments before forwarding to GitLab. H-25."""
+    """TipTap HTML 댓글을 허용 목록 기반으로 sanitize 한다.
+
+    허용 태그의 구조(bold, italic, 리스트 등)는 보존하고
+    script/iframe 등 위험 요소는 내용까지 제거.
+    HTMLParser 사용으로 regex bypass 공격 방지.
+    """
     if not text:
         return ""
-    text = _re_shared.sub(r'<[^>]+>', '', text)
-    text = _html.unescape(text)
-    return text[:50000]
+    sanitizer = _AllowlistSanitizer()
+    try:
+        sanitizer.feed(text[:50000])
+        sanitizer.close()
+    except Exception:
+        pass
+    return sanitizer.get_result()[:50000]
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +413,9 @@ STATUS_KO = {
     "closed":            "종료됨",
     "reopened":          "재개됨",
 }
+
+# 이 상태로 전환 시 change_reason 필수 입력
+REASON_REQUIRED_TRANSITIONS: set[str] = {"waiting", "reopened"}
 
 VALID_TRANSITIONS: dict[str, set[str]] = {
     "open":              {"approved", "in_progress", "waiting", "closed"},

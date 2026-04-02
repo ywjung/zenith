@@ -109,7 +109,16 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str = ""
     MINIO_SECRET_KEY: str = ""
     MINIO_BUCKET: str = "itsm-attachments"
-    MINIO_SECURE: bool = False        # True = HTTPS
+    MINIO_SECURE: bool = True         # False = HTTP (개발 환경에서만 명시적으로 False 설정)
+
+    # Web Push / VAPID
+    # Generate keys: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print('VAPID_PRIVATE_KEY:', v.private_key); print('VAPID_PUBLIC_KEY:', v.public_key)"
+    VAPID_PRIVATE_KEY: str = ""   # URL-safe base64 raw private key
+    VAPID_PUBLIC_KEY: str = ""    # URL-safe base64 uncompressed public key (65 bytes)
+    VAPID_EMAIL: str = "mailto:admin@example.com"  # contact email for push service
+
+    # AI 요약 (Anthropic Claude)
+    ANTHROPIC_API_KEY: str = ""   # Claude API 키 — 미설정 시 AI 요약 비활성화
 
     # 세션 최대 개수 (동일 계정 동시 로그인 제한, 0=무제한)
     MAX_ACTIVE_SESSIONS: int = 5
@@ -125,6 +134,14 @@ class Settings(BaseSettings):
     # 빈 문자열: 사설 IP 전체 신뢰 (하위 호환 기본값)
     # 예: TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12
     TRUSTED_PROXIES: str = ""
+
+    # 백업 디렉토리 — /tmp는 컨테이너 재시작 시 소멸하므로 영구 볼륨 경로 지정 권장
+    BACKUP_DIR: str = "/tmp/itsm_backups"
+
+    # 백업 암호화 키 — SECRET_KEY와 독립적으로 관리하여 JWT 시크릿 교체 시에도 기존 백업 복호화 가능
+    # 미설정 시 SECRET_KEY에서 HKDF 파생 (하위 호환). 신규 설치는 반드시 별도 설정 권장.
+    # 생성: python -c "import secrets; print(secrets.token_hex(32))"
+    BACKUP_ENCRYPTION_KEY: str = ""
 
     # 2FA 강제 적용 역할 (빈 문자열=강제 안 함)
     # 예: REQUIRE_2FA_FOR_ROLES=admin,agent
@@ -161,17 +178,99 @@ class Settings(BaseSettings):
             logger.warning("CORS_ORIGINS에 와일드카드(*)가 포함되어 있습니다. 프로덕션에서는 명시적 출처를 지정하세요.")
         return v
 
+    # 기본값으로 남으면 위험한 시크릿 목록 (값, 설명)
+    _INSECURE_DEFAULTS: tuple[tuple[str, str], ...] = (
+        ("change_me_to_random_32char_string", "SECRET_KEY"),
+        ("changeme", "POSTGRES_PASSWORD (DATABASE_URL)"),
+        ("change_me_redis_password", "REDIS_PASSWORD (REDIS_URL)"),
+    )
+
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
-        # INFO-02: 프로덕션에서 토큰 암호화 키 경고
-        if self.ENVIRONMENT == "production":
+        is_prod = self.ENVIRONMENT == "production"
+
+        # 프로덕션 전용 강제 검증
+        if is_prod:
+            # H-04: 웹훅 시크릿 미설정 시 GitLab 이벤트 위조 가능 → 기동 거부
+            if not self.GITLAB_WEBHOOK_SECRET:
+                raise ValueError(
+                    "GITLAB_WEBHOOK_SECRET이 설정되지 않았습니다. "
+                    "프로덕션에서는 필수입니다. "
+                    "생성: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+                )
+            # SEC: 프로덕션에서 토큰 암호화 키 미설정 시 기동 거부
             if not self.TOKEN_ENCRYPTION_KEY:
-                logger.warning(
+                raise ValueError(
                     "TOKEN_ENCRYPTION_KEY가 설정되지 않았습니다. "
-                    "GitLab refresh 토큰이 평문으로 DB에 저장됩니다."
+                    "프로덕션 환경에서는 필수입니다. "
+                    "생성: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
                 )
             if "*" in self.CORS_ORIGINS:
                 raise ValueError("프로덕션에서는 CORS_ORIGINS에 와일드카드(*)를 사용할 수 없습니다.")
+
+            # SECRET_KEY 기본값 사용 여부 확인
+            if self.SECRET_KEY == "change_me_to_random_32char_string":
+                raise ValueError(
+                    "SECRET_KEY가 기본값입니다. 프로덕션에서는 안전한 랜덤 값으로 교체하세요. "
+                    "생성: python -c \"import secrets; print(secrets.token_hex(32))\""
+                )
+
+        # 환경 무관: 기본 시크릿 사용 시 WARNING 로그
+        # 각 필드를 개별 비교 — 시크릿을 하나의 문자열로 합치면 스택트레이스 노출 위험
+        _field_values = {
+            "SECRET_KEY": self.SECRET_KEY,
+            "POSTGRES_PASSWORD (DATABASE_URL)": self.DATABASE_URL,
+            "REDIS_PASSWORD (REDIS_URL)": self.REDIS_URL,
+        }
+        for default_val, field_name in self._INSECURE_DEFAULTS:
+            field_val = _field_values.get(field_name, "")
+            if default_val in field_val:
+                logger.warning(
+                    "⚠️  보안 경고: %s 가 기본(예시) 값으로 설정되어 있습니다. "
+                    "프로덕션 배포 전에 반드시 변경하세요!", field_name
+                )
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_integration_settings(self) -> "Settings":
+        # SMTP: NOTIFICATION_ENABLED=true 시 필수 항목 확인
+        if self.NOTIFICATION_ENABLED:
+            missing = [f for f, v in [
+                ("SMTP_HOST", self.SMTP_HOST),
+                ("SMTP_USER", self.SMTP_USER),
+                ("SMTP_PASSWORD", self.SMTP_PASSWORD),
+            ] if not v]
+            if missing:
+                raise ValueError(
+                    f"NOTIFICATION_ENABLED=true 이지만 다음 항목이 설정되지 않았습니다: {', '.join(missing)}"
+                )
+
+        # MinIO: MINIO_ENDPOINT 설정 시 ACCESS_KEY/SECRET_KEY 필수 + 취약 기본값 거부
+        if self.MINIO_ENDPOINT:
+            if not self.MINIO_ACCESS_KEY or not self.MINIO_SECRET_KEY:
+                raise ValueError(
+                    "MINIO_ENDPOINT가 설정된 경우 MINIO_ACCESS_KEY와 MINIO_SECRET_KEY가 필요합니다."
+                )
+            _minio_weak = {"minio_admin", "minio_secret_change_me", "minioadmin", "minio"}
+            if self.MINIO_ACCESS_KEY in _minio_weak or self.MINIO_SECRET_KEY in _minio_weak:
+                raise ValueError(
+                    "MINIO_ACCESS_KEY / MINIO_SECRET_KEY가 기본(예시) 값입니다. "
+                    "프로덕션 배포 전에 반드시 강력한 자격증명으로 변경하세요."
+                )
+
+        # IMAP: IMAP_ENABLED=true 시 필수 항목 확인
+        if self.IMAP_ENABLED:
+            missing = [f for f, v in [
+                ("IMAP_HOST", self.IMAP_HOST),
+                ("IMAP_USER", self.IMAP_USER),
+                ("IMAP_PASSWORD", self.IMAP_PASSWORD),
+            ] if not v]
+            if missing:
+                raise ValueError(
+                    f"IMAP_ENABLED=true 이지만 다음 항목이 설정되지 않았습니다: {', '.join(missing)}"
+                )
+
         return self
 
     @field_validator("GITLAB_PROJECT_TOKEN")
@@ -191,6 +290,24 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
+
+    @property
+    def postgres_url_parts(self) -> dict:
+        """DATABASE_URL에서 PostgreSQL 접속 정보를 파싱합니다. (CRIT-2)"""
+        from urllib.parse import urlparse
+        url = self.DATABASE_URL
+        for prefix in ("postgresql+psycopg://", "postgresql+asyncpg://", "postgres://"):
+            if url.startswith(prefix):
+                url = "postgresql://" + url[len(prefix):]
+                break
+        parsed = urlparse(url)
+        return {
+            "user": parsed.username or "itsm",
+            "password": parsed.password or "",
+            "host": parsed.hostname or "postgres",
+            "port": str(parsed.port or 5432),
+            "db": (parsed.path or "/itsm").lstrip("/") or "itsm",
+        }
 
 
 @lru_cache()

@@ -1,0 +1,1008 @@
+{
+  "uid": "itsm-problem-mgmt",
+  "title": "ITSM 문제 관리 & 변경 관리",
+  "description": "Problem Management (문제·인시던트 연계), Change Management (RFC 워크플로우), Web Push 구독 현황",
+  "tags": ["itsm", "problem", "change", "itil"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["1m", "5m", "15m", "30m", "1h"],
+    "time_options": ["6h", "12h", "24h", "2d", "7d", "30d"]
+  },
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0,
+        "label": "데이터소스"
+      }
+    ]
+  },
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "row",
+      "title": "🔴 문제 관리 (Problem Management)",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false,
+      "fieldConfig": { "defaults": {} }
+    },
+
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "전체 문제 수",
+      "description": "ticket_type_meta에 problem으로 등록된 티켓 총 수",
+      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "문제 (Problem)",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_problems_total",
+          "legendFormat": "전체 문제",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "연결된 인시던트",
+      "description": "문제에 causes 링크로 연결된 인시던트 총 수",
+      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "연결 인시던트",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_problem_linked_incidents_total",
+          "legendFormat": "연결 인시던트",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "문제당 평균 인시던트",
+      "description": "연결된 인시던트 수 / 전체 문제 수",
+      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "displayName": "평균 인시던트/문제",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_problem_linked_incidents_total / clamp_min(itsm_problems_total, 1)",
+          "legendFormat": "평균",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "미해결 문제 비율",
+      "description": "열린 문제 / 전체 문제 (인시던트가 연결된 문제 기준)",
+      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "연결 없는 문제",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "clamp_min(itsm_problems_total - itsm_problem_linked_incidents_total, 0)",
+          "legendFormat": "인시던트 미연결",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "문제 등록 추이",
+      "description": "시간에 따른 문제 티켓 수 변화 (5분 갱신 주기)",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull", "max"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "spanNulls": false
+          },
+          "color": { "mode": "palette-classic" },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_problems_total",
+          "legendFormat": "전체 문제",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_problem_linked_incidents_total",
+          "legendFormat": "연결된 인시던트",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "문제 API 요청 추이",
+      "description": "/problems/* 엔드포인트 RPS",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull", "mean"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/problems.*\"}[5m]))",
+          "legendFormat": "문제관리 RPS",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/problems.*\",status=~\"5..\"}[5m]))",
+          "legendFormat": "문제관리 오류",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 2,
+      "type": "row",
+      "title": "📋 변경 관리 (Change Management, RFC)",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 1 },
+      "collapsed": false,
+      "fieldConfig": { "defaults": {} }
+    },
+
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "전체 RFC",
+      "description": "변경 요청(RFC) 전체 수",
+      "gridPos": { "x": 0, "y": 13, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "전체 RFC",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(itsm_change_requests_total)",
+          "legendFormat": "전체",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "검토 대기 (Submitted)",
+      "description": "제출 후 검토 대기 중인 RFC",
+      "gridPos": { "x": 3, "y": 13, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "검토 대기",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_change_requests_total{status=\"submitted\"} + itsm_change_requests_total{status=\"reviewing\"}",
+          "legendFormat": "검토 대기",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "승인됨 (Approved)",
+      "description": "구현 대기 중인 승인된 RFC",
+      "gridPos": { "x": 6, "y": 13, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "승인",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_change_requests_total{status=\"approved\"}",
+          "legendFormat": "승인",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "구현 중 (Implementing)",
+      "description": "현재 구현 진행 중인 RFC",
+      "gridPos": { "x": 9, "y": 13, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "구현 중",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 8 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_change_requests_total{status=\"implementing\"}",
+          "legendFormat": "구현 중",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "긴급 변경 (Emergency)",
+      "description": "change_type=emergency인 RFC 수",
+      "gridPos": { "x": 12, "y": 13, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "긴급 변경",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_change_requests_by_type{change_type=\"emergency\"}",
+          "legendFormat": "긴급",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "실패 / 취소",
+      "description": "failed + cancelled 상태 RFC 수",
+      "gridPos": { "x": 15, "y": 13, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "실패·취소",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_change_requests_total{status=\"failed\"} + itsm_change_requests_total{status=\"cancelled\"}",
+          "legendFormat": "실패·취소",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 26,
+      "type": "stat",
+      "title": "완료 (Implemented)",
+      "description": "성공적으로 구현 완료된 RFC 수",
+      "gridPos": { "x": 18, "y": 13, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "완료",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_change_requests_total{status=\"implemented\"}",
+          "legendFormat": "완료",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 27,
+      "type": "piechart",
+      "title": "RFC 상태별 분포",
+      "description": "변경 요청 8단계 상태별 현황 분포",
+      "gridPos": { "x": 0, "y": 17, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        },
+        "tooltip": { "mode": "single" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_change_requests_total{status=\"draft\"}",
+          "legendFormat": "초안 (Draft)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_total{status=\"submitted\"}",
+          "legendFormat": "제출 (Submitted)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_total{status=\"reviewing\"}",
+          "legendFormat": "검토 중 (Reviewing)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_total{status=\"approved\"}",
+          "legendFormat": "승인 (Approved)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_total{status=\"implementing\"}",
+          "legendFormat": "구현 중 (Implementing)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_total{status=\"implemented\"}",
+          "legendFormat": "완료 (Implemented)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_total{status=\"failed\"}",
+          "legendFormat": "실패 (Failed)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_total{status=\"cancelled\"}",
+          "legendFormat": "취소 (Cancelled)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 28,
+      "type": "piechart",
+      "title": "위험 수준별 RFC 분포",
+      "description": "low / medium / high / critical 위험 수준별 변경 요청 분포",
+      "gridPos": { "x": 8, "y": 17, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        },
+        "tooltip": { "mode": "single" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "낮음 (Low)" },     "properties": [{ "id": "color", "value": { "fixedColor": "green",  "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "보통 (Medium)" },   "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "높음 (High)" },     "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "긴급 (Critical)" }, "properties": [{ "id": "color", "value": { "fixedColor": "red",    "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "itsm_change_requests_by_risk{risk_level=\"low\"}",
+          "legendFormat": "낮음 (Low)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_by_risk{risk_level=\"medium\"}",
+          "legendFormat": "보통 (Medium)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_by_risk{risk_level=\"high\"}",
+          "legendFormat": "높음 (High)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_by_risk{risk_level=\"critical\"}",
+          "legendFormat": "긴급 (Critical)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 29,
+      "type": "piechart",
+      "title": "변경 유형별 RFC 분포",
+      "description": "Standard / Normal / Emergency 변경 유형별 분포",
+      "gridPos": { "x": 16, "y": 17, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "pieType": "pie",
+        "displayLabels": ["name", "percent"],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        },
+        "tooltip": { "mode": "single" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "표준 (Standard)" },  "properties": [{ "id": "color", "value": { "fixedColor": "blue",   "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "일반 (Normal)" },    "properties": [{ "id": "color", "value": { "fixedColor": "green",  "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "긴급 (Emergency)" }, "properties": [{ "id": "color", "value": { "fixedColor": "red",    "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "itsm_change_requests_by_type{change_type=\"standard\"}",
+          "legendFormat": "표준 (Standard)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_by_type{change_type=\"normal\"}",
+          "legendFormat": "일반 (Normal)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "itsm_change_requests_by_type{change_type=\"emergency\"}",
+          "legendFormat": "긴급 (Emergency)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "RFC 단계별 추이",
+      "description": "시간에 따른 RFC 상태별 수 변화 — 병목 단계 파악",
+      "gridPos": { "x": 0, "y": 25, "w": 16, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": ["lastNotNull", "max"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          },
+          "color": { "mode": "palette-classic" },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        { "expr": "itsm_change_requests_total{status=\"submitted\"}",    "legendFormat": "제출",   "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "expr": "itsm_change_requests_total{status=\"reviewing\"}",    "legendFormat": "검토 중", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "expr": "itsm_change_requests_total{status=\"approved\"}",     "legendFormat": "승인",   "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "expr": "itsm_change_requests_total{status=\"implementing\"}", "legendFormat": "구현 중", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "expr": "itsm_change_requests_total{status=\"implemented\"}",  "legendFormat": "완료",   "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "expr": "itsm_change_requests_total{status=\"failed\"}",       "legendFormat": "실패",   "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+      ]
+    },
+
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "RFC API 요청 추이",
+      "description": "/changes/* 엔드포인트 초당 요청 수",
+      "gridPos": { "x": 16, "y": 25, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull", "mean"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/changes.*\"}[5m]))",
+          "legendFormat": "RFC RPS",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/changes.*\",status=~\"5..\"}[5m]))",
+          "legendFormat": "RFC 오류",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 3,
+      "type": "row",
+      "title": "📱 Web Push 알림",
+      "gridPos": { "x": 0, "y": 33, "w": 24, "h": 1 },
+      "collapsed": false,
+      "fieldConfig": { "defaults": {} }
+    },
+
+    {
+      "id": 40,
+      "type": "stat",
+      "title": "Web Push 구독 수",
+      "description": "현재 활성화된 Web Push 구독 브라우저 수",
+      "gridPos": { "x": 0, "y": 34, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "Push 구독",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_web_push_subscriptions_total",
+          "legendFormat": "Push 구독",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 41,
+      "type": "stat",
+      "title": "Push API RPS",
+      "description": "/push/* 엔드포인트 초당 요청 수",
+      "gridPos": { "x": 4, "y": 34, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "displayName": "Push RPS",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 }
+            ]
+          },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/push.*\"}[5m]))",
+          "legendFormat": "Push RPS",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Web Push 구독 수 추이",
+      "description": "시간에 따른 Push 구독 브라우저 수 변화",
+      "gridPos": { "x": 8, "y": 34, "w": 16, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull", "min", "max"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "spanNulls": false
+          },
+          "color": { "fixedColor": "#5794F2", "mode": "fixed" },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        {
+          "expr": "itsm_web_push_subscriptions_total",
+          "legendFormat": "Push 구독",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    },
+
+    {
+      "id": 4,
+      "type": "row",
+      "title": "🔗 ITIL 연계 현황",
+      "gridPos": { "x": 0, "y": 41, "w": 24, "h": 1 },
+      "collapsed": false,
+      "fieldConfig": { "defaults": {} }
+    },
+
+    {
+      "id": 50,
+      "type": "timeseries",
+      "title": "문제·변경·인시던트 연계 추이",
+      "description": "문제 수, RFC 수, 연결된 인시던트 수의 상관 추이 — ITIL 성숙도 지표",
+      "gridPos": { "x": 0, "y": 42, "w": 16, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": ["lastNotNull", "mean", "max"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "spanNulls": false
+          },
+          "color": { "mode": "palette-classic" },
+          "noValue": "0"
+        }
+      },
+      "targets": [
+        { "expr": "itsm_problems_total",                                              "legendFormat": "문제 (Problem)",    "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "expr": "sum(itsm_change_requests_total)",                                  "legendFormat": "RFC (Change)",      "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "expr": "itsm_problem_linked_incidents_total",                              "legendFormat": "연결된 인시던트",    "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "expr": "itsm_ticket_links_total",                                          "legendFormat": "전체 티켓 링크",    "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+      ]
+    },
+
+    {
+      "id": 51,
+      "type": "stat",
+      "title": "ITIL 커버리지 점수",
+      "description": "전체 티켓 중 문제/변경 티켓 비율 (문제+RFC / 전체 SLA 레코드) — 높을수록 체계적 관리",
+      "gridPos": { "x": 16, "y": 42, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "displayName": "ITIL 커버리지",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "green",  "value": 0.15 }
+            ]
+          },
+          "noValue": "N/A"
+        }
+      },
+      "targets": [
+        {
+          "expr": "(itsm_problems_total + sum(itsm_change_requests_total)) / clamp_min(itsm_sla_records_total{breached=\"false\"} + itsm_sla_records_total{breached=\"true\"}, 1)",
+          "legendFormat": "ITIL 커버리지",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ]
+    }
+
+  ]
+}

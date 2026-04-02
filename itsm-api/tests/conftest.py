@@ -130,7 +130,7 @@ def client():
 # ── auth helpers ──────────────────────────────────────────────────────────────
 
 import time
-from jose import jwt as _jwt
+import jwt as _jwt
 
 TEST_SECRET = "test-secret-key-at-least-32-chars-long"
 TEST_ALGORITHM = "HS256"

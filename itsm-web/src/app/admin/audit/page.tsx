@@ -1,7 +1,7 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useState } from 'react'
-import { fetchAuditLogs, downloadAuditLogs } from '@/lib/api'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { fetchAuditLogsCursor, downloadAuditLogs } from '@/lib/api'
 import type { AuditLogEntry } from '@/types'
 import { useAuth } from '@/context/AuthContext'
 
@@ -63,51 +63,91 @@ function ResourceLink({ type, id }: { type: string; id: string }) {
   )
 }
 
-function pageNumbers(page: number, totalPages: number): (number | '…')[] {
-  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
-  const nums: (number | '…')[] = [1]
-  if (page > 3) nums.push('…')
-  for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) nums.push(i)
-  if (page < totalPages - 2) nums.push('…')
-  nums.push(totalPages)
-  return nums
-}
-
-const PER_PAGE = 50
+const LIMIT = 50
 
 function AuditContent() {
   const { isAgent } = useAuth()
 
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
+  const [nextCursor, setNextCursor] = useState<number | null>(null)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadedCount, setLoadedCount] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
 
   const [actionFilter, setActionFilter] = useState('')
+  const [resourceTypeFilter, setResourceTypeFilter] = useState('')
   const [actorSearch, setActorSearch] = useState('')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
 
-  const load = useCallback(() => {
+  // 필터 변경 디바운스용
+  const filterKey = `${actionFilter}|${resourceTypeFilter}|${actorSearch}`
+  const prevFilterKey = useRef(filterKey)
+
+  // IntersectionObserver 센티넬
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  const fetchPage = useCallback(async (cursorId: number | null, reset = false) => {
     if (!isAgent) return
+    if (loading) return
     setLoading(true)
-    fetchAuditLogs({
-      page,
-      per_page: PER_PAGE,
-      action: actionFilter || undefined,
-      actor_username: actorSearch || undefined,
-      from_date: fromDate ? new Date(fromDate).toISOString() : undefined,
-      to_date: toDate ? new Date(toDate + 'T23:59:59').toISOString() : undefined,
-    })
-      .then((data) => { setLogs(data.logs); setTotal(data.total) })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [isAgent, page, actionFilter, actorSearch, fromDate, toDate])
+    setError(null)
+    try {
+      const data = await fetchAuditLogsCursor({
+        cursor_id: cursorId ?? undefined,
+        limit: LIMIT,
+        actor_username: actorSearch || undefined,
+        resource_type: resourceTypeFilter || undefined,
+        action: actionFilter || undefined,
+      })
+      setLogs(prev => reset ? data.items : [...prev, ...data.items])
+      setNextCursor(data.next_cursor)
+      setHasMore(data.has_more)
+      setLoadedCount(prev => reset ? data.items.length : prev + data.items.length)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '불러오기 실패')
+    } finally {
+      setLoading(false)
+      setInitialLoading(false)
+    }
+  }, [isAgent, actionFilter, resourceTypeFilter, actorSearch, loading])
 
-  useEffect(() => { load() }, [load])
+  // 필터 변경 시 리셋
+  useEffect(() => {
+    if (filterKey !== prevFilterKey.current) {
+      prevFilterKey.current = filterKey
+      setLogs([])
+      setNextCursor(null)
+      setHasMore(true)
+      setLoadedCount(0)
+      setInitialLoading(true)
+    }
+  }, [filterKey])
+
+  // 초기 로드 & 필터 변경 후 재로드
+  useEffect(() => {
+    if (initialLoading && isAgent) {
+      fetchPage(null, true)
+    }
+  }, [initialLoading, isAgent]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // IntersectionObserver — 센티넬이 뷰포트에 들어오면 다음 페이지 로드
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && hasMore && !loading && !initialLoading) {
+          fetchPage(nextCursor)
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, loading, initialLoading, nextCursor, fetchPage])
 
   if (!isAgent) {
     return (
@@ -118,20 +158,12 @@ function AuditContent() {
     )
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
-  const hasFilter = !!(actionFilter || actorSearch || fromDate || toDate)
-
-  // actor_username은 서버사이드 필터로 처리 — logs가 이미 필터링된 결과
-  const filtered = logs
+  const hasFilter = !!(actionFilter || resourceTypeFilter || actorSearch)
 
   async function handleDownload() {
     setDownloading(true)
     try {
-      await downloadAuditLogs({
-        action: actionFilter || undefined,
-        from_date: fromDate ? new Date(fromDate).toISOString() : undefined,
-        to_date: toDate ? new Date(toDate + 'T23:59:59').toISOString() : undefined,
-      })
+      await downloadAuditLogs({ action: actionFilter || undefined })
     } catch {
       setError('CSV 다운로드에 실패했습니다.')
     } finally {
@@ -140,7 +172,9 @@ function AuditContent() {
   }
 
   function clearFilters() {
-    setActionFilter(''); setActorSearch(''); setFromDate(''); setToDate(''); setPage(1)
+    setActionFilter('')
+    setResourceTypeFilter('')
+    setActorSearch('')
   }
 
   function formatTimestamp(iso: string) {
@@ -153,37 +187,29 @@ function AuditContent() {
 
   return (
     <div className="space-y-4">
-      {/* Filter bar */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          감사 로그
+        </h1>
+      </div>
+
+      {/* 필터 바 */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm px-4 py-3 flex flex-wrap items-end gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">기간</label>
-          <input
-            type="date" value={fromDate}
-            onChange={(e) => { setFromDate(e.target.value); setPage(1) }}
-            className="border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
-          />
-          <span className="text-gray-400 text-xs">~</span>
-          <input
-            type="date" value={toDate}
-            onChange={(e) => { setToDate(e.target.value); setPage(1) }}
-            className="border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
-          />
-        </div>
-
-        <div className="hidden sm:block w-px h-5 bg-gray-200 dark:bg-gray-600" />
-
         <div className="flex items-center gap-1.5 border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 dark:bg-gray-700">
           <span className="text-gray-400 text-xs">🔍</span>
           <input
             type="text" placeholder="행위자 검색…" value={actorSearch}
-            onChange={(e) => setActorSearch(e.target.value)}
+            onChange={e => setActorSearch(e.target.value)}
             className="text-xs focus:outline-none text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500 w-28 dark:bg-gray-700"
           />
         </div>
 
         <select
           value={actionFilter}
-          onChange={(e) => { setActionFilter(e.target.value); setPage(1) }}
+          onChange={e => setActionFilter(e.target.value)}
           className="border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
         >
           <option value="">전체 액션</option>
@@ -192,13 +218,39 @@ function AuditContent() {
           ))}
         </select>
 
+        <select
+          value={resourceTypeFilter}
+          onChange={e => setResourceTypeFilter(e.target.value)}
+          className="border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
+        >
+          <option value="">전체 리소스</option>
+          <option value="ticket">티켓</option>
+          <option value="comment">댓글</option>
+          <option value="user">사용자</option>
+          <option value="kb_article">KB 문서</option>
+          <option value="custom_field">커스텀 필드</option>
+          <option value="assignment_rule">자동 배정</option>
+          <option value="sla">SLA</option>
+          <option value="auth">인증</option>
+          <option value="announcement">공지사항</option>
+          <option value="email_template">이메일 템플릿</option>
+          <option value="outbound_webhook">웹훅</option>
+          <option value="api_key">API 키</option>
+          <option value="service_type">서비스 유형</option>
+          <option value="escalation_policy">에스컬레이션</option>
+          <option value="label">라벨</option>
+          <option value="quick_reply">빠른 답변</option>
+          <option value="template">템플릿</option>
+          <option value="system">시스템</option>
+        </select>
+
         {hasFilter && (
           <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800">초기화</button>
         )}
 
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-gray-400 dark:text-gray-500">
-            {hasFilter ? `${filtered.length}건 (전체 ${total}건)` : `총 ${total}건`}
+            {loadedCount}건 로드됨{hasMore ? ' (더 있음)' : ' (전체)'}
           </span>
           <button
             onClick={handleDownload} disabled={downloading}
@@ -216,14 +268,14 @@ function AuditContent() {
         </div>
       )}
 
-      {/* Table */}
+      {/* 테이블 */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        {loading ? (
+        {initialLoading ? (
           <div className="text-center py-16 text-gray-400">불러오는 중...</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
                 <tr>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">시간</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">행위자</th>
@@ -234,7 +286,7 @@ function AuditContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {filtered.map((log) => {
+                {logs.map(log => {
                   const meta = ACTION_META[log.action]
                   const role = ROLE_META[log.actor_role] ?? { label: log.actor_role, color: 'bg-gray-100 text-gray-600' }
                   const isExpanded = expanded === log.id
@@ -247,12 +299,9 @@ function AuditContent() {
                         className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${hasDetail ? 'cursor-pointer' : ''}`}
                         onClick={() => hasDetail && setExpanded(isExpanded ? null : log.id)}
                       >
-                        {/* 시간 */}
                         <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap font-mono">
                           {formatTimestamp(log.created_at)}
                         </td>
-
-                        {/* 행위자 — 이름 + @username */}
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
@@ -270,23 +319,17 @@ function AuditContent() {
                             </div>
                           </div>
                         </td>
-
-                        {/* 역할 */}
                         <td className="px-4 py-2.5">
                           <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${role.color}`}>
                             {role.label}
                           </span>
                         </td>
-
-                        {/* 액션 */}
                         <td className="px-4 py-2.5">
                           <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${meta?.color ?? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
                             <span className="leading-none">{meta?.icon}</span>
                             {meta?.label ?? log.action}
                           </span>
                         </td>
-
-                        {/* 대상 링크 */}
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1">
                             <ResourceLink type={log.resource_type} id={log.resource_id} />
@@ -295,14 +338,11 @@ function AuditContent() {
                             )}
                           </div>
                         </td>
-
-                        {/* IP */}
                         <td className="px-4 py-2.5 font-mono text-xs text-gray-400 whitespace-nowrap">
                           {log.ip_address ?? <span className="text-gray-200 dark:text-gray-700">—</span>}
                         </td>
                       </tr>
 
-                      {/* 변경 상세 */}
                       {isExpanded && (
                         <tr>
                           <td colSpan={6} className="px-5 py-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
@@ -330,7 +370,8 @@ function AuditContent() {
                     </Fragment>
                   )
                 })}
-                {filtered.length === 0 && (
+
+                {logs.length === 0 && !initialLoading && (
                   <tr>
                     <td colSpan={6} className="px-4 py-14 text-center text-gray-400">
                       <div className="text-3xl mb-2">📋</div>
@@ -340,48 +381,32 @@ function AuditContent() {
                 )}
               </tbody>
             </table>
+
+            {/* 무한 스크롤 센티넬 */}
+            <div ref={sentinelRef} className="h-1" />
+
+            {/* 로딩 스피너 */}
+            {loading && (
+              <div className="flex items-center justify-center py-6 text-gray-400 gap-2 text-sm">
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                불러오는 중…
+              </div>
+            )}
+
+            {/* 끝 표시 */}
+            {!hasMore && logs.length > 0 && (
+              <div className="flex items-center justify-center py-4 text-xs text-gray-400 dark:text-gray-500 gap-2">
+                <span className="w-12 h-px bg-gray-200 dark:bg-gray-700" />
+                전체 {loadedCount}건 로드 완료
+                <span className="w-12 h-px bg-gray-200 dark:bg-gray-700" />
+              </div>
+            )}
           </div>
         )}
       </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-1">
-          <button
-            onClick={() => setPage(1)} disabled={page === 1}
-            className="px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30"
-          >«</button>
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-            className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30"
-          >‹ 이전</button>
-
-          {pageNumbers(page, totalPages).map((n, i) =>
-            n === '…' ? (
-              <span key={`e${i}`} className="px-2 text-xs text-gray-400">…</span>
-            ) : (
-              <button
-                key={n}
-                onClick={() => setPage(n as number)}
-                className={`w-8 h-8 text-xs rounded-lg border transition-colors ${
-                  page === n
-                    ? 'bg-blue-600 text-white border-blue-600 font-semibold'
-                    : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-              >{n}</button>
-            )
-          )}
-
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-            className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30"
-          >다음 ›</button>
-          <button
-            onClick={() => setPage(totalPages)} disabled={page === totalPages}
-            className="px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30"
-          >»</button>
-        </div>
-      )}
     </div>
   )
 }

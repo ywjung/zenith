@@ -43,7 +43,10 @@ class ConnectionManager:
         if not self.rooms[ticket_iid]:
             del self.rooms[ticket_iid]
         logger.debug("WS disconnect: ticket=%s remaining=%d", ticket_iid, len(self.rooms.get(ticket_iid, [])))
-        await self.broadcast_viewers(ticket_iid)
+        try:
+            await self.broadcast_viewers(ticket_iid)
+        except Exception as e:
+            logger.warning("broadcast_viewers failed after disconnect (ticket=%s): %s", ticket_iid, e)
 
     async def broadcast_to_room(
         self,

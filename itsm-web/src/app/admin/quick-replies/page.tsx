@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react'
 import { fetchQuickReplies, createQuickReply, updateQuickReply, deleteQuickReply } from '@/lib/api'
 import type { QuickReply } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslations } from 'next-intl'
 
 type FormData = { name: string; content: string; category: string }
 const EMPTY_FORM: FormData = { name: '', content: '', category: '' }
 
 export default function QuickRepliesPage() {
   const { isAgent } = useAuth()
+  const t = useTranslations('admin')
   const [items, setItems] = useState<QuickReply[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -30,7 +32,7 @@ export default function QuickRepliesPage() {
     return (
       <div className="text-center py-20">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500">에이전트 이상 권한이 필요합니다.</p>
+        <p className="text-gray-500">{t('common.no_permission_agent')}</p>
       </div>
     )
   }
@@ -66,19 +68,19 @@ export default function QuickRepliesPage() {
       }
       closeForm()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장 실패')
+      setError(e instanceof Error ? e.message : t('quick_replies.save_failed'))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('삭제하시겠습니까?')) return
+    if (!confirm(t('quick_replies.delete_confirm'))) return
     try {
       await deleteQuickReply(id)
       setItems((prev) => prev.filter((r) => r.id !== id))
     } catch (e) {
-      setError(e instanceof Error ? e.message : '삭제 실패')
+      setError(e instanceof Error ? e.message : t('quick_replies.delete_failed'))
     }
   }
 
@@ -86,14 +88,19 @@ export default function QuickRepliesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">빠른 답변 템플릿</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">자주 사용하는 답변을 등록하면 코멘트 입력 시 빠르게 선택할 수 있습니다.</p>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <svg className="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            {t('quick_replies.title')}
+          </h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('quick_replies.description')}</p>
         </div>
         <button
           onClick={openCreate}
           className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
         >
-          + 새 답변 추가
+          {t('quick_replies.add_btn')}
         </button>
       </div>
 
@@ -101,58 +108,58 @@ export default function QuickRepliesPage() {
 
       {showForm && (
         <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-sm p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{editing ? '빠른 답변 수정' : '새 빠른 답변'}</h3>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{editing ? t('quick_replies.edit_title') : t('quick_replies.new_title')}</h3>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">이름 *</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('quick_replies.field_name')}</label>
               <input
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="예: 처리 완료 안내"
+                placeholder={t('quick_replies.field_name_placeholder')}
                 className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">카테고리 (선택)</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('quick_replies.field_category')}</label>
               <input
                 type="text"
                 value={form.category}
                 onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                placeholder="예: 일반, 하드웨어, 소프트웨어"
+                placeholder={t('quick_replies.field_category_placeholder')}
                 className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">내용 *</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('quick_replies.field_content')}</label>
               <textarea
                 value={form.content}
                 onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
                 rows={6}
-                placeholder="답변 내용을 입력하세요..."
+                placeholder={t('quick_replies.field_content_placeholder')}
                 className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y dark:bg-gray-700 dark:text-gray-100"
               />
             </div>
           </div>
           <div className="flex gap-2 justify-end">
-            <button onClick={closeForm} className="text-sm px-4 py-2 border dark:border-gray-600 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">취소</button>
+            <button onClick={closeForm} className="text-sm px-4 py-2 border dark:border-gray-600 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">{t('common.cancel')}</button>
             <button
               onClick={handleSave}
               disabled={saving || !form.name.trim() || !form.content.trim()}
               className="text-sm px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium disabled:opacity-50"
             >
-              {saving ? '저장 중...' : '저장'}
+              {saving ? t('common.saving') : t('common.save')}
             </button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p className="text-sm text-gray-400 py-8 text-center">불러오는 중...</p>
+        <p className="text-sm text-gray-400 py-8 text-center">{t('common.loading')}</p>
       ) : items.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <div className="text-4xl mb-3">💬</div>
-          <p className="text-sm">등록된 빠른 답변이 없습니다.</p>
+          <p className="text-sm">{t('quick_replies.no_items')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -173,13 +180,13 @@ export default function QuickRepliesPage() {
                     onClick={() => openEdit(item)}
                     className="text-xs text-blue-600 hover:text-blue-800"
                   >
-                    수정
+                    {t('common.edit')}
                   </button>
                   <button
                     onClick={() => handleDelete(item.id)}
                     className="text-xs text-red-500 hover:text-red-700"
                   >
-                    삭제
+                    {t('common.delete')}
                   </button>
                 </div>
               </div>

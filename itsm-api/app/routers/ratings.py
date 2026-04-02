@@ -77,6 +77,8 @@ def create_rating(
     db.refresh(rating)
 
     _post_gitlab_comment(iid, employee_name, data.score, data.comment)
+    if data.score <= 2:
+        _notify_low_rating(iid, employee_name, data.score, data.comment, db)
     return rating
 
 
@@ -99,6 +101,8 @@ def update_rating(
     db.refresh(existing)
 
     _post_gitlab_comment(iid, existing.employee_name, data.score, data.comment, updated=True)
+    if data.score <= 2:
+        _notify_low_rating(iid, existing.employee_name, data.score, data.comment, db)
     return existing
 
 
@@ -110,6 +114,50 @@ def get_rating(
 ):
     """하위 호환용 — 해당 티켓의 첫 번째 평가 반환."""
     return db.query(Rating).filter(Rating.gitlab_issue_iid == iid).first()
+
+
+def _notify_low_rating(iid: int, employee_name: str, score: int, comment: Optional[str], db) -> None:
+    """점수 ≤ 2인 낮은 평점 평가 시 담당 에이전트와 IT 팀에 알림 발송."""
+    try:
+        from ..notifications import create_db_notification, send_telegram
+        from ..config import get_settings
+
+        stars = "⭐" * score
+        comment_part = f" — \"{comment}\"" if comment else ""
+        title = f"낮은 만족도 평가: 티켓 #{iid} ({stars})"
+        body = f"{employee_name}님이 {score}점을 평가했습니다.{comment_part}"
+
+        # 담당 에이전트에게 in-app 알림
+        try:
+            issue = gitlab_client.get_issue(iid)
+            assignees = issue.get("assignees", [])
+            for assignee in assignees:
+                assignee_id = str(assignee.get("id", ""))
+                if assignee_id:
+                    create_db_notification(
+                        db=db,
+                        recipient_id=assignee_id,
+                        title=title,
+                        body=body,
+                        link=f"/tickets/{iid}",
+                        dedup_key=f"low-rating-{iid}",
+                        dedup_ttl=3600,
+                    )
+        except Exception as _e:
+            logger.warning("low_rating notify assignee failed for #%d: %s", iid, _e)
+
+        # Telegram 알림
+        settings = get_settings()
+        if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID:
+            send_telegram(
+                f"⚠️ <b>낮은 만족도 평가</b>\n"
+                f"#️⃣ 티켓 #{iid}\n"
+                f"⭐ 점수: {score}/5점\n"
+                f"👤 평가자: {employee_name}"
+                + (f"\n💬 의견: {comment}" if comment else "")
+            )
+    except Exception as e:
+        logger.warning("_notify_low_rating failed for #%d: %s", iid, e)
 
 
 def _post_gitlab_comment(iid: int, name: str, score: int, comment: Optional[str], updated: bool = False):

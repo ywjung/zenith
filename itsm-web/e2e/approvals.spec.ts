@@ -31,10 +31,16 @@ test.describe('승인 대기 목록', () => {
 });
 
 test.describe('승인 라우터 API', () => {
-  test('승인 내역 API가 응답한다', async ({ request }) => {
-    const res = await request.get('/api/approvals', { failOnStatusCode: false });
+  test('승인 내역 API가 응답한다', async ({ page }) => {
+    await page.goto('/');
+    const status = await page.evaluate(async (apiPath) => {
+      try {
+        const r = await fetch(apiPath, { credentials: 'include' });
+        return r.status;
+      } catch { return 0; }
+    }, '/api/approvals');
     // 200(인증됨), 401(미인증), 403(권한없음) 모두 정상 응답
-    expect([200, 401, 403, 404]).toContain(res.status());
+    expect([200, 401, 403, 404]).toContain(status);
   });
 });
 

@@ -38,7 +38,7 @@ def test_get_user_or_ip_with_valid_token():
     """_get_user_or_ip extracts username from JWT cookie (covers lines 32-34)."""
     from app.rate_limit import _get_user_or_ip
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
     from app.config import get_settings
     settings = get_settings()
     token = _jwt.encode(

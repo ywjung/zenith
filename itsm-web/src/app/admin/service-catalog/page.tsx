@@ -20,6 +20,9 @@ interface CatalogItem {
   fields_schema: FieldDef[]
   is_active: boolean
   order: number
+  requires_approval: boolean
+  approver_username: string | null
+  approval_note: string | null
   created_by: string
   updated_at: string | null
 }
@@ -94,11 +97,15 @@ interface FormState {
   fields_schema: FieldDef[]
   is_active: boolean
   order: number
+  requires_approval: boolean
+  approver_username: string
+  approval_note: string
 }
 
 const EMPTY_FORM: FormState = {
   name: '', description: '', category: '', icon: '📋',
   fields_schema: [], is_active: true, order: 0,
+  requires_approval: false, approver_username: '', approval_note: '',
 }
 
 export default function ServiceCatalogAdminPage() {
@@ -141,6 +148,9 @@ export default function ServiceCatalogAdminPage() {
       fields_schema: item.fields_schema || [],
       is_active: item.is_active,
       order: item.order,
+      requires_approval: item.requires_approval ?? false,
+      approver_username: item.approver_username || '',
+      approval_note: item.approval_note || '',
     })
     setError(null)
     setShowModal(true)
@@ -163,6 +173,9 @@ export default function ServiceCatalogAdminPage() {
           fields_schema: form.fields_schema,
           is_active: form.is_active,
           order: form.order,
+          requires_approval: form.requires_approval,
+          approver_username: form.approver_username.trim() || null,
+          approval_note: form.approval_note.trim() || null,
         }),
       })
       if (!res.ok) {
@@ -212,7 +225,12 @@ export default function ServiceCatalogAdminPage() {
       <div className="bg-white dark:bg-gray-900 rounded-2xl border dark:border-gray-700 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">서비스 카탈로그</h2>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <svg className="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+              서비스 카탈로그
+            </h1>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">포털에서 신청 가능한 서비스 항목을 관리합니다.</p>
           </div>
           <button
@@ -369,6 +387,38 @@ export default function ServiceCatalogAdminPage() {
                   fields={form.fields_schema}
                   onChange={fields => setForm(f => ({ ...f, fields_schema: fields }))}
                 />
+              </div>
+
+              {/* 승인 워크플로우 */}
+              <div className="border-t dark:border-gray-700 pt-4">
+                <label className="flex items-center gap-2 cursor-pointer mb-3">
+                  <input
+                    type="checkbox"
+                    checked={form.requires_approval}
+                    onChange={e => setForm(f => ({ ...f, requires_approval: e.target.checked }))}
+                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600"
+                  />
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    ✅ 승인 필요 <span className="text-gray-400 font-normal">(티켓 생성 시 자동으로 승인 요청 생성)</span>
+                  </span>
+                </label>
+                {form.requires_approval && (
+                  <div className="space-y-2 ml-5">
+                    <input
+                      placeholder="승인자 사용자명 (비워두면 에이전트 전체)"
+                      value={form.approver_username}
+                      onChange={e => setForm(f => ({ ...f, approver_username: e.target.value }))}
+                      className="w-full text-xs border dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <textarea
+                      placeholder="요청자에게 보여줄 안내 메시지 (선택)"
+                      value={form.approval_note}
+                      onChange={e => setForm(f => ({ ...f, approval_note: e.target.value }))}
+                      rows={2}
+                      className="w-full text-xs border dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                    />
+                  </div>
+                )}
               </div>
 
               {error && <p className="text-xs text-red-600 dark:text-red-400">⚠️ {error}</p>}

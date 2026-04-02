@@ -473,7 +473,7 @@ def test_get_current_user_invalid_api_key(client):
 def test_get_current_user_blacklisted_token(client):
     """Blacklisted JTI → 401 (covers line 248)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
 
     token = _jwt.encode({
         "sub": "42", "role": "user", "username": "u", "name": "U",
@@ -501,7 +501,7 @@ def test_get_current_user_blocked_gitlab_user(client, user_cookies):
 def test_get_current_user_jti_gitlab_token_expired(client):
     """JWT with jti, empty gitlab token, Redis TTL=-2 → 401 (covers lines 252-271)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
 
     # Token with jti; conftest redis mock has get=None (empty token) and ttl=-2
     token = _jwt.encode({
@@ -519,7 +519,7 @@ def test_get_current_user_jti_gitlab_token_expired(client):
 def test_get_current_user_jti_gitlab_token_ttl_check_exception(client):
     """Redis TTL check raises exception → fail-open, continues (covers lines 274-275)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
 
     token = _jwt.encode({
         "sub": "42", "role": "user", "username": "u", "name": "U",
@@ -544,7 +544,7 @@ def test_get_current_user_jti_gitlab_token_ttl_check_exception(client):
 def test_get_current_user_jti_valid_gitlab_token(client):
     """JWT with jti, valid gitlab token in Redis → proceeds normally (covers line 252-254)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
 
     token = _jwt.encode({
         "sub": "42", "role": "user", "username": "u", "name": "U",
@@ -568,7 +568,7 @@ def test_get_current_user_jti_valid_gitlab_token(client):
 def test_get_current_user_inactive_userrole(client):
     """UserRole with is_active=False → 403 (covers lines 294-295, 297)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
     token = _jwt.encode({
         "sub": "42", "role": "user", "username": "hong", "name": "홍",
         "exp": int(time.time()) + 3600,
@@ -590,7 +590,7 @@ def test_get_current_user_inactive_userrole(client):
 def test_get_current_user_userrole_db_exception_failopen(client):
     """DB exception in UserRole check → fail-open, continues (covers line 299)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
     token = _jwt.encode({
         "sub": "42", "role": "user", "username": "hong", "name": "홍",
         "exp": int(time.time()) + 3600,
@@ -632,7 +632,7 @@ def test_get_current_user_ip_allowlist_blocked(client, admin_cookies):
 def test_get_current_user_2fa_required_not_enabled(client):
     """Role in REQUIRE_2FA_FOR_ROLES, 2FA not enabled → 403 (covers lines 327-341)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
 
     token = _jwt.encode({
         "sub": "42", "role": "admin", "username": "u", "name": "U",
@@ -664,7 +664,7 @@ def test_get_current_user_2fa_required_not_enabled(client):
 def test_get_current_user_2fa_http_exception_raises(client):
     """httpx.get raises exception for 2FA check → 403 fail-closed (covers lines 344-350)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
 
     token = _jwt.encode({
         "sub": "42", "role": "admin", "username": "u", "name": "U",

@@ -4,16 +4,17 @@ import { useEffect, useState } from 'react'
 import { fetchSLAPolicies, updateSLAPolicy } from '@/lib/api'
 import type { SLAPolicy } from '@/types'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslations } from 'next-intl'
 
 const PRIORITY_ORDER = ['critical', 'high', 'medium', 'low']
 
-const PRIORITY_META: Record<string, {
-  label: string; icon: string; color: string; bg: string; border: string; bar: string; desc: string
+const PRIORITY_STYLE: Record<string, {
+  icon: string; color: string; bg: string; border: string; bar: string
 }> = {
-  critical: { label: '긴급', icon: '🔴', color: 'text-red-700 dark:text-red-300',    bg: 'bg-red-50 dark:bg-red-900/20',    border: 'border-red-200 dark:border-red-700',    bar: 'bg-red-400',    desc: '업무 전체 중단 · 즉시 대응' },
-  high:     { label: '높음', icon: '🟠', color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-200 dark:border-orange-700', bar: 'bg-orange-400', desc: '주요 기능 장애 · 빠른 처리 필요' },
-  medium:   { label: '보통', icon: '🟡', color: 'text-yellow-700 dark:text-yellow-300', bg: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-200 dark:border-yellow-700', bar: 'bg-yellow-400', desc: '일부 불편 · 업무 지속 가능' },
-  low:      { label: '낮음', icon: '⚪', color: 'text-gray-600 dark:text-gray-400',   bg: 'bg-gray-50 dark:bg-gray-800/50',   border: 'border-gray-200 dark:border-gray-700',   bar: 'bg-gray-400',   desc: '사소한 개선 요청' },
+  critical: { icon: '🔴', color: 'text-red-700 dark:text-red-300',    bg: 'bg-red-50 dark:bg-red-900/20',    border: 'border-red-200 dark:border-red-700',    bar: 'bg-red-400' },
+  high:     { icon: '🟠', color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-200 dark:border-orange-700', bar: 'bg-orange-400' },
+  medium:   { icon: '🟡', color: 'text-yellow-700 dark:text-yellow-300', bg: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-200 dark:border-yellow-700', bar: 'bg-yellow-400' },
+  low:      { icon: '⚪', color: 'text-gray-600 dark:text-gray-400',   bg: 'bg-gray-50 dark:bg-gray-800/50',   border: 'border-gray-200 dark:border-gray-700',   bar: 'bg-gray-400' },
 }
 
 function hoursDisplay(h: number) {
@@ -25,6 +26,14 @@ function hoursDisplay(h: number) {
 
 function SLAPoliciesContent() {
   const { isAdmin } = useAuth()
+  const t = useTranslations('admin')
+
+  const PRIORITY_META: Record<string, { icon: string; color: string; bg: string; border: string; bar: string; label: string; desc: string }> = {
+    critical: { ...PRIORITY_STYLE.critical, label: t('sla.priority_critical_label'), desc: t('sla.priority_critical_desc') },
+    high:     { ...PRIORITY_STYLE.high,     label: t('sla.priority_high_label'),     desc: t('sla.priority_high_desc') },
+    medium:   { ...PRIORITY_STYLE.medium,   label: t('sla.priority_medium_label'),   desc: t('sla.priority_medium_desc') },
+    low:      { ...PRIORITY_STYLE.low,      label: t('sla.priority_low_label'),      desc: t('sla.priority_low_desc') },
+  }
   const [policies, setPolicies] = useState<SLAPolicy[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -45,7 +54,7 @@ function SLAPoliciesContent() {
     return (
       <div className="text-center py-20">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500">관리자 권한이 필요합니다.</p>
+        <p className="text-gray-500">{t('common.no_permission')}</p>
       </div>
     )
   }
@@ -64,7 +73,7 @@ function SLAPoliciesContent() {
       setPolicies((prev) => prev.map((p) => p.priority === priority ? updated : p))
       setEditing(null)
     } catch (e: unknown) {
-      setSaveError(e instanceof Error ? e.message : '저장 실패')
+      setSaveError(e instanceof Error ? e.message : t('sla.save_failed'))
     } finally {
       setSaving(false)
     }
@@ -77,8 +86,16 @@ function SLAPoliciesContent() {
 
   return (
     <div>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {t('sla.title')}
+        </h1>
+      </div>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-        우선순위별 SLA 목표 시간을 설정합니다. 변경 사항은 새로 등록되는 티켓부터 적용됩니다.
+        {t('sla.description')}
       </p>
 
       {error && (
@@ -86,7 +103,7 @@ function SLAPoliciesContent() {
       )}
 
       {loading ? (
-        <div className="text-center py-16 text-gray-400">불러오는 중...</div>
+        <div className="text-center py-16 text-gray-400">{t('common.loading')}</div>
       ) : (
         <div className="grid grid-cols-4 gap-4">
           {ordered.map((policy) => {
@@ -106,7 +123,7 @@ function SLAPoliciesContent() {
                         onClick={() => startEdit(policy)}
                         className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 px-2 py-0.5 rounded hover:bg-white/60 dark:hover:bg-white/10"
                       >
-                        수정
+                        {t('sla.edit_btn')}
                       </button>
                     )}
                   </div>
@@ -117,7 +134,7 @@ function SLAPoliciesContent() {
                 {isEditing ? (
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs text-gray-500 dark:text-gray-400 font-medium block mb-1">최초 응답 (시간)</label>
+                      <label className="text-xs text-gray-500 dark:text-gray-400 font-medium block mb-1">{t('sla.response_time_label')}</label>
                       <input
                         type="number"
                         min={1}
@@ -128,7 +145,7 @@ function SLAPoliciesContent() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 dark:text-gray-400 font-medium block mb-1">해결 시간 (시간)</label>
+                      <label className="text-xs text-gray-500 dark:text-gray-400 font-medium block mb-1">{t('sla.resolve_time_label')}</label>
                       <input
                         type="number"
                         min={1}
@@ -145,13 +162,13 @@ function SLAPoliciesContent() {
                         disabled={saving}
                         className="flex-1 text-sm bg-blue-600 text-white py-1.5 rounded-md hover:bg-blue-700 disabled:opacity-50"
                       >
-                        {saving ? '저장...' : '저장'}
+                        {saving ? t('sla.saving') : t('common.save')}
                       </button>
                       <button
                         onClick={() => setEditing(null)}
                         className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 px-3"
                       >
-                        취소
+                        {t('common.cancel')}
                       </button>
                     </div>
                   </div>
@@ -160,7 +177,7 @@ function SLAPoliciesContent() {
                     {/* Response time */}
                     <div>
                       <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="text-gray-500 dark:text-gray-400">최초 응답</span>
+                        <span className="text-gray-500 dark:text-gray-400">{t('sla.response_time')}</span>
                         <span className={`font-bold ${meta.color}`}>{hoursDisplay(policy.response_hours)}</span>
                       </div>
                       <div className="h-1.5 bg-white/70 dark:bg-black/20 rounded-full overflow-hidden">
@@ -170,7 +187,7 @@ function SLAPoliciesContent() {
                     {/* Resolve time */}
                     <div>
                       <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="text-gray-500 dark:text-gray-400">해결 시간</span>
+                        <span className="text-gray-500 dark:text-gray-400">{t('sla.resolve_time')}</span>
                         <span className={`font-bold ${meta.color}`}>{hoursDisplay(policy.resolve_hours)}</span>
                       </div>
                       <div className="h-1.5 bg-white/70 dark:bg-black/20 rounded-full overflow-hidden">

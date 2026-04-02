@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { useTranslations } from 'next-intl'
 
 interface AutomationRule {
   id: number
@@ -28,40 +29,6 @@ interface Action {
   value: string
 }
 
-const TRIGGER_EVENTS = [
-  { value: 'ticket.created', label: '티켓 생성' },
-  { value: 'ticket.status_changed', label: '상태 변경' },
-  { value: 'ticket.assigned', label: '담당자 배정' },
-  { value: 'ticket.priority_changed', label: '우선순위 변경' },
-  { value: 'ticket.commented', label: '댓글 등록' },
-  { value: 'ticket.sla_warning', label: 'SLA 임박 경고' },
-  { value: 'ticket.sla_breached', label: 'SLA 위반 발생' },
-  { value: 'ticket.closed', label: '티켓 종료' },
-  { value: 'ticket.reopened', label: '티켓 재오픈' },
-]
-
-const CONDITION_FIELDS = [
-  { value: 'priority', label: '우선순위' },
-  { value: 'category', label: '카테고리' },
-  { value: 'status', label: '상태' },
-  { value: 'assignee', label: '담당자 username' },
-  { value: 'title', label: '제목' },
-]
-
-const CONDITION_OPS = [
-  { value: 'eq', label: '같음 (=)' },
-  { value: 'neq', label: '다름 (≠)' },
-  { value: 'contains', label: '포함' },
-  { value: 'in', label: '목록 중 하나 (쉼표 구분)' },
-]
-
-const ACTION_TYPES = [
-  { value: 'set_status', label: '상태 변경', placeholder: 'in_progress' },
-  { value: 'assign', label: '담당자 배정', placeholder: 'username' },
-  { value: 'add_label', label: '라벨 추가', placeholder: 'urgent' },
-  { value: 'notify', label: '알림 전송', placeholder: 'assignee | submitter | admin' },
-  { value: 'set_priority', label: '우선순위 변경', placeholder: 'high' },
-]
 
 const EMPTY_RULE = {
   name: '',
@@ -95,13 +62,22 @@ interface AutomationLogEntry {
   triggered_at: string
 }
 
-const TRIGGER_LABEL_MAP: Record<string, string> = Object.fromEntries(
-  TRIGGER_EVENTS.map(e => [e.value, e.label])
-)
 
 function AutomationLogsModal({ rule, onClose }: { rule: AutomationRule; onClose: () => void }) {
   const [logs, setLogs] = useState<AutomationLogEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const t = useTranslations('admin')
+  const triggerLabelMap: Record<string, string> = {
+    'ticket.created': t('automation_rules.trigger_ticket_created'),
+    'ticket.status_changed': t('automation_rules.trigger_status_changed'),
+    'ticket.assigned': t('automation_rules.trigger_assigned'),
+    'ticket.priority_changed': t('automation_rules.trigger_priority_changed'),
+    'ticket.commented': t('automation_rules.trigger_commented'),
+    'ticket.sla_warning': t('automation_rules.trigger_sla_warning'),
+    'ticket.sla_breached': t('automation_rules.trigger_sla_breached'),
+    'ticket.closed': t('automation_rules.trigger_closed'),
+    'ticket.reopened': t('automation_rules.trigger_reopened'),
+  }
 
   useEffect(() => {
     apiFetch(`/automation-rules/${rule.id}/logs?limit=50`)
@@ -119,18 +95,18 @@ function AutomationLogsModal({ rule, onClose }: { rule: AutomationRule; onClose:
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
           <div>
-            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">실행 이력</h3>
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{t('automation_rules.logs_title')}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{rule.name}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
         </div>
         <div className="overflow-y-auto flex-1">
           {loading ? (
-            <div className="text-center py-12 text-gray-400 text-sm">불러오는 중...</div>
+            <div className="text-center py-12 text-gray-400 text-sm">{t('common.loading')}</div>
           ) : logs.length === 0 ? (
             <div className="text-center py-12 text-gray-400 text-sm">
               <div className="text-3xl mb-2">📭</div>
-              아직 실행 이력이 없습니다.
+              {t('automation_rules.logs_modal_empty')}
             </div>
           ) : (
             <div className="divide-y dark:divide-gray-700">
@@ -148,11 +124,11 @@ function AutomationLogsModal({ rule, onClose }: { rule: AutomationRule; onClose:
                         #{log.ticket_iid}
                       </a>
                       <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded">
-                        {TRIGGER_LABEL_MAP[log.trigger_event] || log.trigger_event}
+                        {triggerLabelMap[log.trigger_event] || log.trigger_event}
                       </span>
                       {log.matched && log.actions_taken && log.actions_taken.length > 0 && (
                         <span className="text-xs text-green-700 dark:text-green-400">
-                          액션 {log.actions_taken.length}개 실행
+                          {t('automation_rules.action_count', { count: log.actions_taken.length })}
                         </span>
                       )}
                     </div>
@@ -186,6 +162,18 @@ function AllLogsPanel() {
   const [logs, setLogs] = useState<AutomationLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [matchedOnly, setMatchedOnly] = useState(false)
+  const t = useTranslations('admin')
+  const triggerLabelMap: Record<string, string> = {
+    'ticket.created': t('automation_rules.trigger_ticket_created'),
+    'ticket.status_changed': t('automation_rules.trigger_status_changed'),
+    'ticket.assigned': t('automation_rules.trigger_assigned'),
+    'ticket.priority_changed': t('automation_rules.trigger_priority_changed'),
+    'ticket.commented': t('automation_rules.trigger_commented'),
+    'ticket.sla_warning': t('automation_rules.trigger_sla_warning'),
+    'ticket.sla_breached': t('automation_rules.trigger_sla_breached'),
+    'ticket.closed': t('automation_rules.trigger_closed'),
+    'ticket.reopened': t('automation_rules.trigger_reopened'),
+  }
 
   function load(mo: boolean) {
     setLoading(true)
@@ -207,9 +195,17 @@ function AllLogsPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <svg className="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          {t('automation_rules.title')}
+        </h1>
+      </div>
+      <div className="flex items-center justify-between">
         <div className="flex gap-4 text-sm">
-          <span className="text-green-600 dark:text-green-400 font-medium">✓ 실행 {successCount}건</span>
-          <span className="text-gray-400 dark:text-gray-500">— 불일치 {failCount}건</span>
+          <span className="text-green-600 dark:text-green-400 font-medium">{t('automation_rules.logs_matched', { count: successCount })}</span>
+          <span className="text-gray-400 dark:text-gray-500">{t('automation_rules.logs_unmatched', { count: failCount })}</span>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
           <input
@@ -218,16 +214,16 @@ function AllLogsPanel() {
             onChange={e => setMatchedOnly(e.target.checked)}
             className="rounded text-blue-600"
           />
-          실행된 것만 보기
+          {t('automation_rules.logs_matched_only')}
         </label>
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-gray-400 text-sm">불러오는 중...</div>
+        <div className="text-center py-12 text-gray-400 text-sm">{t('common.loading')}</div>
       ) : logs.length === 0 ? (
         <div className="text-center py-12 text-gray-400 text-sm">
           <div className="text-3xl mb-2">📭</div>
-          실행 이력이 없습니다.
+          {t('automation_rules.logs_empty')}
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl divide-y dark:divide-gray-700">
@@ -245,10 +241,10 @@ function AllLogsPanel() {
                     #{log.ticket_iid}
                   </a>
                   <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">
-                    {TRIGGER_LABEL_MAP[log.trigger_event] || log.trigger_event}
+                    {triggerLabelMap[log.trigger_event] || log.trigger_event}
                   </span>
                   {log.matched && log.actions_taken && log.actions_taken.length > 0 && (
-                    <span className="text-xs text-green-700 dark:text-green-400">액션 {log.actions_taken.length}개</span>
+                    <span className="text-xs text-green-700 dark:text-green-400">{t('automation_rules.action_count', { count: log.actions_taken.length })}</span>
                   )}
                 </div>
                 {log.matched && log.actions_taken && log.actions_taken.length > 0 && (
@@ -272,6 +268,43 @@ function AllLogsPanel() {
 }
 
 export default function AutomationRulesPage() {
+  const t = useTranslations('admin')
+
+  const TRIGGER_EVENTS = [
+    { value: 'ticket.created', label: t('automation_rules.trigger_ticket_created') },
+    { value: 'ticket.status_changed', label: t('automation_rules.trigger_status_changed') },
+    { value: 'ticket.assigned', label: t('automation_rules.trigger_assigned') },
+    { value: 'ticket.priority_changed', label: t('automation_rules.trigger_priority_changed') },
+    { value: 'ticket.commented', label: t('automation_rules.trigger_commented') },
+    { value: 'ticket.sla_warning', label: t('automation_rules.trigger_sla_warning') },
+    { value: 'ticket.sla_breached', label: t('automation_rules.trigger_sla_breached') },
+    { value: 'ticket.closed', label: t('automation_rules.trigger_closed') },
+    { value: 'ticket.reopened', label: t('automation_rules.trigger_reopened') },
+  ]
+
+  const CONDITION_FIELDS = [
+    { value: 'priority', label: t('automation_rules.cond_field_priority') },
+    { value: 'category', label: t('automation_rules.cond_field_category') },
+    { value: 'status', label: t('automation_rules.cond_field_status') },
+    { value: 'assignee', label: t('automation_rules.cond_field_assignee') },
+    { value: 'title', label: t('automation_rules.cond_field_title') },
+  ]
+
+  const CONDITION_OPS = [
+    { value: 'eq', label: t('automation_rules.cond_op_eq') },
+    { value: 'neq', label: t('automation_rules.cond_op_neq') },
+    { value: 'contains', label: t('automation_rules.cond_op_contains') },
+    { value: 'in', label: t('automation_rules.cond_op_in') },
+  ]
+
+  const ACTION_TYPES = [
+    { value: 'set_status', label: t('automation_rules.action_set_status'), placeholder: 'in_progress' },
+    { value: 'assign', label: t('automation_rules.action_assign'), placeholder: 'username' },
+    { value: 'add_label', label: t('automation_rules.action_add_label'), placeholder: 'urgent' },
+    { value: 'notify', label: t('automation_rules.action_notify'), placeholder: 'assignee | submitter | admin' },
+    { value: 'set_priority', label: t('automation_rules.action_set_priority'), placeholder: 'high' },
+  ]
+
   const [tab, setTab] = useState<'rules' | 'logs'>('rules')
   const [rules, setRules] = useState<AutomationRule[]>([])
   const [loading, setLoading] = useState(true)
@@ -290,7 +323,7 @@ export default function AutomationRulesPage() {
       const data = await apiFetch('/automation-rules')
       setRules(data)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '불러오기 실패')
+      setError(e instanceof Error ? e.message : t('automation_rules.load_failed'))
     } finally {
       setLoading(false)
     }
@@ -349,19 +382,19 @@ export default function AutomationRulesPage() {
       setShowForm(false)
       await loadRules()
     } catch (e: unknown) {
-      setSaveError(e instanceof Error ? e.message : '저장 실패')
+      setSaveError(e instanceof Error ? e.message : t('automation_rules.save_failed'))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('이 규칙을 삭제할까요?')) return
+    if (!confirm(t('automation_rules.delete_confirm'))) return
     try {
       await apiFetch(`/automation-rules/${id}`, { method: 'DELETE' })
       setRules(r => r.filter(x => x.id !== id))
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '삭제 실패')
+      alert(e instanceof Error ? e.message : t('automation_rules.delete_failed'))
     }
   }
 
@@ -378,7 +411,7 @@ export default function AutomationRulesPage() {
         await loadRules()
       }
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '변경 실패')
+      alert(e instanceof Error ? e.message : t('automation_rules.toggle_failed'))
     }
   }
 
@@ -412,15 +445,20 @@ export default function AutomationRulesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">자동화 규칙</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">이벤트 발생 시 자동으로 실행할 액션을 정의합니다.</p>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <svg className="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            {t('automation_rules.title')}
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{t('automation_rules.description')}</p>
         </div>
         {tab === 'rules' && (
           <button
             onClick={openCreate}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
           >
-            + 새 규칙
+            {t('automation_rules.add_btn')}
           </button>
         )}
       </div>
@@ -431,13 +469,13 @@ export default function AutomationRulesPage() {
           onClick={() => setTab('rules')}
           className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === 'rules' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
         >
-          규칙 목록
+          {t('automation_rules.tab_rules')}
         </button>
         <button
           onClick={() => setTab('logs')}
           className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === 'logs' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
         >
-          전체 실행 이력
+          {t('automation_rules.tab_logs')}
         </button>
       </div>
 
@@ -461,9 +499,9 @@ export default function AutomationRulesPage() {
       ) : tab === 'rules' && rules.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl p-12 text-center">
           <div className="text-4xl mb-3">🤖</div>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">등록된 자동화 규칙이 없습니다.</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">{t('automation_rules.no_rules')}</p>
           <button onClick={openCreate} className="mt-3 text-blue-600 dark:text-blue-400 text-sm hover:underline">
-            첫 번째 규칙 만들기
+            {t('automation_rules.add_first')}
           </button>
         </div>
       ) : tab === 'rules' ? (
@@ -481,7 +519,7 @@ export default function AutomationRulesPage() {
                       {TRIGGER_LABEL[rule.trigger_event] || rule.trigger_event}
                     </span>
                     {!rule.is_active && (
-                      <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full">비활성</span>
+                      <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full">{t('automation_rules.inactive_badge')}</span>
                     )}
                   </div>
                   {rule.description && (
@@ -490,7 +528,7 @@ export default function AutomationRulesPage() {
                   <div className="mt-2 flex flex-wrap gap-2">
                     {rule.conditions.length > 0 && (
                       <div className="text-xs text-gray-600 dark:text-gray-300">
-                        <span className="font-medium">조건:</span>{' '}
+                        <span className="font-medium">{t('automation_rules.conditions_label')}</span>{' '}
                         {rule.conditions.map((c, i) => (
                           <span key={i} className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded mr-1">
                             {c.field} {c.operator} &ldquo;{c.value}&rdquo;
@@ -500,7 +538,7 @@ export default function AutomationRulesPage() {
                     )}
                     {rule.actions.length > 0 && (
                       <div className="text-xs text-gray-600 dark:text-gray-300">
-                        <span className="font-medium">액션:</span>{' '}
+                        <span className="font-medium">{t('automation_rules.actions_label')}</span>{' '}
                         {rule.actions.map((a, i) => (
                           <span key={i} className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded mr-1">
                             {a.type}: {a.value}
@@ -514,13 +552,13 @@ export default function AutomationRulesPage() {
                   <button
                     onClick={() => handleToggle(rule)}
                     className={`text-xs px-2 py-1 rounded ${rule.is_active ? 'text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20' : 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
-                    title={rule.is_active ? '비활성화' : '활성화'}
+                    title={rule.is_active ? t('automation_rules.deactivate') : t('automation_rules.activate')}
                   >
-                    {rule.is_active ? '비활성화' : '활성화'}
+                    {rule.is_active ? t('automation_rules.deactivate') : t('automation_rules.activate')}
                   </button>
-                  <button onClick={() => setLogsRule(rule)} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1">이력</button>
-                  <button onClick={() => openEdit(rule)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline px-2 py-1">수정</button>
-                  <button onClick={() => handleDelete(rule.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1">삭제</button>
+                  <button onClick={() => setLogsRule(rule)} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1">{t('automation_rules.logs_btn')}</button>
+                  <button onClick={() => openEdit(rule)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline px-2 py-1">{t('common.edit')}</button>
+                  <button onClick={() => handleDelete(rule.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1">{t('common.delete')}</button>
                 </div>
               </div>
             </div>
@@ -534,7 +572,7 @@ export default function AutomationRulesPage() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
               <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                {editing ? '규칙 수정' : '새 자동화 규칙'}
+                {editing ? t('automation_rules.edit_title') : t('automation_rules.new_title')}
               </h3>
               <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
             </div>
@@ -543,27 +581,27 @@ export default function AutomationRulesPage() {
               {/* 기본 정보 */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">규칙 이름 *</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('automation_rules.field_name')}</label>
                   <input
                     type="text"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                     className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="예: 긴급 티켓 자동 알림"
+                    placeholder={t('automation_rules.field_name_placeholder')}
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">설명</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('automation_rules.field_description')}</label>
                   <input
                     type="text"
                     value={form.description}
                     onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                     className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="규칙 설명 (선택)"
+                    placeholder={t('automation_rules.field_description_placeholder')}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">트리거 이벤트 *</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('automation_rules.field_trigger')}</label>
                   <select
                     value={form.trigger_event}
                     onChange={e => setForm(f => ({ ...f, trigger_event: e.target.value }))}
@@ -574,7 +612,7 @@ export default function AutomationRulesPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">순서</label>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('automation_rules.field_order')}</label>
                     <input
                       type="number"
                       value={form.order}
@@ -590,7 +628,7 @@ export default function AutomationRulesPage() {
                       onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
                       className="rounded text-blue-600"
                     />
-                    <label htmlFor="is_active" className="text-sm text-gray-700 dark:text-gray-300">활성화</label>
+                    <label htmlFor="is_active" className="text-sm text-gray-700 dark:text-gray-300">{t('automation_rules.field_active')}</label>
                   </div>
                 </div>
               </div>
@@ -598,11 +636,11 @@ export default function AutomationRulesPage() {
               {/* 조건 */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300">조건 (AND)</label>
-                  <button onClick={addCondition} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">+ 조건 추가</button>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300">{t('automation_rules.conditions_title')}</label>
+                  <button onClick={addCondition} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">{t('automation_rules.conditions_add')}</button>
                 </div>
                 {form.conditions.length === 0 ? (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">조건 없음 — 모든 이벤트에 적용</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">{t('automation_rules.conditions_empty')}</p>
                 ) : (
                   <div className="space-y-2">
                     {form.conditions.map((cond, i) => (
@@ -625,7 +663,7 @@ export default function AutomationRulesPage() {
                           type="text"
                           value={cond.value}
                           onChange={e => updateCondition(i, 'value', e.target.value)}
-                          placeholder="값"
+                          placeholder={t('automation_rules.condition_value_placeholder')}
                           className="flex-1 border dark:border-gray-600 rounded px-2 py-1.5 text-xs dark:bg-gray-800 dark:text-gray-100 focus:outline-none"
                         />
                         <button onClick={() => removeCondition(i)} className="text-red-400 hover:text-red-600 px-1">×</button>
@@ -638,11 +676,11 @@ export default function AutomationRulesPage() {
               {/* 액션 */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300">액션</label>
-                  <button onClick={addAction} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">+ 액션 추가</button>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300">{t('automation_rules.actions_title')}</label>
+                  <button onClick={addAction} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">{t('automation_rules.actions_add')}</button>
                 </div>
                 {form.actions.length === 0 ? (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">액션을 최소 1개 추가해주세요</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">{t('automation_rules.actions_empty')}</p>
                 ) : (
                   <div className="space-y-2">
                     {form.actions.map((action, i) => {
@@ -660,7 +698,7 @@ export default function AutomationRulesPage() {
                             type="text"
                             value={action.value}
                             onChange={e => updateAction(i, 'value', e.target.value)}
-                            placeholder={actionDef?.placeholder || '값'}
+                            placeholder={actionDef?.placeholder || t('automation_rules.condition_value_placeholder')}
                             className="flex-1 border dark:border-gray-600 rounded px-2 py-1.5 text-xs dark:bg-gray-800 dark:text-gray-100 focus:outline-none"
                           />
                           <button onClick={() => removeAction(i)} className="text-red-400 hover:text-red-600 px-1">×</button>
@@ -683,14 +721,14 @@ export default function AutomationRulesPage() {
                 onClick={() => setShowForm(false)}
                 className="px-4 py-2 border dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
-                취소
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !form.name}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
               >
-                {saving ? '저장 중...' : editing ? '수정 완료' : '규칙 생성'}
+                {saving ? t('common.saving') : editing ? t('automation_rules.save_done_btn') : t('automation_rules.save_btn')}
               </button>
             </div>
           </div>

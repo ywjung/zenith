@@ -1,4 +1,6 @@
 import asyncio
+import contextvars
+import json
 import logging
 import threading
 import time
@@ -7,7 +9,10 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import get_settings
 from .database import engine, Base, SessionLocal
@@ -28,14 +33,68 @@ from .routers.dashboard import router as dashboard_router
 from .routers.ip_allowlist import router as ip_allowlist_router
 from .routers.faq import router as faq_router
 from .routers.custom_fields import admin_router as custom_fields_admin_router, ticket_router as custom_fields_ticket_router
+from .routers.users import router as users_router
+from .routers.admin.recurring_tickets import router as recurring_tickets_router
+from .routers.changes import router as changes_router
+from .routers.push import router as push_router
+from .routers.problems import router as problems_router
+from .routers.notification_rules import router as notification_rules_router
 from . import gitlab_client
 from . import sla as sla_module
 from .routers.reports import take_snapshot
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+# Request-scoped context variable — 각 비동기 태스크(요청)마다 독립적으로 관리됨
+_request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
+
+
+class _JsonFormatter(logging.Formatter):
+    """표준 라이브러리만으로 구현한 JSON 구조화 로그 포매터.
+
+    ELK / Loki 파이프라인에서 별도 정규식 파싱 없이 바로 인덱싱 가능.
+    """
+
+    # LogRecord 기본 필드 — payload에 이미 포함됐거나 불필요한 필드 제외
+    _SKIP = frozenset({
+        "msg", "args", "created", "relativeCreated", "msecs",
+        "exc_info", "exc_text", "stack_info", "lineno", "funcName",
+        "filename", "module", "pathname", "process", "processName",
+        "thread", "threadName", "taskName", "levelname", "levelno", "name",
+    })
+
+    def format(self, record: logging.LogRecord) -> str:
+        # extra={"req_id": ...} 로 명시된 경우 우선 사용, 없으면 ContextVar에서 읽음
+        req_id = getattr(record, "req_id", None) or _request_id_var.get()
+        payload: dict = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),   # args가 format string에 주입된 완성 메시지
+            "req_id": req_id,
+        }
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        # extra 키 추가 (기본 필드 덮어쓰기 방지)
+        for key, val in record.__dict__.items():
+            if key in self._SKIP or key.startswith("_"):
+                continue
+            if key in payload:
+                continue
+            try:
+                json.dumps(val)
+                payload[key] = val
+            except (TypeError, ValueError):
+                payload[key] = str(val)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+_json_handler = logging.StreamHandler()
+_json_handler.setFormatter(_JsonFormatter())
+logging.root.setLevel(logging.INFO)
+logging.root.handlers = [_json_handler]
+# 외부 라이브러리 로그 레벨 조정 (과도한 DEBUG 로그 차단)
+for _noisy in ("httpx", "httpcore", "uvicorn.access"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 _sla_thread_stop = threading.Event()
@@ -173,6 +232,23 @@ def _run_user_sync():
 
     group_ids: set[int] = set()
     project_ids_set: set[int] = set()
+    gitlab_admin_ids: set[int] = set()
+
+    # 0. GitLab 인스턴스 관리자(is_admin=true) 수집 — 그룹/프로젝트 멤버 여부와 무관하게 항상 활성
+    try:
+        import httpx as _httpx
+        _headers = {"PRIVATE-TOKEN": settings.GITLAB_PROJECT_TOKEN}
+        _resp = _httpx.get(
+            f"{settings.GITLAB_API_URL}/api/v4/users",
+            headers=_headers,
+            params={"admins": "true", "per_page": 100},
+            timeout=10,
+        )
+        if _resp.is_success:
+            gitlab_admin_ids = {int(u["id"]) for u in _resp.json()}
+            logger.info("User sync: %d GitLab instance admin(s) found — always active", len(gitlab_admin_ids))
+    except Exception as e:
+        logger.warning("User sync: failed to fetch GitLab admins: %s", e)
 
     # 1. 그룹 멤버 수집 (설정된 경우)
     if settings.GITLAB_GROUP_ID:
@@ -194,15 +270,16 @@ def _run_user_sync():
     # 활성 멤버 결정 기준
     if require_group and settings.GITLAB_GROUP_ID:
         # 그룹 멤버십 필수: 그룹에 없으면 프로젝트 멤버여도 비활성
+        # 단, GitLab 인스턴스 관리자는 항상 활성
         if not group_ids:
             logger.warning("User sync: group member fetch returned empty (require_group=true) — skipping to avoid mass deactivation")
             return
-        active_ids = group_ids
-        logger.info("User sync: require_group=true, using group membership only (%d members)", len(active_ids))
+        active_ids = group_ids | gitlab_admin_ids
+        logger.info("User sync: require_group=true, group+admins (%d members)", len(active_ids))
     else:
-        # 그룹 OR 프로젝트 멤버 중 하나라도 해당하면 활성
-        active_ids = group_ids | project_ids_set
-        logger.info("User sync: require_group=false, group+project union (%d members)", len(active_ids))
+        # 그룹 OR 프로젝트 멤버 중 하나라도 해당하면 활성 (관리자 포함)
+        active_ids = group_ids | project_ids_set | gitlab_admin_ids
+        logger.info("User sync: require_group=false, group+project+admins union (%d members)", len(active_ids))
 
     if not active_ids:
         logger.warning("User sync: no active members found — skipping to avoid mass deactivation")
@@ -301,10 +378,15 @@ async def lifespan(app: FastAPI):
     _sla_thread_stop.set()
     _snapshot_thread_stop.set()
     _user_sync_stop.set()
-    logger.info("Shutting down — waiting for background threads")
-    sla_thread.join(timeout=10)
-    snap_thread.join(timeout=10)
-    user_sync_thread.join(timeout=10)
+    logger.info("Shutting down — waiting for background threads (max 55s each)")
+    # gunicorn graceful-timeout=60s 기준 — 스레드에 최대 55s 허용
+    _THREAD_SHUTDOWN_TIMEOUT = 55
+    sla_thread.join(timeout=_THREAD_SHUTDOWN_TIMEOUT)
+    snap_thread.join(timeout=_THREAD_SHUTDOWN_TIMEOUT)
+    user_sync_thread.join(timeout=_THREAD_SHUTDOWN_TIMEOUT)
+    for t, name in [(sla_thread, "sla"), (snap_thread, "snapshot"), (user_sync_thread, "user_sync")]:
+        if t.is_alive():
+            logger.warning("Background thread '%s' did not stop within %ss — forcing shutdown", name, _THREAD_SHUTDOWN_TIMEOUT)
     logger.info("Background threads stopped")
 
 
@@ -321,6 +403,10 @@ app = FastAPI(
     docs_url=None if _is_production() else "/docs",
     redoc_url=None if _is_production() else "/redoc",
     openapi_url=None if _is_production() else "/openapi.json",
+    # nginx /api/ → FastAPI / 로 proxy할 때 redirect URL에 /api prefix 유지
+    root_path="/api",
+    # trailing slash 없이 접근 시 307 redirect 방지
+    redirect_slashes=False,
 )
 
 settings = get_settings()
@@ -332,6 +418,42 @@ setup_telemetry(app)
 # DB 쿼리 프로파일러 (개발 환경에서 per-request 추적 활성화)
 from .db_profiler import setup_db_profiler
 setup_db_profiler(app, enabled=not _is_production())
+
+# ---------------------------------------------------------------------------
+# 표준화된 에러 응답 핸들러
+# 모든 HTTP 오류를 { "error": { "code", "message", "detail" } } 구조로 통일
+# ---------------------------------------------------------------------------
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": str(exc.status_code), "message": exc.detail}},
+        headers=getattr(exc, "headers", None) or {},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    settings = get_settings()
+    # 프로덕션 환경에서는 필드명·타입 정보 등 스키마 지문을 숨김
+    if settings.ENVIRONMENT == "production":
+        detail: object = [
+            {"field": ".".join(str(loc) for loc in e.get("loc", [])), "msg": e.get("msg", "")}
+            for e in exc.errors()
+        ]
+    else:
+        detail = exc.errors()
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "validation_error",
+                "message": "입력 값이 올바르지 않습니다.",
+                "detail": detail,
+            }
+        },
+    )
+
 
 # Rate limiting — limiter already configured with Redis in rate_limit.py
 try:
@@ -351,7 +473,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Cookie"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -371,6 +493,11 @@ import ipaddress as _ipmod
 _LOOPBACK_NETS = [
     _ipmod.ip_network("127.0.0.0/8"),
     _ipmod.ip_network("::1/128"),
+]
+# Docker 기본 브리지 네트워크(172.17.0.0/16) 및 Compose 커스텀 네트워크(172.16.0.0/12)
+# 포트 바인딩(host→container)을 통해 접속하는 로컬 브라우저 트래픽도 허용
+_DOCKER_BRIDGE_NETS = [
+    _ipmod.ip_network("172.16.0.0/12"),  # Docker 사설 네트워크 전체 범위
 ]
 _ip_cache: dict = {"nets": [], "loaded_at": 0.0}
 _IP_CACHE_TTL = 1.0  # seconds — 긴급 차단 응답성 개선 (5초 → 1초)
@@ -406,8 +533,8 @@ def _is_local_ip(client_ip: _ipmod.IPv4Address | _ipmod.IPv6Address, request: Re
     """로컬호스트 또는 Docker 호스트 머신 IP인지 판별.
 
     Docker Compose 환경에서 localhost 브라우저 접속 시
-    X-Forwarded-For 에는 Docker 브리지 게이트웨이(Nginx 컨테이너 /24 의 .1)가
-    나타나므로, request.client.host(=Nginx 컨테이너 IP) 기준으로 계산한다.
+    X-Forwarded-For 에는 Docker 브리지 게이트웨이(172.17.0.1 등)가 나타난다.
+    nginx 컨테이너 서브넷(.1)과 Docker 기본 브리지(172.16/12) 모두 허용한다.
     """
     # 1) 일반 loopback
     if any(client_ip in net for net in _LOOPBACK_NETS):
@@ -420,6 +547,16 @@ def _is_local_ip(client_ip: _ipmod.IPv4Address | _ipmod.IPv6Address, request: Re
             if client_ip == docker_host_ip:
                 return True
         except (ValueError, StopIteration):
+            pass
+    # 3) Docker 기본 브리지(172.16.0.0/12): 포트 바인딩 NAT 경유 로컬 트래픽
+    #    proxy(nginx) 자신도 같은 사설 대역일 때만 적용 — 외부 사설망과 혼동 방지
+    if request.client:
+        try:
+            proxy_ip = _ipmod.ip_address(request.client.host)
+            if (any(client_ip in net for net in _DOCKER_BRIDGE_NETS)
+                    and any(proxy_ip in net for net in _DOCKER_BRIDGE_NETS)):
+                return True
+        except ValueError:
             pass
     return False
 
@@ -436,7 +573,8 @@ async def ip_allowlist_middleware(request: Request, call_next):
     if auth_header.startswith("Bearer "):
         token = auth_header[len("Bearer "):]
         try:
-            from jose import jwt as _jwt, JWTError as _JWTError
+            import jwt as _jwt
+            _JWTError = _jwt.exceptions.InvalidTokenError
             from .auth import ALGORITHM as _ALGORITHM, _is_token_blacklisted
             _settings = get_settings()
             payload = _jwt.decode(token, _settings.SECRET_KEY, algorithms=[_ALGORITHM])
@@ -447,7 +585,17 @@ async def ip_allowlist_middleware(request: Request, call_next):
         except Exception:
             payload = None
 
-    is_admin_path = request.url.path.startswith("/admin")
+    # UI에서 모든 인증 사용자에게 필요한 읽기 전용 메타데이터 엔드포인트 — IP 제한 제외
+    _IP_ALLOWLIST_BYPASS = frozenset({
+        "/admin/filter-options",
+        "/admin/service-types",
+        "/admin/role-labels",
+        "/admin/custom-fields",
+    })
+    is_admin_path = (
+        request.url.path.startswith("/admin")
+        and request.url.path not in _IP_ALLOWLIST_BYPASS
+    )
     should_check = is_admin_path
 
     if not should_check and payload is not None:
@@ -550,7 +698,12 @@ async def ensure_daily_snapshot_on_access(request: Request, call_next):
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-    response: Response = await call_next(request)
+    # contextvars에 저장 → 이 요청 처리 중 모든 log 레코드에 req_id 자동 포함
+    token = _request_id_var.set(request_id)
+    try:
+        response: Response = await call_next(request)
+    finally:
+        _request_id_var.reset(token)
     response.headers["X-Request-ID"] = request_id
     return response
 
@@ -560,10 +713,12 @@ async def log_requests(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     elapsed = (time.perf_counter() - start) * 1000
+    # add_request_id 미들웨어(inner)가 헤더에 이미 설정한 값을 읽음
     request_id = response.headers.get("X-Request-ID", "-")
     logger.info(
-        "%s %s %d %.1fms req=%s",
-        request.method, request.url.path, response.status_code, elapsed, request_id,
+        "%s %s %d %.1fms",
+        request.method, request.url.path, response.status_code, elapsed,
+        extra={"req_id": request_id},
     )
     return response
 
@@ -607,6 +762,12 @@ _v1.include_router(ip_allowlist_router)
 _v1.include_router(faq_router)
 _v1.include_router(custom_fields_admin_router)
 _v1.include_router(custom_fields_ticket_router)
+_v1.include_router(users_router)
+_v1.include_router(recurring_tickets_router)
+_v1.include_router(changes_router)
+_v1.include_router(push_router)
+_v1.include_router(problems_router)
+_v1.include_router(notification_rules_router)
 
 # MinIO 오브젝트 스토리지 프록시 (인증 필요)
 from fastapi import Depends as _Depends
@@ -693,14 +854,21 @@ try:
     from fastapi import Request as _VitalsRequest
     from fastapi.responses import Response as _VitalsResponse
 
+    # H3: 허용 metric_name / rating allowlist — cardinality 폭발 및 메트릭 오염 방지
+    _VITALS_ALLOWED_NAMES = frozenset({"CLS", "FID", "FCP", "LCP", "TTFB", "INP"})
+    _VITALS_ALLOWED_RATINGS = frozenset({"good", "needs-improvement", "poor"})
+
     # nginx: /api/vitals → itsm-api:8000/vitals (prefix stripped)
     @app.post("/vitals", include_in_schema=False)
     async def receive_web_vitals(request: _VitalsRequest) -> _VitalsResponse:
         try:
             data = await request.json()
-            name = str(data.get("name", "unknown"))
+            name = str(data.get("name", ""))
+            rating = str(data.get("rating", ""))
+            # allowlist 검증으로 cardinality 폭발 방지
+            if name not in _VITALS_ALLOWED_NAMES or rating not in _VITALS_ALLOWED_RATINGS:
+                return _VitalsResponse(status_code=204)
             value = float(data.get("value", 0))
-            rating = str(data.get("rating", "unknown"))
             _web_vitals_gauge.labels(metric_name=name, rating=rating).set(value)
         except Exception:
             pass
@@ -757,6 +925,17 @@ def health():
         _gitlab_health_cache = (result, now_mono)
         checks["gitlab"] = result
 
+    # Celery broker (Redis ping)
+    try:
+        import redis as _redis_mod
+        from .config import get_settings as _get_settings
+        _br = _redis_mod.Redis.from_url(_get_settings().REDIS_URL, socket_connect_timeout=2)
+        _br.ping()
+        checks["celery_broker"] = "ok"
+    except Exception as e:
+        logger.error("Health check celery_broker error: %s", e)
+        checks["celery_broker"] = "error"
+
     # GitLab 레이블 드리프트 감지 — 필수 레이블 누락 시 경고
     try:
         checks["label_sync"] = _check_label_drift()
@@ -767,6 +946,41 @@ def health():
     all_ok = all(v == "ok" for v in checks.values())
     return JSONResponse(
         content={"status": "ok" if all_ok else "degraded", "checks": checks},
+        status_code=200 if all_ok else 503,
+    )
+
+
+@app.get("/ready", tags=["system"], include_in_schema=False)
+def ready():
+    """Readiness probe — DB와 Redis만 확인 (외부 GitLab 제외).
+
+    배포 시 롤링 업데이트 또는 k8s readiness probe에 사용.
+    /health 와 달리 GitLab 다운이 503을 유발하지 않는다.
+    """
+    from fastapi.responses import JSONResponse
+    from .database import SessionLocal
+    checks: dict = {}
+
+    try:
+        with SessionLocal() as db:
+            db.execute(__import__("sqlalchemy").text("SELECT 1"))
+        checks["db"] = "ok"
+    except Exception as e:
+        logger.error("Readiness DB error: %s", e)
+        checks["db"] = "error"
+
+    try:
+        import redis as _redis_mod
+        _br = _redis_mod.Redis.from_url(get_settings().REDIS_URL, socket_connect_timeout=2)
+        _br.ping()
+        checks["redis"] = "ok"
+    except Exception as e:
+        logger.error("Readiness Redis error: %s", e)
+        checks["redis"] = "error"
+
+    all_ok = all(v == "ok" for v in checks.values())
+    return JSONResponse(
+        content={"status": "ok" if all_ok else "not_ready", "checks": checks},
         status_code=200 if all_ok else 503,
     )
 
@@ -825,7 +1039,8 @@ async def ticket_ws(
     연결 시 token 쿼리 파라미터로 JWT를 검증하고,
     접속자 목록(viewers)과 타이핑 인디케이터(typing)를 브로드캐스트한다.
     """
-    from jose import jwt as _jose_jwt, JWTError as _JoseJWTError
+    import jwt as _jose_jwt
+    _JoseJWTError = _jose_jwt.exceptions.InvalidTokenError
     from .config import get_settings as _ws_get_settings
     from .auth import ALGORITHM as _JWT_ALGORITHM
 

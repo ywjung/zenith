@@ -8,7 +8,7 @@ import pytest
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
 def _make_token(role="developer", sub="5", username="devuser"):
-    from jose import jwt as _jwt
+    import jwt as _jwt
     return _jwt.encode({
         "sub": sub, "role": role, "name": "Dev User", "username": username,
         "email": f"{username}@test.com",
@@ -51,7 +51,7 @@ FAKE_NEW_ISSUE = {
 
 def test_list_dev_projects_no_token(client, agent_cookies):
     """No gitlab_token in JWT → returns empty list."""
-    from jose import jwt as _jwt
+    import jwt as _jwt
     token = _jwt.encode({
         "sub": "3", "role": "agent", "name": "Agent",
         "username": "agent", "email": "a@x.com",
@@ -132,7 +132,7 @@ def test_create_forward_source_not_found(client, agent_cookies):
 
 def test_create_forward_no_gitlab_token(client):
     """No gitlab_token in JWT → 401."""
-    from jose import jwt as _jwt
+    import jwt as _jwt
     token = _jwt.encode({
         "sub": "3", "role": "agent", "name": "Agent",
         "username": "agent", "email": "a@x.com",

@@ -191,7 +191,7 @@ def test_create_approval_with_approver_notification(client, admin_cookies, db_se
 def test_approve_request_wrong_approver_403(client, db_session):
     """Agent who is not the designated approver → 403 (lines 149-150)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
 
     # Create approval as admin with approver_username="someone_else"
     with patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE):
@@ -247,7 +247,7 @@ def test_approve_request_with_requester_notification(client, admin_cookies, db_s
 def test_reject_request_wrong_approver_403(client, db_session):
     """Non-admin non-approver agent reject → 403 (lines 195-197)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
     from tests.conftest import make_token
 
     admin_token = make_token(role="admin", username="admin_user")

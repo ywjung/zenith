@@ -20,8 +20,11 @@ const nextConfig = {
     formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       { protocol: 'https', hostname: '**.gitlab.com' },
-      { protocol: 'http', hostname: 'localhost' },
-      { protocol: 'http', hostname: '127.0.0.1' },
+      // 개발 환경에서만 localhost 허용
+      ...(process.env.NODE_ENV !== 'production' ? [
+        { protocol: 'http', hostname: 'localhost' },
+        { protocol: 'http', hostname: '127.0.0.1' },
+      ] : []),
     ],
     minimumCacheTTL: 3600,
   },
@@ -37,6 +40,13 @@ const nextConfig = {
       '@hello-pangea/dnd',
       'react-markdown',
     ],
+  },
+
+  async redirects() {
+    return [
+      // /tickets 라우트 없음 — 홈(티켓 목록)으로 redirect
+      { source: '/tickets', destination: '/', permanent: false },
+    ]
   },
 
   async headers() {

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { fetchKBArticle, updateKBArticle } from '@/lib/api'
 import type { KBArticle } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
@@ -16,6 +17,7 @@ function EditKBContent() {
   const router = useRouter()
   const { isAgent } = useAuth()
   const { serviceTypes } = useServiceTypes()
+  const t = useTranslations('kb')
   const idOrSlug = params?.id as string
 
   const [article, setArticle] = useState<KBArticle | null>(null)
@@ -45,18 +47,24 @@ function EditKBContent() {
     return (
       <div className="text-center py-16">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500 dark:text-gray-400">에이전트 이상 권한이 필요합니다.</p>
+        <p className="text-gray-500 dark:text-gray-400">{t('permission_denied')}</p>
       </div>
     )
   }
 
-  if (loading) return <div className="text-center py-16 text-gray-400 dark:text-gray-500">불러오는 중...</div>
+  if (loading) return <div className="text-center py-16 text-gray-400 dark:text-gray-500">{t('loading')}</div>
   if (error) return <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg p-4">⚠️ {error}</div>
-  if (!article) return null
+  if (!article) return (
+    <div className="text-center py-16">
+      <div className="text-4xl mb-3">📄</div>
+      <p className="text-gray-500 dark:text-gray-400">아티클을 찾을 수 없습니다.</p>
+      <Link href="/kb" className="mt-4 inline-block text-sm text-blue-600 dark:text-blue-400 hover:underline">목록으로 돌아가기</Link>
+    </div>
+  )
 
   function addTag() {
-    const t = tagInput.trim().replace(/^#/, '')
-    if (t && !tags.includes(t)) setTags((prev) => [...prev, t])
+    const tag = tagInput.trim().replace(/^#/, '')
+    if (tag && !tags.includes(tag)) setTags((prev) => [...prev, tag])
     setTagInput('')
   }
 
@@ -76,7 +84,7 @@ function EditKBContent() {
       })
       router.push(`/kb/${updated.slug}`)
     } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : '저장에 실패했습니다.')
+      setSubmitError(err instanceof Error ? err.message : t('save_failed'))
       setSubmitting(false)
     }
   }
@@ -84,15 +92,15 @@ function EditKBContent() {
   return (
     <div className="w-full">
       <div className="mb-4">
-        <Link href={`/kb/${article.slug}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">← 아티클로 돌아가기</Link>
+        <Link href={`/kb/${article.slug}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">{t('back_to_article')}</Link>
       </div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">아티클 수정</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">{t('edit_title')}</h1>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Title */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
           <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-            제목 <span className="text-red-500 normal-case">*</span>
+            {t('title_label')} <span className="text-red-500 normal-case">*</span>
           </label>
           <input
             value={form.title}
@@ -114,7 +122,7 @@ function EditKBContent() {
 
         {/* Category */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">카테고리</label>
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('category_label')}</label>
           <div className="grid grid-cols-6 gap-2">
             <button
               type="button"
@@ -126,9 +134,9 @@ function EditKBContent() {
               }`}
             >
               <span className="text-xl">—</span>
-              <span>없음</span>
+              <span>{t('none_category')}</span>
             </button>
-            {serviceTypes.filter(t => t.enabled).map((c) => (
+            {serviceTypes.filter(st => st.enabled).map((c) => (
               <button
                 key={c.value}
                 type="button"
@@ -148,20 +156,20 @@ function EditKBContent() {
 
         {/* Editor */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">본문</label>
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('content_label')}</label>
           <RichTextEditor
             value={form.content}
             onChange={(html) => setForm((f) => ({ ...f, content: html }))}
             onInsertRef={(fn) => { editorInsertRef.current = fn }}
-            placeholder={'개요, 해결 방법, 참고 내용 등을 작성하세요.'}
+            placeholder={t('content_placeholder')}
             minHeight="320px"
           />
         </div>
 
-        {/* 파일 첨부 */}
+        {/* Attachments */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
           <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-            파일 첨부
+            {t('attachment_label')}
           </label>
           <KBFileUpload
             files={attachments}
@@ -178,14 +186,14 @@ function EditKBContent() {
 
         {/* Tags */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">태그</label>
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('tags_label')}</label>
           <div className="flex gap-2 mb-2">
             <input
               type="text"
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() } }}
-              placeholder="태그 입력 후 Enter 또는 쉼표"
+              placeholder={t('tags_placeholder')}
               className="flex-1 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
@@ -193,15 +201,15 @@ function EditKBContent() {
               onClick={addTag}
               className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              추가
+              {t('tag_add_btn')}
             </button>
           </div>
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
-              {tags.map((t) => (
-                <span key={t} className="inline-flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 rounded-full px-2.5 py-1">
-                  #{t}
-                  <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== t))} className="hover:text-red-500 ml-0.5">×</button>
+              {tags.map((tag) => (
+                <span key={tag} className="inline-flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 rounded-full px-2.5 py-1">
+                  #{tag}
+                  <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== tag))} className="hover:text-red-500 ml-0.5">×</button>
                 </span>
               ))}
             </div>
@@ -219,9 +227,9 @@ function EditKBContent() {
               <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${form.published ? 'left-6' : 'left-1'}`} />
             </button>
             <div>
-              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{form.published ? '공개' : '초안 (비공개)'}</div>
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{form.published ? t('public_label') : t('draft_private')}</div>
               <div className="text-xs text-gray-400 dark:text-gray-500">
-                {form.published ? '모든 사용자에게 공개됩니다' : '나중에 공개할 수 있습니다'}
+                {form.published ? t('visible_to_all') : t('visible_later')}
               </div>
             </div>
           </div>
@@ -232,14 +240,14 @@ function EditKBContent() {
               href={`/kb/${article.slug}`}
               className="border border-gray-300 dark:border-gray-600 px-5 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              취소
+              {t('cancel_btn')}
             </Link>
             <button
               type="submit"
               disabled={submitting}
               className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
-              {submitting ? '저장 중...' : '저장'}
+              {submitting ? t('saving_btn') : t('save_btn')}
             </button>
           </div>
         </div>

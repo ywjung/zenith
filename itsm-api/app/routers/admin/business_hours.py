@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from ...audit import write_audit_log
+from ...auth import get_current_user
 from ...database import get_db
 from ...models import BusinessHoursConfig, BusinessHoliday
 from ...rbac import require_admin
@@ -44,6 +45,24 @@ class HolidayBulkItem(BaseModel):
 
 class HolidayBulkCreate(BaseModel):
     holidays: list[HolidayBulkItem]
+
+
+@business_hours_router.get("/holidays/public")
+def get_holidays_public(
+    year: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """로그인 사용자 전체 접근 가능한 공휴일 목록 조회 (캘린더 등에서 사용)."""
+    from datetime import date as _date
+    q = db.query(BusinessHoliday)
+    if year:
+        q = q.filter(
+            BusinessHoliday.date >= _date(year, 1, 1),
+            BusinessHoliday.date <= _date(year, 12, 31),
+        )
+    holidays = q.order_by(BusinessHoliday.date).all()
+    return [{"id": h.id, "date": str(h.date), "name": h.name or ""} for h in holidays]
 
 
 @business_hours_router.get("/business-hours")

@@ -6,7 +6,11 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
 from fastapi import Depends, HTTPException, Request
-from jose import JWTError, jwt
+import jwt as _jwt_lib
+from jwt.exceptions import InvalidTokenError as JWTError
+
+# Module-level alias so existing code using `jwt.encode/decode` continues to work
+jwt = _jwt_lib
 
 from .config import get_settings
 
@@ -103,17 +107,25 @@ def create_token(user: dict, gitlab_token: str = "", role: str = "user") -> str:
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
-def _is_token_blacklisted(jti: str) -> bool:
-    """Redis JWT 블랙리스트에 해당 JTI가 있는지 확인한다."""
+def _is_token_blacklisted(jti: str, role: str = "user") -> bool:
+    """Redis JWT 블랙리스트에 해당 JTI가 있는지 확인한다.
+
+    Redis 장애 시:
+    - admin/agent/pl 역할은 fail-closed (True 반환 → 로그인 거부)
+    - 일반 user는 fail-open (False 반환) — 서비스 중단 최소화
+    """
+    privileged = role in ("admin", "agent", "pl")
     try:
         from .redis_client import get_redis
         r = get_redis()
         if r is None:
-            return False
+            if privileged:
+                logger.warning("Redis unavailable, failing closed for privileged role=%s jti=%s", role, jti)
+            return privileged  # Redis 없으면 권한자는 차단, 일반 사용자는 허용
         return r.exists(f"jwt:blacklist:{jti}") == 1
     except Exception as e:
-        logger.error("Redis blacklist check failed, failing open: %s", e)
-        return False
+        logger.error("Redis blacklist check failed (role=%s): %s", role, e)
+        return privileged  # 장애 시 권한자는 fail-closed
 
 
 def store_gitlab_token(jti: str, gitlab_token: str, ttl_seconds: int) -> None:
@@ -244,7 +256,8 @@ def get_current_user(request: Request) -> dict:
 
     # JTI 블랙리스트 검사 (로그아웃된 토큰 거부)
     jti = payload.get("jti")
-    if jti and _is_token_blacklisted(jti):
+    role = payload.get("role", "user")
+    if jti and _is_token_blacklisted(jti, role=role):
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
     # VULN-01: JWT payload에서 제거된 gitlab_token을 Redis에서 복원
@@ -282,6 +295,7 @@ def get_current_user(request: Request) -> dict:
             raise HTTPException(status_code=401, detail="GitLab 계정이 비활성화됨")
 
     # S-6: 그룹 멤버 동기화 결과 검사 (퇴사자 차단) — API 키는 숫자 ID가 없으므로 skip
+    # DB에서 최신 역할을 읽어 JWT 역할을 덮어씀 (역할 변경이 즉시 반영됨)
     role = payload.get("role", "user")
     if user_id and str(user_id).isdigit():
         try:
@@ -291,12 +305,20 @@ def get_current_user(request: Request) -> dict:
                 role_rec = db.query(UserRole).filter(
                     UserRole.gitlab_user_id == int(user_id)
                 ).first()
-                if role_rec and not role_rec.is_active:
-                    raise HTTPException(status_code=403, detail="그룹 멤버십이 해제됐습니다. 관리자에게 문의하세요.")
+                if role_rec:
+                    if not role_rec.is_active:
+                        raise HTTPException(status_code=403, detail="그룹 멤버십이 해제됐습니다. 관리자에게 문의하세요.")
+                    role = role_rec.role  # DB 역할 우선 적용
+                    payload["role"] = role  # payload에도 반영하여 return 시 최신 역할이 전달되도록 함
         except HTTPException:
             raise
         except Exception as e:
-            logger.warning("UserRole is_active check failed (fail-open): %s", e)
+            # M-03: admin/agent는 DB 오류 시 fail-closed (권한 있는 계정의 접근 차단)
+            #       일반 사용자는 fail-open (서비스 가용성 유지)
+            if role in ("admin", "agent"):
+                logger.error("UserRole is_active check failed for privileged role '%s': %s — denying access", role, e)
+                raise HTTPException(status_code=503, detail="사용자 상태를 확인할 수 없습니다. 잠시 후 다시 시도하세요.")
+            logger.warning("UserRole is_active check failed (fail-open for user role): %s", e)
 
     # S-10: IP 화이트리스트 검사 (역할별 적용)
     settings = get_settings()
@@ -304,13 +326,24 @@ def get_current_user(request: Request) -> dict:
     if admin_cidrs and role in ("admin", "agent"):
         from .security import check_ip_whitelist
         import ipaddress as _ipaddress
-        # VULN-05: trusted proxy 환경에서만 X-Forwarded-For 신뢰
+        # L-01: TRUSTED_PROXIES 설정에 명시된 IP만 X-Forwarded-For 신뢰
+        #       미설정 시 사설 IP 전체 신뢰 (하위 호환)
         client_ip = ""
         xff = request.headers.get("X-Forwarded-For", "")
         if xff and request.client:
             try:
                 proxy_addr = _ipaddress.ip_address(request.client.host)
-                if proxy_addr.is_private:
+                trusted_proxies_str = getattr(settings, "TRUSTED_PROXIES", "")
+                if trusted_proxies_str:
+                    trusted_nets = [
+                        _ipaddress.ip_network(c.strip(), strict=False)
+                        for c in trusted_proxies_str.split(",") if c.strip()
+                    ]
+                    is_trusted = any(proxy_addr in net for net in trusted_nets)
+                else:
+                    # 미설정 시 사설 IP 전체 신뢰 (기존 동작 유지)
+                    is_trusted = proxy_addr.is_private
+                if is_trusted:
                     client_ip = xff.split(",")[0].strip()
             except ValueError:
                 pass

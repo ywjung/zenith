@@ -107,7 +107,7 @@ test.describe('티켓 CRUD', () => {
         expect(hasMain).toBeTruthy();
         return;
       }
-      await submitBtn.click();
+      await submitBtn.click({ force: true });
       await page.waitForTimeout(500);
       // 유효성 오류 → 같은 폼 페이지에 머물러야 함
       const stillOnForm =
@@ -158,7 +158,7 @@ test.describe('티켓 CRUD', () => {
       const isVisible = await searchInput.isVisible().catch(() => false);
       if (!isVisible) return;
 
-      await searchInput.click();
+      await searchInput.click({ force: true });
       await searchInput.fill('테스트');
       await page.waitForTimeout(700); // debounce 대기
       // 페이지가 유지되어야 함 (결과 또는 빈 목록)
@@ -174,11 +174,11 @@ test.describe('티켓 CRUD', () => {
         .waitFor({ state: 'hidden', timeout: 10000 })
         .catch(() => {});
 
-      // 클릭 가능한 테이블 행 또는 리스트 아이템
-      const firstItem = page
-        .locator('tr[class*="cursor"], tr:has(td a), [role="listitem"] a, tbody tr')
-        .first();
-      const hasItem = await firstItem.isVisible().catch(() => false);
+      // 실제 티켓 행(링크 포함) 로드 대기 (최대 8초, 스켈레톤 행 제외)
+      const realRow = page.locator('tbody tr:has(td a)').first();
+      await realRow.waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
+
+      const hasItem = await realRow.isVisible().catch(() => false);
 
       if (!hasItem) {
         // 티켓이 없는 환경 — 스킵
@@ -186,8 +186,17 @@ test.describe('티켓 CRUD', () => {
         return;
       }
 
-      await firstItem.click();
-      await page.waitForTimeout(600);
+      // 행 내부의 링크를 클릭하거나, 링크가 없으면 행 자체 클릭
+      const linkInRow = realRow.locator('td a').first();
+      const hasLink = await linkInRow.isVisible().catch(() => false);
+      if (hasLink) {
+        await linkInRow.click({ force: true });
+      } else {
+        await realRow.click({ force: true });
+      }
+      // URL 변경 대기 (최대 5초)
+      await page.waitForURL(/tickets\/\d+/, { timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(300);
       // 상세 페이지 URL 패턴
       const url = page.url();
       expect(url).toMatch(/tickets\/\d+|issue|detail/);
@@ -237,19 +246,33 @@ test.describe('티켓 CRUD', () => {
   });
 
   test.describe('티켓 API 응답', () => {
-    test('티켓 목록 API가 정상 응답한다', async ({ request }) => {
-      const res = await request.get('/api/tickets', { failOnStatusCode: false });
+    test('티켓 목록 API가 정상 응답한다', async ({ page }) => {
+      await page.goto('/');
+      const status = await page.evaluate(async (apiPath) => {
+        try {
+          const r = await fetch(apiPath, { credentials: 'include' });
+          return r.status;
+        } catch { return 0; }
+      }, '/api/tickets');
       // 200(인증됨), 401(미인증), 403(권한없음) 모두 정상 HTTP 응답
-      expect([200, 401, 403]).toContain(res.status());
+      expect([200, 401, 403]).toContain(status);
     });
 
-    test('티켓 생성 API 엔드포인트가 존재한다 (POST /api/tickets)', async ({ request }) => {
+    test('티켓 생성 API 엔드포인트가 존재한다 (POST /api/tickets)', async ({ page }) => {
+      await page.goto('/');
       // 빈 바디 → 422(유효성 오류) 또는 401 예상
-      const res = await request.post('/api/tickets', {
-        data: {},
-        failOnStatusCode: false,
-      });
-      expect([400, 401, 403, 422]).toContain(res.status());
+      const status = await page.evaluate(async (apiPath) => {
+        try {
+          const r = await fetch(apiPath, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({}),
+          });
+          return r.status;
+        } catch { return 0; }
+      }, '/api/tickets');
+      expect([400, 401, 403, 422]).toContain(status);
     });
   });
 });

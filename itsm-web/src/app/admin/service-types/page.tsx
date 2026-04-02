@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
 import type { ServiceType } from '@/types'
 import { API_BASE } from '@/lib/constants'
+import { useTranslations } from 'next-intl'
 
 const EMPTY_FORM = {
   label: '', description: '', emoji: '📋', color: '#6699cc', sort_order: 0,
@@ -37,9 +38,10 @@ const EMOJI_GROUPS = [
 
 function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string) => void }) {
   const [open, setOpen] = useState(false)
+  const t = useTranslations('admin.service_types')
   return (
     <div>
-      <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">이모지</label>
+      <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('field_emoji')}</label>
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1.5 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-700 flex-1">
           <span className="text-xl leading-none">{value}</span>
@@ -54,7 +56,7 @@ function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string)
           onClick={() => setOpen((o) => !o)}
           className={`text-xs px-3 py-2 rounded-lg border transition-colors ${open ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-900/20 dark:border-blue-600 dark:text-blue-300' : 'border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}
         >
-          {open ? '닫기' : '선택'}
+          {open ? t('emoji_close') : t('emoji_open')}
         </button>
       </div>
       {open && (
@@ -90,6 +92,7 @@ function OptionsEditor({
   onOptionsChange: (v: string[]) => void
 }) {
   const [input, setInput] = useState('')
+  const t = useTranslations('admin.service_types')
 
   function add() {
     const v = input.trim()
@@ -103,35 +106,35 @@ function OptionsEditor({
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-gray-50 dark:bg-gray-700/50 space-y-3">
-      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">하위 선택 항목 (선택사항)</p>
-      <p className="text-xs text-gray-400 dark:text-gray-500">티켓 등록 시 서비스 유형 선택 후 나타나는 세부 옵션입니다.</p>
+      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('options_title')}</p>
+      <p className="text-xs text-gray-400 dark:text-gray-500">{t('options_desc')}</p>
 
       {/* Context label */}
       <div>
-        <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">항목 레이블</label>
+        <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('options_label')}</label>
         <input
           value={contextLabel}
           onChange={(e) => onLabelChange(e.target.value)}
-          placeholder="예: 장비 유형, 프로그램, 증상"
+          placeholder={t('options_label_placeholder')}
           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-gray-200"
         />
       </div>
 
       {/* Options input */}
       <div>
-        <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">옵션 목록</label>
+        <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('options_list_label')}</label>
         <div className="flex gap-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
-            placeholder="옵션 입력 후 Enter"
+            placeholder={t('options_input_placeholder')}
             className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-gray-200"
           />
           <button
             type="button" onClick={add}
             className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600"
-          >추가</button>
+          >{t('options_add')}</button>
         </div>
         {contextOptions.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2">
@@ -144,7 +147,7 @@ function OptionsEditor({
           </div>
         )}
         {contextOptions.length === 0 && (
-          <p className="text-xs text-gray-300 dark:text-gray-600 mt-2">옵션을 추가하면 티켓 등록 시 빠른 선택 버튼이 표시됩니다.</p>
+          <p className="text-xs text-gray-300 dark:text-gray-600 mt-2">{t('options_empty_hint')}</p>
         )}
       </div>
     </div>
@@ -154,6 +157,7 @@ function OptionsEditor({
 export default function ServiceTypesPage() {
   const { isAdmin } = useAuth()
   const { serviceTypes, reload } = useServiceTypes()
+  const t = useTranslations('admin')
 
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState(EMPTY_FORM)
@@ -180,7 +184,7 @@ export default function ServiceTypesPage() {
     return (
       <div className="text-center py-20">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500">관리자 권한이 필요합니다.</p>
+        <p className="text-gray-500">{t('common.no_permission')}</p>
       </div>
     )
   }
@@ -198,7 +202,7 @@ export default function ServiceTypesPage() {
       setShowCreate(false)
       setCreateForm(EMPTY_FORM)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '생성 실패')
+      setError(err instanceof Error ? err.message : t('service_types.create_failed'))
     } finally { setSaving(false) }
   }
 
@@ -223,7 +227,7 @@ export default function ServiceTypesPage() {
       reload()
       setEditingId(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '수정 실패')
+      setError(err instanceof Error ? err.message : t('service_types.update_failed'))
     } finally { setSaving(false) }
   }
 
@@ -232,25 +236,33 @@ export default function ServiceTypesPage() {
       await updateServiceType(st.id, { enabled: !st.enabled })
       reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '변경 실패')
+      setError(err instanceof Error ? err.message : t('service_types.toggle_failed'))
     }
   }
 
   const handleDelete = async (st: ServiceType) => {
-    if (!confirm(`"${st.emoji} ${st.label}" 서비스 유형을 삭제하시겠습니까?\n사용 중인 티켓이 있으면 삭제가 거부됩니다.`)) return
+    if (!confirm(t('service_types.delete_confirm', { emoji: st.emoji, label: st.label }))) return
     try {
       await deleteServiceType(st.id)
       reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '삭제 실패')
+      setError(err instanceof Error ? err.message : t('service_types.delete_failed'))
     }
   }
 
   return (
     <div>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+          </svg>
+          {t('service_types.title')}
+        </h1>
+      </div>
       <div className="flex items-start justify-between mb-5 gap-4">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          서비스 유형은 티켓·KB 카테고리로 사용됩니다. 내부 키는 시스템이 자동으로 생성합니다.
+          {t('service_types.description')}
           추가·수정 시 GitLab에 <code className="bg-gray-100 dark:bg-gray-700 dark:text-gray-300 px-1 rounded text-xs">cat::{'{'}id{'}'}</code> 라벨이 자동 동기화됩니다.{' '}
           <a href="/admin/labels" className="text-blue-600 hover:underline text-xs">라벨 동기화 현황 →</a>
         </p>
@@ -258,7 +270,7 @@ export default function ServiceTypesPage() {
           onClick={() => { setShowCreate(!showCreate); setCreateForm(EMPTY_FORM) }}
           className="flex-shrink-0 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
         >
-          + 유형 추가
+          {t('service_types.add_btn')}
         </button>
       </div>
 
@@ -269,10 +281,10 @@ export default function ServiceTypesPage() {
       {/* Create form */}
       {showCreate && (
         <form onSubmit={handleCreate} className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-xl p-5 mb-4 shadow-sm space-y-4">
-          <h3 className="font-semibold text-gray-800 dark:text-gray-200">새 서비스 유형</h3>
+          <h3 className="font-semibold text-gray-800 dark:text-gray-200">{t('service_types.new_title')}</h3>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">표시 이름 *</label>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('service_types.field_label')}</label>
               <input
                 value={createForm.label}
                 onChange={(e) => setCreateForm(f => ({ ...f, label: e.target.value }))}
@@ -281,7 +293,7 @@ export default function ServiceTypesPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">설명 (부제목)</label>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('service_types.field_description')}</label>
               <input
                 value={createForm.description}
                 onChange={(e) => setCreateForm(f => ({ ...f, description: e.target.value }))}
@@ -293,7 +305,7 @@ export default function ServiceTypesPage() {
           <div className="grid grid-cols-3 gap-4">
             <EmojiPicker value={createForm.emoji} onChange={(emoji) => setCreateForm(f => ({ ...f, emoji }))} />
             <div>
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">색상</label>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('service_types.field_color')}</label>
               <div className="flex gap-2 items-center">
                 <input type="color" value={createForm.color}
                   onChange={(e) => setCreateForm(f => ({ ...f, color: e.target.value }))}
@@ -306,7 +318,7 @@ export default function ServiceTypesPage() {
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">정렬 순서</label>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('service_types.field_sort_order')}</label>
               <input type="number" value={createForm.sort_order}
                 onChange={(e) => setCreateForm(f => ({ ...f, sort_order: Number(e.target.value) }))}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
@@ -321,10 +333,10 @@ export default function ServiceTypesPage() {
           />
           <div className="flex gap-2">
             <button type="submit" disabled={saving} className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
-              {saving ? '저장 중...' : '저장'}
+              {saving ? t('service_types.saving') : t('common.save')}
             </button>
             <button type="button" onClick={() => setShowCreate(false)} className="border border-gray-300 dark:border-gray-600 px-5 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">
-              취소
+              {t('common.cancel')}
             </button>
           </div>
         </form>
@@ -335,17 +347,17 @@ export default function ServiceTypesPage() {
         {serviceTypes.length === 0 && (
           <div className="text-center py-16 text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
             <div className="text-3xl mb-2">🗂️</div>
-            <p>등록된 서비스 유형이 없습니다.</p>
+            <p>{t('service_types.no_service_types')}</p>
           </div>
         )}
         {serviceTypes.map((st) => (
           <div key={st.id}>
             {editingId === st.id ? (
               <div className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-xl p-4 shadow-sm space-y-3">
-                <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">수정 — {st.label}</h3>
+                <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">{t('service_types.edit_title', { label: st.label })}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">표시 이름</label>
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('service_types.field_label')}</label>
                     <input
                       value={editForm.label ?? ''}
                       onChange={(e) => setEditForm(f => ({ ...f, label: e.target.value }))}
@@ -353,7 +365,7 @@ export default function ServiceTypesPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">설명 (부제목)</label>
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('service_types.field_description')}</label>
                     <input
                       value={editForm.description ?? ''}
                       onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))}
@@ -368,7 +380,7 @@ export default function ServiceTypesPage() {
                     onChange={(emoji) => setEditForm(f => ({ ...f, emoji }))}
                   />
                   <div>
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">색상</label>
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('service_types.field_color')}</label>
                     <div className="flex gap-2 items-center">
                       <input type="color" value={editForm.color ?? '#6699cc'}
                         onChange={(e) => setEditForm(f => ({ ...f, color: e.target.value }))}
@@ -381,7 +393,7 @@ export default function ServiceTypesPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">정렬 순서</label>
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('service_types.field_sort_order')}</label>
                     <input type="number" value={editForm.sort_order ?? 0}
                       onChange={(e) => setEditForm(f => ({ ...f, sort_order: Number(e.target.value) }))}
                       className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
@@ -396,10 +408,10 @@ export default function ServiceTypesPage() {
                 />
                 <div className="flex gap-2">
                   <button onClick={() => handleUpdate(st.id)} disabled={saving} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
-                    {saving ? '저장 중...' : '저장'}
+                    {saving ? t('service_types.saving') : t('common.save')}
                   </button>
                   <button onClick={() => setEditingId(null)} className="border border-gray-300 dark:border-gray-600 px-4 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    취소
+                    {t('common.cancel')}
                   </button>
                 </div>
               </div>
@@ -431,38 +443,38 @@ export default function ServiceTypesPage() {
                       )}
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-300 dark:text-gray-600">하위 항목 없음</span>
+                    <span className="text-xs text-gray-300 dark:text-gray-600">{t('service_types.no_subitems')}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
                   {/* 티켓 사용 수 뱃지 */}
                   {usageLoading ? (
-                    <span className="text-xs text-gray-300 animate-pulse">확인 중...</span>
+                    <span className="text-xs text-gray-300 animate-pulse">{t('service_types.in_use_checking')}</span>
                   ) : (usageCounts[st.id] ?? 0) > 0 ? (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 text-orange-600 dark:text-orange-400 font-medium"
-                          title={`이 서비스 유형을 사용 중인 티켓 ${usageCounts[st.id]}건`}>
-                      🎫 {usageCounts[st.id]}건 사용 중
+                          title={t('service_types.in_use', { count: usageCounts[st.id] })}>
+                      {t('service_types.in_use', { count: usageCounts[st.id] })}
                     </span>
                   ) : null}
                   <button
                     onClick={() => handleToggle(st)}
                     className={`text-xs px-3 py-1 rounded-full border font-medium transition-colors ${st.enabled ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-900/30' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-600'}`}
                   >
-                    {st.enabled ? '활성' : '비활성'}
+                    {st.enabled ? t('common.active') : t('common.inactive')}
                   </button>
-                  <button onClick={() => startEdit(st)} className="text-xs text-blue-500 hover:text-blue-700 transition-colors">수정</button>
+                  <button onClick={() => startEdit(st)} className="text-xs text-blue-500 hover:text-blue-700 transition-colors">{t('common.edit')}</button>
                   {/* 삭제 버튼: 사용 중이면 비활성화 */}
                   {(usageCounts[st.id] ?? 0) > 0 ? (
                     <span
                       className="text-gray-200 dark:text-gray-700 text-lg leading-none cursor-not-allowed"
-                      title={`티켓 ${usageCounts[st.id]}건이 사용 중이므로 삭제할 수 없습니다. 비활성화를 사용하세요.`}
+                      title={t('service_types.delete_title_disabled', { count: usageCounts[st.id] })}
                     >✕</span>
                   ) : (
                     <button
                       onClick={() => handleDelete(st)}
                       disabled={usageLoading}
                       className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors text-lg leading-none disabled:cursor-not-allowed"
-                      title="삭제"
+                      title={t('common.delete')}
                     >✕</button>
                   )}
                 </div>

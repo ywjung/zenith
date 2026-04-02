@@ -4,7 +4,7 @@ import type {
   AssignmentRule, SLARecord, NotificationItem, TicketTemplate, TimeEntry, TicketLink,
   RatingStats, RealtimeStats, BreakdownStats, DevProject, ProjectForward, ForwardsResponse,
   SLAPolicy, AgentPerformance, SavedFilter, LinkedMR, ServiceType, Milestone,
-  CustomFieldDef, TicketCustomFieldValue, DoraMetrics,
+  CustomFieldDef, TicketCustomFieldValue, DoraMetrics, GanttData,
 } from '@/types'
 import { API_BASE } from '@/lib/constants'
 
@@ -18,37 +18,90 @@ function buildQuery(params?: Record<string, string | number | undefined | null>)
   return qs.toString() ? `?${qs}` : ''
 }
 
+/** API 요청 기본 타임아웃 (ms). 파일 업로드 등 장시간 작업은 직접 AbortController 사용. */
+const REQUEST_TIMEOUT_MS = 30_000
+
+/** main.py 통합 에러 포맷 {error:{code,message,detail}} 및 FastAPI 기본 {detail} 모두 처리 */
+async function parseErrorMessage(res: Response): Promise<string> {
+  const err = await res.json().catch(() => ({} as Record<string, unknown>))
+  if (err.error && typeof err.error === 'object') {
+    const e = err.error as Record<string, unknown>
+    if (Array.isArray(e.detail)) return (e.detail as { msg: string }[]).map(x => x.msg).join('; ')
+    return (e.message as string) || `HTTP ${res.status}`
+  }
+  if (Array.isArray(err.detail)) return (err.detail as { msg: string }[]).map(x => x.msg).join('; ')
+  return (err.detail as string) || `HTTP ${res.status}`
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    cache: 'no-store',
-    credentials: 'include',
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      cache: 'no-store',
+      credentials: 'include',
+      signal: init?.signal ?? controller.signal,
+    })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`요청 시간이 초과되었습니다 (${REQUEST_TIMEOUT_MS / 1000}s)`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+
+  // 429 Too Many Requests — Retry-After 헤더 또는 1초 후 1회 재시도
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('Retry-After') || '1', 10)
+    const waitMs = Math.min(Math.max(retryAfter, 1), 10) * 1000
+    await new Promise(resolve => setTimeout(resolve, waitMs))
+    const retryRes = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      cache: 'no-store',
+      credentials: 'include',
+    })
+    if (retryRes.ok) {
+      if (retryRes.status === 204 || retryRes.headers.get('content-length') === '0') return undefined as T
+      return retryRes.json()
+    }
+    throw new Error('요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.')
+  }
+
   if (res.status === 401) {
     // Try to refresh token before redirecting
     const refreshed = await tryRefreshToken()
     if (refreshed) {
-      // Retry original request
-      const retryRes = await fetch(`${API_BASE}${path}`, {
-        ...init,
-        headers: { 'Content-Type': 'application/json', ...init?.headers },
-        cache: 'no-store',
-        credentials: 'include',
-      })
-      if (retryRes.ok) return retryRes.json()
+      // Retry original request (새 타임아웃 적용)
+      const retryController = new AbortController()
+      const retryTimer = setTimeout(() => retryController.abort(), REQUEST_TIMEOUT_MS)
+      try {
+        const retryRes = await fetch(`${API_BASE}${path}`, {
+          ...init,
+          headers: { 'Content-Type': 'application/json', ...init?.headers },
+          cache: 'no-store',
+          credentials: 'include',
+          signal: retryController.signal,
+        })
+        if (retryRes.ok) return retryRes.json()
+      } finally {
+        clearTimeout(retryTimer)
+      }
     }
-    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+    // /help, /portal 같은 공개 페이지에서는 리다이렉트 하지 않음
+    const PUBLIC_PATHS = ['/login', '/help', '/portal']
+    if (typeof window !== 'undefined' && !PUBLIC_PATHS.some(p => window.location.pathname.startsWith(p))) {
       window.location.href = '/login'
     }
     throw new Error('로그인이 필요합니다.')
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    const detail = Array.isArray(err.detail)
-      ? err.detail.map((e: { msg: string }) => e.msg).join('; ')
-      : (err.detail || `HTTP ${res.status}`)
-    throw new Error(detail)
+    throw new Error(await parseErrorMessage(res))
   }
   if (res.status === 204 || res.headers.get('content-length') === '0') {
     return undefined as T
@@ -56,12 +109,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json()
 }
 
-// Prevent concurrent refresh attempts — only one request proceeds at a time
-let _refreshPromise: Promise<boolean> | null = null
+// Prevent concurrent refresh attempts.
+// Stored on window (not module scope) to avoid SSR singleton leaking across requests.
+type _WinWithRefresh = typeof window & { __itsmRefreshPromise?: Promise<boolean> | null }
 
 async function tryRefreshToken(): Promise<boolean> {
-  if (_refreshPromise) return _refreshPromise
-  _refreshPromise = (async () => {
+  // SSR: cookies unavailable, skip
+  if (typeof window === 'undefined') return false
+  const win = window as _WinWithRefresh
+  if (win.__itsmRefreshPromise) return win.__itsmRefreshPromise
+  win.__itsmRefreshPromise = (async () => {
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
@@ -71,10 +128,10 @@ async function tryRefreshToken(): Promise<boolean> {
     } catch {
       return false
     } finally {
-      _refreshPromise = null
+      win.__itsmRefreshPromise = null
     }
   })()
-  return _refreshPromise
+  return win.__itsmRefreshPromise
 }
 
 // ---------------------------------------------------------------------------
@@ -150,19 +207,28 @@ export async function fetchRating(iid: number): Promise<Rating | null> {
 
 export async function deleteTicket(iid: number, projectId?: string): Promise<void> {
   const qs = projectId ? `?project_id=${projectId}` : ''
-  const res = await fetch(`${API_BASE}/tickets/${iid}${qs}`, {
+  let res = await fetch(`${API_BASE}/tickets/${iid}${qs}`, {
     method: 'DELETE',
     credentials: 'include',
   })
   if (res.status === 401) {
-    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-      window.location.href = '/login'
+    const refreshed = await tryRefreshToken()
+    if (refreshed) {
+      res = await fetch(`${API_BASE}/tickets/${iid}${qs}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
     }
-    throw new Error('로그인이 필요합니다.')
+    if (res.status === 401) {
+      const PUBLIC_PATHS = ['/login', '/help', '/portal']
+      if (typeof window !== 'undefined' && !PUBLIC_PATHS.some(p => window.location.pathname.startsWith(p))) {
+        window.location.href = '/login'
+      }
+      throw new Error('로그인이 필요합니다.')
+    }
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    throw new Error(await parseErrorMessage(res))
   }
 }
 
@@ -201,11 +267,7 @@ export async function updateTicket(
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    const detail = Array.isArray(err.detail)
-      ? err.detail.map((e: { msg: string }) => e.msg).join('; ')
-      : (err.detail || `HTTP ${res.status}`)
-    throw new Error(detail)
+    throw new Error(await parseErrorMessage(res))
   }
   const ticket = await res.json() as Ticket
   // ETag 헤더에서 updated_at 추출 (낙관적 락용)
@@ -239,6 +301,9 @@ export function deleteComment(iid: number, noteId: number, projectId?: string): 
   return request(`/tickets/${iid}/comments/${noteId}${qs}`, { method: 'DELETE' })
 }
 
+/** 파일 업로드 전용 타임아웃 (ms). 10MB 파일 기준 느린 네트워크(1Mbps)에서 약 80s. */
+const UPLOAD_TIMEOUT_MS = 300_000 // 5분
+
 export async function uploadFile(
   file: File,
   projectId?: string,
@@ -246,21 +311,38 @@ export async function uploadFile(
   const formData = new FormData()
   formData.append('file', file)
   const qs = projectId ? `?project_id=${projectId}` : ''
-  const res = await fetch(`${API_BASE}/tickets/upload${qs}`, {
-    method: 'POST',
-    body: formData,
-    credentials: 'include',
-    cache: 'no-store',
-  })
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS)
+
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}/tickets/upload${qs}`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`파일 업로드 시간이 초과되었습니다 (${UPLOAD_TIMEOUT_MS / 60000}분)`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+
   if (res.status === 401) {
-    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+    // /help, /portal 같은 공개 페이지에서는 리다이렉트 하지 않음
+    const PUBLIC_PATHS = ['/login', '/help', '/portal']
+    if (typeof window !== 'undefined' && !PUBLIC_PATHS.some(p => window.location.pathname.startsWith(p))) {
       window.location.href = '/login'
     }
     throw new Error('로그인이 필요합니다.')
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    throw new Error(await parseErrorMessage(res))
   }
   return res.json()
 }
@@ -306,6 +388,19 @@ export function fetchSLAPrediction(iid: number, projectId?: string): Promise<imp
   return request<import('@/types').SLAPrediction>(`/tickets/${iid}/sla-prediction${qs}`)
 }
 
+export interface AISummaryResult {
+  iid: number
+  summary: string
+  key_points: string[]
+  suggested_action: string
+  comment_count: number
+}
+
+export function fetchTicketAISummary(iid: number, projectId?: string): Promise<AISummaryResult> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<AISummaryResult>(`/tickets/${iid}/ai-summary${qs}`, { method: 'POST' })
+}
+
 export function bulkUpdateTickets(data: {
   iids: number[]
   project_id: string
@@ -333,6 +428,10 @@ export function logTime(iid: number, projectId: string, minutes: number, descrip
   })
 }
 
+export function deleteTimeEntry(iid: number, projectId: string, entryId: number): Promise<void> {
+  return request(`/tickets/${iid}/time/${entryId}?project_id=${projectId}`, { method: 'DELETE' })
+}
+
 // ---------------------------------------------------------------------------
 // Ticket Links
 // ---------------------------------------------------------------------------
@@ -348,7 +447,7 @@ export function createTicketLink(iid: number, data: { target_iid: number; projec
   })
 }
 
-export function deleteTicketLink(iid: number, linkId: number): Promise<void> {
+export function deleteTicketLink(iid: number, linkId: number | string): Promise<void> {
   return request(`/tickets/${iid}/links/${linkId}`, { method: 'DELETE' })
 }
 
@@ -407,8 +506,11 @@ export function restoreKBRevision(articleId: number, revisionId: number): Promis
   return request(`/kb/articles/${articleId}/revisions/${revisionId}/restore`, { method: 'POST' })
 }
 
-export function suggestKBArticles(q: string, limit = 3): Promise<KBArticle[]> {
-  return request(`/kb/suggest?q=${encodeURIComponent(q)}&limit=${limit}`)
+export function suggestKBArticles(q: string, limit = 3, category?: string, desc?: string): Promise<KBArticle[]> {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  if (category) params.set('category', category)
+  if (desc) params.set('desc', desc.slice(0, 300))
+  return request(`/kb/suggest?${params}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -442,6 +544,17 @@ export function fetchAuditLogs(params?: {
   to_date?: string
 }): Promise<{ total: number; page: number; per_page: number; logs: AuditLogEntry[] }> {
   return request(`/admin/audit${buildQuery(params)}`)
+}
+
+/** 커서 기반 감사 로그 조회 — 무한 스크롤용 */
+export function fetchAuditLogsCursor(params?: {
+  cursor_id?: number
+  limit?: number
+  actor_username?: string
+  resource_type?: string
+  action?: string
+}): Promise<{ items: AuditLogEntry[]; next_cursor: number | null; has_more: boolean }> {
+  return request(`/admin/audit/cursor${buildQuery(params)}`)
 }
 
 export async function downloadAuditLogs(params?: {
@@ -598,6 +711,10 @@ export function fetchDoraMetrics(params?: { days?: number; project_id?: string }
 
 export function fetchSLAHeatmap(params?: { weeks?: number }): Promise<{ date: string; breached: number; total: number }[]> {
   return request(`/reports/sla/heatmap${buildQuery(params)}`)
+}
+
+export function fetchCsatTrend(params?: { from?: string; to?: string; granularity?: 'weekly' | 'monthly' }): Promise<import('@/types').CsatTrendItem[]> {
+  return request(`/reports/csat-trend${buildQuery(params)}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -788,9 +905,12 @@ export interface FaqItem {
   updated_at: string | null
 }
 
-export function fetchFaqItems(params?: { category?: string; active_only?: boolean }): Promise<FaqItem[]> {
+export async function fetchFaqItems(params?: { category?: string; active_only?: boolean }): Promise<FaqItem[]> {
   const qs = buildQuery({ category: params?.category, active_only: params?.active_only === false ? 'false' : undefined })
-  return request<FaqItem[]>(`/faq${qs}`)
+  // 공개 엔드포인트 — 미로그인 시 리다이렉트 없이 빈 배열 반환
+  const res = await fetch(`${API_BASE}/faq${qs}`, { credentials: 'include', cache: 'no-store' })
+  if (!res.ok) return []
+  return res.json()
 }
 
 export function createFaqItem(data: { question: string; answer: string; category?: string | null; order_num?: number; is_active?: boolean }): Promise<FaqItem> {
@@ -891,5 +1011,505 @@ export function fetchCeleryFlowerWorkers(): Promise<CeleryWorker[]> {
 
 export function fetchCeleryFlowerTasks(state: string = 'ALL', limit: number = 20): Promise<CeleryTask[]> {
   return request<CeleryTask[]>(`/admin/celery/flower/tasks?state=${state}&limit=${limit}`)
+}
+
+// ---------------------------------------------------------------------------
+// Gantt
+// ---------------------------------------------------------------------------
+
+export function fetchGanttData(days: number): Promise<GanttData> {
+  return request<GanttData>(`/tickets/gantt?days=${days}`)
+}
+
+// ---------------------------------------------------------------------------
+// Sessions
+// ---------------------------------------------------------------------------
+
+export function fetchSessions(): Promise<import('@/types').SessionInfo[]> {
+  return request<import('@/types').SessionInfo[]>('/auth/sessions')
+}
+
+export function revokeSession(tokenId: number): Promise<void> {
+  return request(`/auth/sessions/${tokenId}`, { method: 'DELETE' })
+}
+
+export function revokeOtherSessions(): Promise<void> {
+  return request('/auth/sessions', { method: 'DELETE' })
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard config
+// ---------------------------------------------------------------------------
+
+export function fetchDashboardConfig(): Promise<{ username: string; widgets: import('@/types').DashboardWidget[] }> {
+  return request('/dashboard/config')
+}
+
+export function saveDashboardConfig(config: import('@/types').DashboardConfig): Promise<{ username: string; widgets: import('@/types').DashboardWidget[] }> {
+  return request('/dashboard/config', {
+    method: 'PUT',
+    body: JSON.stringify({ widgets: config.widgets }),
+  })
+}
+
+export interface DashboardExtraStats {
+  sla_breached: { iid: number; sla_deadline: string | null }[]
+  sla_breached_count: number
+  team_workload: { username: string; count: number }[]
+}
+
+export function fetchDashboardExtraStats(): Promise<DashboardExtraStats> {
+  return request<DashboardExtraStats>('/dashboard/widgets/extra-stats')
+}
+
+// ---------------------------------------------------------------------------
+// 커스텀 알림 규칙
+// ---------------------------------------------------------------------------
+
+export interface NotificationRule {
+  id: number
+  name: string
+  enabled: boolean
+  match_priorities: string[]
+  match_categories: string[]
+  match_states: string[]
+  match_sla_warning: boolean
+  notify_in_app: boolean
+  notify_email: boolean
+  notify_push: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+export type NotificationRuleCreate = Omit<NotificationRule, 'id' | 'created_at' | 'updated_at'>
+export type NotificationRuleUpdate = Partial<NotificationRuleCreate>
+
+export function listNotificationRules(): Promise<{ rules: NotificationRule[] }> {
+  return request('/notification-rules/')
+}
+
+export function createNotificationRule(data: NotificationRuleCreate): Promise<NotificationRule> {
+  return request('/notification-rules/', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export function updateNotificationRule(id: number, data: NotificationRuleUpdate): Promise<NotificationRule> {
+  return request(`/notification-rules/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+export function deleteNotificationRule(id: number): Promise<void> {
+  return request(`/notification-rules/${id}`, { method: 'DELETE' })
+}
+
+// SLA pause / resume / extend
+export function pauseTicketSLA(iid: number, projectId?: string): Promise<import('@/types').SLARecord> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<import('@/types').SLARecord>(`/tickets/${iid}/sla/pause${qs}`, { method: 'POST' })
+}
+
+export function resumeTicketSLA(iid: number, projectId?: string): Promise<import('@/types').SLARecord> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<import('@/types').SLARecord>(`/tickets/${iid}/sla/resume${qs}`, { method: 'POST' })
+}
+
+export function extendTicketSLA(iid: number, minutes: number, projectId?: string): Promise<import('@/types').SLARecord> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<import('@/types').SLARecord>(`/tickets/${iid}/sla/extend${qs}`, {
+    method: 'POST',
+    body: JSON.stringify({ minutes }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Web Push
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Problems (Problem Management)
+// ---------------------------------------------------------------------------
+
+export interface LinkedIncident {
+  iid: number
+  title: string
+  state: string
+  priority: string
+}
+
+export interface ProblemTicket {
+  iid: number
+  title: string
+  description: string
+  state: string
+  priority: string
+  assignee: { id: number; username: string; name: string; avatar_url: string } | null
+  created_at: string
+  updated_at: string
+  web_url: string
+  ticket_type: string
+  linked_incident_iids?: number[]
+  linked_incidents?: LinkedIncident[]
+}
+
+export function listProblems(params?: {
+  state?: string
+  search?: string
+  page?: number
+  per_page?: number
+}): Promise<{ problems: ProblemTicket[]; total: number; page: number; per_page: number }> {
+  return request(`/problems${buildQuery(params)}`)
+}
+
+export function createProblem(body: {
+  title: string
+  description?: string
+  priority?: string
+  assignee_id?: number
+}): Promise<ProblemTicket> {
+  return request('/problems', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export function getProblem(iid: number): Promise<ProblemTicket> {
+  return request(`/problems/${iid}`)
+}
+
+export function updateProblem(iid: number, body: {
+  title: string
+  description?: string
+  priority?: string
+  assignee_id?: number | null
+}): Promise<ProblemTicket> {
+  return request(`/problems/${iid}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+export function linkIncidentToProblem(problemIid: number, incidentIid: number): Promise<object> {
+  return request(`/problems/${problemIid}/link-incident`, {
+    method: 'POST',
+    body: JSON.stringify({ incident_iid: incidentIid }),
+  })
+}
+
+export function unlinkIncidentFromProblem(problemIid: number, incidentIid: number): Promise<object> {
+  return request(`/problems/${problemIid}/link-incident/${incidentIid}`, { method: 'DELETE' })
+}
+
+export function getProblemStats(): Promise<{
+  total_problems: number
+  total_linked_incidents: number
+  avg_incidents_per_problem: number
+}> {
+  return request('/problems/stats/summary')
+}
+
+export function fetchPushVapidKey(): Promise<{ publicKey: string }> {
+  return request('/push/vapid-public-key')
+}
+
+export function fetchPushStatus(): Promise<{ enabled: boolean; subscriptions: number }> {
+  return request('/push/status')
+}
+
+export function subscribePush(subscription: { endpoint: string; p256dh: string; auth: string }): Promise<{ status: string }> {
+  return request('/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify(subscription),
+  })
+}
+
+export function unsubscribePush(subscription: { endpoint: string; p256dh: string; auth: string }): Promise<{ status: string }> {
+  return request('/push/unsubscribe', {
+    method: 'DELETE',
+    body: JSON.stringify(subscription),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// SLA Dashboard
+// ---------------------------------------------------------------------------
+
+export interface SLADashboardTicket {
+  iid: number
+  title: string
+  status: string
+  priority: string
+  sla_deadline: string
+  elapsed_pct: number
+  remaining_seconds: number
+  assignee: string | null
+  breached: boolean
+}
+
+export interface SLADashboard {
+  breach_count: number
+  warning_count: number
+  on_track_count: number
+  tickets: SLADashboardTicket[]
+  trend: { date: string; count: number }[]
+}
+
+export function fetchSLADashboard(projectId?: string): Promise<SLADashboard> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<SLADashboard>(`/reports/sla-dashboard${qs}`)
+}
+
+// ---------------------------------------------------------------------------
+// Calendar
+// ---------------------------------------------------------------------------
+
+export interface CalendarTicket {
+  iid: number
+  title: string
+  status: string
+  priority: string
+  created_at: string
+  closed_at: string | null
+  sla_deadline: string | null
+  web_url: string
+}
+
+export function fetchCalendarTickets(year: number, month: number, projectId?: string): Promise<CalendarTicket[]> {
+  return request<CalendarTicket[]>(`/tickets/calendar${buildQuery({ year, month, project_id: projectId })}`)
+}
+
+export interface HolidayItem {
+  id: number
+  date: string  // "YYYY-MM-DD"
+  name: string
+}
+
+export function fetchHolidays(year: number): Promise<HolidayItem[]> {
+  return request<HolidayItem[]>(`/admin/holidays/public${buildQuery({ year })}`)
+}
+
+// ---------------------------------------------------------------------------
+// CSV Import
+// ---------------------------------------------------------------------------
+
+export interface CSVImportResult {
+  imported: number
+  failed: { row: number; title: string; error: string }[]
+}
+
+export async function importTicketsCSV(file: File, projectId?: string): Promise<CSVImportResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''
+  const res = await fetch(`${API_BASE}/tickets/import/csv${qs}`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'include',
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    const detail = Array.isArray(err.detail)
+      ? err.detail.map((e: { msg: string }) => e.msg).join('; ')
+      : (err.detail || `HTTP ${res.status}`)
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+export function downloadImportTemplate(): void {
+  const a = document.createElement('a')
+  a.href = `${API_BASE}/tickets/import/template`
+  a.download = 'itsm_import_template.csv'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
+// ---------------------------------------------------------------------------
+// User Avatar
+// ---------------------------------------------------------------------------
+
+export async function uploadAvatar(file: File): Promise<{ avatar_url: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`${API_BASE}/users/me/avatar`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'include',
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    const detail = Array.isArray(err.detail)
+      ? err.detail.map((e: { msg: string }) => e.msg).join('; ')
+      : (err.detail || `HTTP ${res.status}`)
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+export async function deleteAvatar(): Promise<void> {
+  await fetch(`${API_BASE}/users/me/avatar`, {
+    method: 'DELETE',
+    credentials: 'include',
+    cache: 'no-store',
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Change Management (RFC)
+// ---------------------------------------------------------------------------
+
+export interface ChangeRequest {
+  id: number
+  title: string
+  description: string | null
+  change_type: 'standard' | 'normal' | 'emergency'
+  risk_level: 'low' | 'medium' | 'high' | 'critical'
+  status: string
+  related_ticket_iid: number | null
+  project_id: string
+  scheduled_start_at: string | null
+  scheduled_end_at: string | null
+  actual_start_at: string | null
+  actual_end_at: string | null
+  rollback_plan: string | null
+  impact: string | null
+  requester_username: string
+  requester_name: string | null
+  approver_username: string | null
+  approver_name: string | null
+  approved_at: string | null
+  approval_comment: string | null
+  implementer_username: string | null
+  result_note: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface ChangeCreate {
+  title: string
+  description?: string
+  change_type: string
+  risk_level: string
+  related_ticket_iid?: number
+  project_id: string
+  scheduled_start_at?: string
+  scheduled_end_at?: string
+  rollback_plan?: string
+  impact?: string
+}
+
+export async function listChanges(params?: {
+  status?: string; change_type?: string; risk_level?: string
+  requester_username?: string; page?: number; per_page?: number
+}): Promise<{ changes: ChangeRequest[]; total: number; page: number; per_page: number }> {
+  return request(`/changes${buildQuery(params)}`)
+}
+
+export async function createChange(body: ChangeCreate): Promise<ChangeRequest> {
+  return request('/changes', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function getChange(id: number): Promise<ChangeRequest> {
+  return request(`/changes/${id}`)
+}
+
+export async function updateChange(id: number, body: Partial<ChangeCreate>): Promise<ChangeRequest> {
+  return request(`/changes/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+export async function transitionChange(
+  id: number, status: string, comment?: string
+): Promise<ChangeRequest> {
+  return request(`/changes/${id}/transition`, {
+    method: 'POST',
+    body: JSON.stringify({ status, comment }),
+  })
+}
+
+export async function getChangeStats(): Promise<Record<string, number>> {
+  return request('/changes/stats/summary')
+}
+
+// ---------------------------------------------------------------------------
+// Task 4: 시간 추적 리포트
+// ---------------------------------------------------------------------------
+
+export interface TimeTrackingByAgent {
+  agent_id: string
+  agent_name: string
+  total_minutes: number
+  total_hours: number
+  ticket_count: number
+}
+
+export interface TimeTrackingEntry {
+  id: number
+  issue_iid: number
+  project_id: string
+  agent_id: string
+  agent_name: string
+  minutes: number
+  description: string | null
+  logged_at: string | null
+}
+
+export interface TimeTrackingReport {
+  total_minutes: number
+  total_hours: number
+  entry_count: number
+  agent_count: number
+  by_agent: TimeTrackingByAgent[]
+  by_date: { date: string; minutes: number }[]
+  recent_entries: TimeTrackingEntry[]
+}
+
+export function fetchTimeTrackingReport(params?: {
+  project_id?: string
+  agent?: string
+  start?: string
+  end?: string
+}): Promise<TimeTrackingReport> {
+  return request<TimeTrackingReport>(`/reports/time-tracking${buildQuery(params)}`)
+}
+
+// ---------------------------------------------------------------------------
+// Task 6: 멀티 프로젝트 통합 뷰
+// ---------------------------------------------------------------------------
+
+export interface MultiProjectStats {
+  project_id: string
+  project_name: string
+  total_sla_records: number
+  sla_breached: number
+  sla_active: number
+  sla_compliance_rate: number | null
+  total_time_hours: number
+}
+
+export function fetchMultiProjectStats(): Promise<{ projects: MultiProjectStats[] }> {
+  return request<{ projects: MultiProjectStats[] }>('/reports/multi-project')
+}
+
+// ---------------------------------------------------------------------------
+// Task 9: SLA 준수율 트렌드 리포트
+// ---------------------------------------------------------------------------
+
+export interface SLAComplianceTrend {
+  week: string
+  total: number
+  met: number
+  breached: number
+  compliance_rate: number | null
+}
+
+export interface SLAComplianceReport {
+  period_weeks: number
+  total: number
+  met: number
+  breached: number
+  overall_compliance_rate: number | null
+  trend: SLAComplianceTrend[]
+  by_priority: { priority: string; total: number; breached: number; compliance_rate: number | null }[]
+}
+
+export function fetchSLAComplianceReport(params?: {
+  project_id?: string
+  weeks?: number
+}): Promise<SLAComplianceReport> {
+  return request<SLAComplianceReport>(`/reports/sla-compliance${buildQuery(params)}`)
 }
 

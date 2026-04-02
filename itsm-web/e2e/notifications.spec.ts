@@ -24,7 +24,7 @@ test.describe('알림 페이지', () => {
   test('전체 읽음 처리 버튼이 존재한다', async ({ page }) => {
     const markAllBtn = page.getByRole('button', { name: /전체.*읽음|모두.*읽|mark all/i });
     if (await markAllBtn.isVisible()) {
-      await markAllBtn.click();
+      await markAllBtn.click({ force: true });
       await page.waitForTimeout(500);
       // 에러가 발생하지 않으면 통과
       await expect(page.locator('main')).toBeVisible();

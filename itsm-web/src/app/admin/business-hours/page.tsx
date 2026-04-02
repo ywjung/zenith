@@ -30,6 +30,7 @@ function defaultSchedule(): ScheduleItem[] {
 
 const THIS_YEAR = new Date().getFullYear()
 
+
 function getYearTabs(holidays: Holiday[], pinnedYears: number[]): number[] {
   const years = new Set(holidays.map(h => Number(h.date.slice(0, 4))))
   for (const y of pinnedYears) years.add(y)
@@ -188,9 +189,13 @@ export default function BusinessHoursPage() {
       {/* 헤더 */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-2xl shrink-0">⏰</div>
           <div>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">SLA 업무 시간 설정</h2>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              SLA 업무 시간 설정
+            </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               SLA 마감 시한은 업무 시간 기준으로 계산됩니다. 예: 업무 시간 4시간 정책은
               오후 5시 접수 시 다음 날 오전 10시가 마감이 됩니다.

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { useTranslations } from 'next-intl'
 
 interface ChannelState {
   email_enabled: boolean
@@ -20,6 +21,7 @@ function ToggleRow({
   configured,
   configuredLabel,
   unconfiguredLabel,
+  unconfiguredHint,
   onToggle,
   loading,
 }: {
@@ -30,6 +32,7 @@ function ToggleRow({
   configured: boolean
   configuredLabel: string
   unconfiguredLabel: string
+  unconfiguredHint: string
   onToggle: (v: boolean) => void
   loading: boolean
 }) {
@@ -52,7 +55,7 @@ function ToggleRow({
         <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
         {!configured && (
           <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-            환경 변수가 설정되지 않아 실제 발송은 비활성 상태입니다. 활성화하더라도 발송되지 않습니다.
+            {unconfiguredHint}
           </p>
         )}
       </div>
@@ -76,6 +79,7 @@ function ToggleRow({
 }
 
 export default function NotificationChannelsPage() {
+  const t = useTranslations('admin')
   const [state, setState] = useState<ChannelState | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
@@ -86,9 +90,9 @@ export default function NotificationChannelsPage() {
     fetch(`${API_BASE}/admin/notification-channels`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
       .then(setState)
-      .catch(() => setError('설정을 불러오지 못했습니다.'))
+      .catch(() => setError(t('notification_channels.load_error')))
       .finally(() => setLoading(false))
-  }, [])
+  }, [t])
 
   const CHANNEL_LABELS: Record<string, string> = {
     email_enabled: '이메일',
@@ -110,10 +114,13 @@ export default function NotificationChannelsPage() {
       })
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText)
       setState(prev => prev ? { ...prev, [field]: value } : prev)
-      setSuccessMsg(`${CHANNEL_LABELS[field] ?? field} 알림이 ${value ? '활성화' : '비활성화'}되었습니다.`)
+      setSuccessMsg(t('notification_channels.toggle_success', {
+        channel: CHANNEL_LABELS[field] ?? field,
+        status: value ? t('notification_channels.toggle_activated') : t('notification_channels.toggle_deactivated'),
+      }))
       setTimeout(() => setSuccessMsg(''), 3000)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '저장 실패')
+      setError(e instanceof Error ? e.message : t('notification_channels.save_failed'))
     } finally {
       setSaving(null)
     }
@@ -122,24 +129,28 @@ export default function NotificationChannelsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48 text-gray-400 dark:text-gray-500 text-sm">
-        불러오는 중…
+        {t('common.loading')}
       </div>
     )
   }
 
   if (!state) {
     return (
-      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg text-sm">{error || '오류가 발생했습니다.'}</div>
+      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg text-sm">{error || t('common.error')}</div>
     )
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">알림 채널 설정</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+          {t('notification_channels.title')}
+        </h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          이메일 및 텔레그램 발송을 런타임에 켜거나 끌 수 있습니다.
-          SMTP / Bot Token 등 인프라 환경 변수 설정은 별도로 필요합니다.
+          {t('notification_channels.description')}
         </p>
       </div>
 
@@ -153,44 +164,47 @@ export default function NotificationChannelsPage() {
       <div className="space-y-3">
         <ToggleRow
           icon="📧"
-          label="이메일 알림"
-          description="티켓 생성·상태 변경·댓글·SLA 경고 등 이벤트 발생 시 관련 사용자에게 이메일을 발송합니다."
+          label={t('notification_channels.email_label')}
+          description={t('notification_channels.email_description')}
           enabled={state.email_enabled}
           configured={state.email_configured}
-          configuredLabel="SMTP 설정됨"
-          unconfiguredLabel="SMTP 미설정"
+          configuredLabel={t('notification_channels.email_configured')}
+          unconfiguredLabel={t('notification_channels.email_unconfigured')}
+          unconfiguredHint={t('notification_channels.unconfigured_hint')}
           onToggle={v => toggle('email_enabled', v)}
           loading={saving === 'email_enabled'}
         />
         <ToggleRow
           icon="✈️"
-          label="텔레그램 알림"
-          description="IT 팀 채널로 티켓 생성·SLA 위반 등 주요 이벤트를 텔레그램 메시지로 전송합니다."
+          label={t('notification_channels.telegram_label')}
+          description={t('notification_channels.telegram_description')}
           enabled={state.telegram_enabled}
           configured={state.telegram_configured}
-          configuredLabel="Bot 설정됨"
-          unconfiguredLabel="Bot 미설정"
+          configuredLabel={t('notification_channels.telegram_configured')}
+          unconfiguredLabel={t('notification_channels.telegram_unconfigured')}
+          unconfiguredHint={t('notification_channels.unconfigured_hint')}
           onToggle={v => toggle('telegram_enabled', v)}
           loading={saving === 'telegram_enabled'}
         />
         <ToggleRow
           icon="💬"
-          label="Slack 알림"
-          description="Slack Incoming Webhook을 통해 IT 채널로 티켓 생성·상태 변경·SLA 위반 알림을 전송합니다. 자동화 규칙의 send_slack 액션도 이 채널을 사용합니다."
+          label={t('notification_channels.slack_label')}
+          description={t('notification_channels.slack_description')}
           enabled={state.slack_enabled}
           configured={state.slack_configured}
-          configuredLabel="Webhook 설정됨"
-          unconfiguredLabel="SLACK_WEBHOOK_URL 미설정"
+          configuredLabel={t('notification_channels.slack_configured')}
+          unconfiguredLabel={t('notification_channels.slack_unconfigured')}
+          unconfiguredHint={t('notification_channels.unconfigured_hint')}
           onToggle={v => toggle('slack_enabled', v)}
           loading={saving === 'slack_enabled'}
         />
       </div>
 
       <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs text-gray-500 dark:text-gray-400 space-y-1">
-        <p className="font-medium text-gray-600 dark:text-gray-300 mb-2">📋 동작 방식</p>
-        <p>• 환경 변수(NOTIFICATION_ENABLED / TELEGRAM_ENABLED / SLACK_ENABLED)가 비활성화된 경우 이 설정과 무관하게 발송되지 않습니다.</p>
-        <p>• 환경 변수가 활성화된 경우 이 토글로 런타임에 발송을 제어할 수 있습니다.</p>
-        <p>• 변경 사항은 즉시 반영되며 최대 60초 내에 모든 서버에 적용됩니다.</p>
+        <p className="font-medium text-gray-600 dark:text-gray-300 mb-2">{t('notification_channels.how_it_works')}</p>
+        <p>• {t('notification_channels.how_1')}</p>
+        <p>• {t('notification_channels.how_2')}</p>
+        <p>• {t('notification_channels.how_3')}</p>
         <p>• Slack은 <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">SLACK_WEBHOOK_URL</code> 환경 변수에 Incoming Webhook URL을 설정해야 합니다.</p>
         <p>• 이메일 템플릿별 개별 비활성화는 <a href="/admin/email-templates" className="text-blue-600 underline">이메일 템플릿</a> 메뉴에서 설정하세요.</p>
       </div>

@@ -44,7 +44,7 @@ def _make_celery() -> Celery:
         task_soft_time_limit=60,               # 60 s soft limit
         task_time_limit=120,                   # 120 s hard limit
         worker_prefetch_multiplier=1,          # 공정한 분산 처리
-        result_expires=3600,                   # 결과 1 시간 보관
+        result_expires=86400,                  # 결과 24 시간 보관 (비동기 작업 상태 조회 가능)
         # ── Celery Beat 주기 태스크 ─────────────────────────────────────
         # crontab 기반 — 정각 기준 실행 보장 (단순 interval 대비 드리프트 방지)
         beat_schedule={
@@ -72,9 +72,17 @@ def _make_celery() -> Celery:
                 "task": "itsm.periodic_db_cleanup",
                 "schedule": crontab(hour=3, minute=0),  # 매일 03:00 KST: 만료 토큰·오래된 로그 정리
             },
+            "db-backup-daily-2am": {
+                "task": "itsm.periodic_db_backup",
+                "schedule": crontab(hour=2, minute=0),  # 매일 02:00 KST: DB 백업 + AES-256 암호화
+            },
+            "recurring-tickets-hourly": {
+                "task": "itsm.periodic_create_recurring_tickets",
+                "schedule": crontab(minute=0),  # 매 정각
+            },
         },
         beat_scheduler="celery.beat:PersistentScheduler",
-        beat_schedule_filename="/tmp/celerybeat-schedule",
+        beat_schedule_filename="/var/celery/celerybeat-schedule",
     )
     # autodiscover: app 패키지의 tasks.py 자동 등록
     app.autodiscover_tasks(["app"])

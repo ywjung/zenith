@@ -23,7 +23,7 @@ try:
     def _get_user_or_ip(request: Request) -> str:
         """Key function: use username from JWT cookie if available, else IP."""
         try:
-            from jose import jwt as _jwt
+            import jwt as _jwt
             token = request.cookies.get("itsm_token", "")
             if token:
                 settings = _get_settings()

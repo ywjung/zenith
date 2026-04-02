@@ -2,7 +2,7 @@
 import json
 import re
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Annotated, Optional, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -28,6 +28,64 @@ def _invalidate_kb_cache():
     r = get_redis()
     if r:
         scan_delete(r, "itsm:kb:*")
+
+
+def _sync_kb_search_index(article_id: int, article_title: str, article_content: str,
+                           article_published: bool) -> None:
+    """KB 아티클을 ticket_search_index에 즉시 반영한다.
+
+    published=True 일 때만 색인, False(비공개/삭제)면 인덱스에서 제거한다.
+    실패해도 KB 저장 자체는 영향받지 않으므로 예외를 삼킨다.
+    """
+    try:
+        import re as _re
+        from ..database import SessionLocal
+        from ..models import TicketSearchIndex
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from sqlalchemy import func as sa_func
+
+        kb_project_id = "__kb__"  # KB 전용 pseudo project_id
+
+        def _strip(text: str) -> str:
+            t = _re.sub(r"<[^>]+>", " ", text)
+            t = _re.sub(r"[#*`_~\[\]!>|]", " ", t)
+            return _re.sub(r"\s+", " ", t).strip()[:2000]
+
+        with SessionLocal() as db:
+            if not article_published:
+                # 비공개 전환 / 삭제 시 인덱스에서 제거
+                db.query(TicketSearchIndex).filter(
+                    TicketSearchIndex.iid == article_id,
+                    TicketSearchIndex.project_id == kb_project_id,
+                ).delete(synchronize_session=False)
+                db.commit()
+                return
+
+            stmt = pg_insert(TicketSearchIndex).values(
+                iid=article_id,
+                project_id=kb_project_id,
+                title=article_title,
+                description_text=_strip(article_content),
+                state="opened",
+                labels_json=[],
+                assignee_username=None,
+                created_at=sa_func.now(),
+                updated_at=sa_func.now(),
+            ).on_conflict_do_update(
+                index_elements=["iid", "project_id"],
+                set_={
+                    "title": article_title,
+                    "description_text": _strip(article_content),
+                    "state": "opened",
+                    "updated_at": sa_func.now(),
+                    "synced_at": sa_func.now(),
+                },
+            )
+            db.execute(stmt)
+            db.commit()
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("KB search index sync failed for article %s: %s", article_id, exc)
 
 router = APIRouter(prefix="/kb", tags=["knowledge-base"])
 
@@ -58,7 +116,7 @@ class ArticleCreate(BaseModel):
     content: str = Field(..., min_length=1, description="아티클 본문")
     category: Optional[str] = None
     published: bool = False
-    tags: List[str] = []  # F-8
+    tags: List[Annotated[str, Field(max_length=50)]] = Field(default=[], max_length=20)  # F-8: max 20 tags, each ≤50 chars
 
 
 class ArticlePatch(BaseModel):
@@ -213,46 +271,94 @@ def get_article(
 @router.get("/suggest")
 def suggest_kb_articles(
     q: str = Query(..., min_length=2, description="검색어 (티켓 제목 기반)"),
+    category: str | None = Query(default=None, description="티켓 카테고리 (카테고리 일치 시 점수 보너스)"),
+    desc: str | None = Query(default=None, description="티켓 설명 발췌 (최대 300자, 쿼리 보강용)"),
     limit: int = Query(default=3, le=5),
     db: Session = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    """티켓 제목 입력 시 관련 KB 아티클 자동 추천.
+    """티켓 제목·설명·카테고리 기반 관련 KB 아티클 추천.
 
-    PostgreSQL FTS 유사도 기반 TOP N 반환.
-    에이전트 댓글 작성 시에도 활용 가능.
+    - ts_rank_cd 가중치 벡터 (title=A, content=D) 기반 관련성 정렬
+    - 카테고리 일치 시 +0.15 점수 보너스
+    - 최소 관련성 임계값(0.001) 미충족 결과 제외
+    - 3단계 폴백: FTS → trgm word_similarity → OR FTS → LIKE
     """
+    import re as _re
+
+    # 설명 발췌: 마크다운 제거 후 최대 150자
+    desc_clean = ""
+    if desc:
+        desc_clean = _re.sub(r'[#*`>\[\]()\-_~|!]', ' ', desc)
+        desc_clean = _re.sub(r'\s+', ' ', desc_clean).strip()[:150]
+
+    # 검색어: 제목 + 설명 발췌 결합 (설명이 있으면 추가 컨텍스트 제공)
+    combined_q = q.strip()
+    if desc_clean:
+        combined_q = combined_q + " " + desc_clean
+
+    cat = (category or "").strip() or None
+    _MIN_RANK = 0.001   # FTS 최소 관련성 임계값
+    _MIN_TRGM = 0.08    # trgm word_similarity 최소 임계값
+
+    def _row_to_dict(r) -> dict:
+        return {"id": r.id, "slug": r.slug, "title": r.title, "category": r.category, "view_count": r.view_count}
+
     try:
-        # websearch_to_tsquery: OR 연산 지원, 긴 제목 입력 시에도 부분 매칭
-        # 예) "Docker 설치 방법" → Docker | 설치 | 방법 (AND 대신 OR)
-        results = (
-            db.query(KBArticle)
-            .filter(
-                KBArticle.published == True,  # noqa: E712
-                sa_text(
-                    "to_tsvector('simple', title || ' ' || content) @@ "
-                    "websearch_to_tsquery('simple', :q)"
-                ).bindparams(q=q),
-            )
-            .order_by(KBArticle.view_count.desc())
-            .limit(limit)
-            .all()
-        )
-        # websearch 결과가 없으면 pg_trgm 트라이그램 유사도 검색 (한국어 부분 매칭)
-        if not results:
-            results = (
-                db.query(KBArticle)
-                .filter(
-                    KBArticle.published == True,  # noqa: E712
-                    sa_text("(title % :q OR content % :q2)").bindparams(q=q, q2=q),
+        # ── 1단계: ts_rank_cd 가중치 벡터 기반 FTS ──────────────────────────────
+        # title(A=1.0) >> content(D=0.1) → 제목 매칭이 내용 매칭보다 훨씬 높은 점수
+        # CTE를 이용해 rank 계산을 한 번만 수행
+        rows = db.execute(
+            sa_text("""
+                WITH ranked AS (
+                    SELECT id, title, slug, category, view_count,
+                        ts_rank_cd(
+                            setweight(to_tsvector('simple', coalesce(title, '')), 'A') ||
+                            setweight(to_tsvector('simple', coalesce(content, '')), 'D'),
+                            websearch_to_tsquery('simple', :q)
+                        ) + CASE WHEN (:cat IS NOT NULL AND category = :cat) THEN 0.15 ELSE 0 END AS rank
+                    FROM kb_articles
+                    WHERE published = true
+                      AND (
+                          setweight(to_tsvector('simple', coalesce(title, '')), 'A') ||
+                          setweight(to_tsvector('simple', coalesce(content, '')), 'D')
+                      ) @@ websearch_to_tsquery('simple', :q)
                 )
-                .order_by(KBArticle.view_count.desc())
-                .limit(limit)
-                .all()
-            )
-        # 트라이그램도 없으면 단어 분리 OR FTS 폴백
-        if not results:
-            words = q.split()[:5]  # 최대 5개 단어
+                SELECT * FROM ranked WHERE rank >= :min_rank ORDER BY rank DESC LIMIT :limit
+            """),
+            {"q": combined_q, "cat": cat, "min_rank": _MIN_RANK, "limit": limit},
+        ).fetchall()
+
+        if rows:
+            return [_row_to_dict(r) for r in rows]
+
+        # ── 2단계: pg_trgm word_similarity — 한국어 서브스트링 부분 매칭 ──────────
+        # word_similarity: 짧은 검색어가 긴 문자열 안에 포함될 때 유리
+        rows = db.execute(
+            sa_text("""
+                WITH sim AS (
+                    SELECT id, title, slug, category, view_count,
+                        greatest(word_similarity(:q, title), 0) * 2
+                        + greatest(word_similarity(:q, content), 0)
+                        + CASE WHEN (:cat IS NOT NULL AND category = :cat) THEN 0.3 ELSE 0 END AS score
+                    FROM kb_articles
+                    WHERE published = true
+                      AND (word_similarity(:q, title) > :min_sim
+                           OR word_similarity(:q, content) > :min_sim2)
+                )
+                SELECT * FROM sim WHERE score > 0 ORDER BY score DESC LIMIT :limit
+            """),
+            {"q": q, "cat": cat, "min_sim": _MIN_TRGM, "min_sim2": _MIN_TRGM * 0.5, "limit": limit},
+        ).fetchall()
+
+        if rows:
+            return [_row_to_dict(r) for r in rows]
+
+        # ── 3단계: 단어 OR FTS 폴백 (임계값 없음) ────────────────────────────────
+        # to_tsquery 토큰으로 허용되지 않는 문자 제거 후 OR 쿼리 생성
+        import re as _re2
+        words = [_re2.sub(r"[^\w가-힣]", "", w) for w in q.split()[:5] if _re2.sub(r"[^\w가-힣]", "", w)]
+        if words:
             or_query = " | ".join(words)
             results = (
                 db.query(KBArticle)
@@ -267,8 +373,18 @@ def suggest_kb_articles(
                 .limit(limit)
                 .all()
             )
+            if results:
+                return [
+                    {"id": a.id, "slug": a.slug, "title": a.title, "category": a.category, "view_count": a.view_count}
+                    for a in results
+                ]
+
+        return []
+
     except Exception:
-        # FTS 폴백 — MED-04: LIKE 메타문자 이스케이프
+        # 트랜잭션 abort 상태 해제 후 LIKE 폴백 실행
+        db.rollback()
+        # LIKE 폴백 — MED-04: LIKE 메타문자 이스케이프
         _q = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         like = f"%{_q}%"
         results = (
@@ -281,16 +397,10 @@ def suggest_kb_articles(
             .limit(limit)
             .all()
         )
-    return [
-        {
-            "id": a.id,
-            "slug": a.slug,
-            "title": a.title,
-            "category": a.category,
-            "view_count": a.view_count,
-        }
-        for a in results
-    ]
+        return [
+            {"id": a.id, "slug": a.slug, "title": a.title, "category": a.category, "view_count": a.view_count}
+            for a in results
+        ]
 
 
 @router.post("/articles", status_code=201)
@@ -325,6 +435,7 @@ def create_article(
         db.commit()
     db.refresh(article)
     _invalidate_kb_cache()
+    _sync_kb_search_index(article.id, article.title, article.content, article.published)
     return _article_to_dict(article, include_content=True)
 
 
@@ -333,7 +444,7 @@ def update_article(
     article_id: int,
     data: ArticleCreate,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_pl),
+    _user: dict = Depends(require_agent),
 ):
     article = db.query(KBArticle).filter(KBArticle.id == article_id).first()
     if not article:
@@ -384,6 +495,7 @@ def update_article(
     db.commit()
     db.refresh(article)
     _invalidate_kb_cache()
+    _sync_kb_search_index(article.id, article.title, article.content, article.published)
     return _article_to_dict(article, include_content=True)
 
 
@@ -396,6 +508,8 @@ def delete_article(
     article = db.query(KBArticle).filter(KBArticle.id == article_id).first()
     if not article:
         raise HTTPException(status_code=404, detail="아티클을 찾을 수 없습니다.")
+    from ..models import KBRevision
+    db.query(KBRevision).filter(KBRevision.article_id == article_id).delete(synchronize_session=False)
     db.delete(article)
     db.commit()
     _invalidate_kb_cache()
@@ -510,7 +624,7 @@ def publish_article(
     article_id: int,
     published: bool = True,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_pl),
+    _user: dict = Depends(require_agent),
 ):
     article = db.query(KBArticle).filter(KBArticle.id == article_id).first()
     if not article:
@@ -519,6 +633,7 @@ def publish_article(
     article.updated_at = datetime.now(timezone.utc)
     db.commit()
     _invalidate_kb_cache()
+    _sync_kb_search_index(article.id, article.title, article.content, article.published)
     return {"id": article.id, "published": article.published}
 
 

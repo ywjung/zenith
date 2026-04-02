@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import {
   createTicket, fetchProjects, fetchProjectMembers, fetchMilestones,
   uploadFile, fetchTemplates, fetchKBArticles,
@@ -17,28 +18,28 @@ import { formatName, formatFileSize, getFileIcon } from '@/lib/utils'
 
 const PRIORITIES = [
   {
-    value: 'low',      label: '낮음', desc: '일상 업무에 영향 없음',    sla: '5일',
+    value: 'low',
     icon: '⚪',
     active: 'border-gray-400 bg-gray-50 dark:bg-gray-700/50',
     inact:  'border-gray-200 dark:border-gray-600',
     labelColor: 'text-gray-700 dark:text-gray-300',
   },
   {
-    value: 'medium',   label: '보통', desc: '불편하지만 업무 가능',      sla: '3일',
+    value: 'medium',
     icon: '🟡',
     active: 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20',
     inact:  'border-gray-200 dark:border-gray-600',
     labelColor: 'text-yellow-800 dark:text-yellow-300',
   },
   {
-    value: 'high',     label: '높음', desc: '업무에 지장 있음',          sla: '24시간',
+    value: 'high',
     icon: '🟠',
     active: 'border-orange-500 bg-orange-50 dark:bg-orange-900/20',
     inact:  'border-gray-200 dark:border-gray-600',
     labelColor: 'text-orange-800 dark:text-orange-300',
   },
   {
-    value: 'critical', label: '긴급', desc: '업무 불가 · 즉시 조치 필요', sla: '4시간',
+    value: 'critical',
     icon: '🔴',
     active: 'border-red-500 bg-red-50 dark:bg-red-900/20',
     inact:  'border-gray-200 dark:border-gray-600',
@@ -58,6 +59,11 @@ function NewTicketContent() {
   const router = useRouter()
   const { user, isAgent } = useAuth()
   const { serviceTypes } = useServiceTypes()
+  const t = useTranslations('ticket_new')
+  const tp = useTranslations('ticket.priority')
+  const tf = useTranslations('ticket.fields')
+  const tportal = useTranslations('portal')
+  const tc = useTranslations('common')
 
   const [projects, setProjects] = useState<GitLabProject[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
@@ -91,6 +97,92 @@ function NewTicketContent() {
   const [error, setError] = useState<string | null>(null)
   const [customFieldDefs, setCustomFieldDefs] = useState<CustomFieldDef[]>([])
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({})
+
+  // ── 임시저장 ───────────────────────────────────────────────
+  const DRAFT_KEY = 'ticket_new_draft'
+  const isDirtyRef = useRef(false)
+  const submittedRef = useRef(false)
+  // 이탈 확인 모달 상태
+  const [leaveModal, setLeaveModal] = useState<{ show: boolean; dest: string }>({ show: false, dest: '' })
+  // 임시저장 복원 배너 상태
+  const [hasDraft, setHasDraft] = useState(false)
+  // 임시저장 완료 토스트
+  const [draftSaved, setDraftSaved] = useState(false)
+  const draftToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 폼 변경 감지
+  useEffect(() => {
+    isDirtyRef.current = !!(form.title || form.description || form.employee_name)
+  }, [form.title, form.description, form.employee_name])
+
+  // 페이지 진입 시 임시저장 데이터 확인
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY)
+      if (saved) setHasDraft(true)
+    } catch {}
+  }, [])
+
+  // 임시저장 실행
+  const saveDraft = useCallback(() => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, confidential, categoryContext, savedAt: Date.now() }))
+      if (draftToastTimer.current) clearTimeout(draftToastTimer.current)
+      setDraftSaved(true)
+      draftToastTimer.current = setTimeout(() => setDraftSaved(false), 2500)
+    } catch {}
+  }, [form, confidential, categoryContext])
+
+  // 임시저장 삭제
+  const clearDraft = useCallback(() => {
+    try { localStorage.removeItem(DRAFT_KEY) } catch {}
+    setHasDraft(false)
+  }, [])
+
+  // 임시저장 복원
+  function restoreDraft() {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY)
+      if (!saved) return
+      const { form: savedForm, confidential: savedConfidential, categoryContext: savedCtx } = JSON.parse(saved)
+      setForm((prev) => ({ ...prev, ...savedForm }))
+      if (savedConfidential !== undefined) setConfidential(savedConfidential)
+      if (savedCtx !== undefined) setCategoryContext(savedCtx)
+    } catch {}
+    setHasDraft(false)
+    clearDraft()
+  }
+
+  // 브라우저 탭 닫기 / 새로고침 경고
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirtyRef.current && !submittedRef.current) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [])
+
+  // Next.js 링크 클릭 이탈 감지 (a 태그 href 클릭 가로채기)
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (submittedRef.current || !isDirtyRef.current) return
+      const anchor = (e.target as Element).closest('a[href]') as HTMLAnchorElement | null
+      if (!anchor) return
+      const href = anchor.getAttribute('href') || ''
+      // 외부 링크, 앵커, javascript: 제외
+      if (!href || href.startsWith('#') || href.startsWith('javascript') || href.startsWith('http')) return
+      e.preventDefault()
+      e.stopPropagation()
+      setLeaveModal({ show: true, dest: href })
+    }
+    document.addEventListener('click', handleClick, true)
+    return () => document.removeEventListener('click', handleClick, true)
+  }, [])
+
+  // ─────────────────────────────────────────────────────────
 
   // 커스텀 필드 정의 로딩
   useEffect(() => {
@@ -128,15 +220,19 @@ function NewTicketContent() {
     fetchMilestones(form.project_id).then(setMilestones).catch(() => setMilestones([]))
   }, [form.project_id])
 
-  // KB 자동 추천 — /kb/suggest 전용 API 사용 (300ms 디바운스)
+  // KB 자동 추천 — 제목+카테고리+설명 발췌로 관련성 향상 (300ms 디바운스)
   useEffect(() => {
     if (kbTimer.current) clearTimeout(kbTimer.current)
     if (form.title.length < 6) { setKbSuggestions([]); return }
     kbTimer.current = setTimeout(async () => {
       setKbLoading(true)
       try {
+        const params = new URLSearchParams({ q: form.title, limit: '3' })
+        if (form.category) params.set('category', form.category)
+        const descExcerpt = (form.description || '').replace(/[#*`>\[\]()\-_~|!<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
+        if (descExcerpt) params.set('desc', descExcerpt)
         const res = await fetch(
-          `/api/kb/suggest?q=${encodeURIComponent(form.title)}&limit=3`,
+          `/api/kb/suggest?${params}`,
           { credentials: 'include', cache: 'no-store' }
         )
         if (res.ok) setKbSuggestions(await res.json())
@@ -148,7 +244,7 @@ function NewTicketContent() {
       }
     }, 300)
     return () => { if (kbTimer.current) clearTimeout(kbTimer.current) }
-  }, [form.title])
+  }, [form.title, form.category, form.description])
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -248,25 +344,119 @@ function NewTicketContent() {
         }
       }
       const qs = ticket.project_id ? `?project_id=${ticket.project_id}` : ''
+      submittedRef.current = true
+      clearDraft()
       router.push(`/tickets/${ticket.iid}${qs}`)
     } catch (err: unknown) {
       setUploadingFiles(false)
-      setError(err instanceof Error ? err.message : '등록에 실패했습니다.')
+      setError(err instanceof Error ? err.message : t('submit_failed'))
       setSubmitting(false)
     }
   }
 
   const selectedPriority = PRIORITIES.find((p) => p.value === form.priority)
-  const selectedCategory = serviceTypes.find((c) => c.value === form.category)
-  const canSubmit = !submitting && !projectsLoading && projects.length > 0
+  const selectedCategory = serviceTypes.find((c) => (c.description || c.value) === form.category)
+  const canSubmit = !submitting && !projectsLoading && projects.length > 0 && form.title.trim().length > 0
 
   return (
     <div className="w-full">
+
+      {/* ── 이탈 확인 모달 ── */}
+      {leaveModal.show && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 overflow-hidden">
+            {/* 상단 강조 바 */}
+            <div className="h-1 w-full bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400" />
+            <div className="p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">작성 중인 내용이 있습니다</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">페이지를 이동하면 작성한 내용이 사라집니다.<br />임시저장 후 이동하시겠습니까?</p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    saveDraft()
+                    setHasDraft(true)
+                    setLeaveModal({ show: false, dest: '' })
+                    submittedRef.current = true
+                    window.location.href = leaveModal.dest
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+                >
+                  💾 임시저장 후 이동
+                </button>
+                <button
+                  onClick={() => {
+                    clearDraft()
+                    setLeaveModal({ show: false, dest: '' })
+                    submittedRef.current = true
+                    window.location.href = leaveModal.dest
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-semibold transition-colors"
+                >
+                  저장하지 않고 이동
+                </button>
+                <button
+                  onClick={() => setLeaveModal({ show: false, dest: '' })}
+                  className="w-full py-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  계속 작성하기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 임시저장 완료 토스트 ── */}
+      {draftSaved && (
+        <div className="fixed bottom-6 right-6 z-[9998] flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-900 dark:bg-gray-700 text-white text-sm shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          임시저장 완료
+        </div>
+      )}
+
+      {/* ── 임시저장 복원 배너 ── */}
+      {hasDraft && (
+        <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20">
+          <svg className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm text-amber-800 dark:text-amber-300 flex-1">
+            임시저장된 작성 내용이 있습니다.
+          </p>
+          <button
+            type="button"
+            onClick={restoreDraft}
+            className="text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline shrink-0"
+          >
+            불러오기
+          </button>
+          <button
+            type="button"
+            onClick={clearDraft}
+            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 shrink-0"
+          >
+            삭제
+          </button>
+        </div>
+      )}
+
       {/* 브레드크럼 */}
       <div className="mb-5">
-        <a href="/" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">← 목록으로</a>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-1">IT 지원 요청</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">문제를 자세히 설명해주시면 빠르게 처리해 드립니다.</p>
+        <a href="/" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">{t('back')}</a>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-1">{t('title')}</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{t('desc')}</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-5 items-start">
@@ -277,7 +467,7 @@ function NewTicketContent() {
           {/* 템플릿 */}
           {templates.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">📋 템플릿으로 빠르게 시작</p>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{t('template_section')}</p>
               <div className="flex flex-wrap gap-2">
                 {templates.map((t) => (
                   <button
@@ -302,7 +492,7 @@ function NewTicketContent() {
           {/* ① 서비스 유형 */}
           <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5">
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center">
-              <SectionNum n={1} />서비스 유형
+              <SectionNum n={1} />{t('service_type')}
             </p>
 
             <div className="grid grid-cols-5 gap-2">
@@ -311,11 +501,11 @@ function NewTicketContent() {
                   key={c.value}
                   type="button"
                   onClick={() => {
-                    setForm((prev) => ({ ...prev, category: c.value }))
+                    setForm((prev) => ({ ...prev, category: c.description || c.value }))
                     setCategoryContext('')
                   }}
                   className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 transition-all text-center ${
-                    form.category === c.value
+                    form.category === (c.description || c.value)
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-sm'
                       : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
@@ -332,7 +522,7 @@ function NewTicketContent() {
             {selectedCategory?.context_label && (selectedCategory?.context_options?.length ?? 0) > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                 <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                  {selectedCategory.context_label} <span className="text-gray-400 dark:text-gray-500 font-normal">(선택)</span>
+                  {selectedCategory.context_label} <span className="text-gray-400 dark:text-gray-500 font-normal">{t('optional')}</span>
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedCategory.context_options.map((opt) => (
@@ -357,14 +547,14 @@ function NewTicketContent() {
           {/* ② 요청 내용 */}
           <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5 space-y-4">
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">
-              <SectionNum n={2} />요청 내용
+              <SectionNum n={2} />{t('request_content')}
             </p>
 
             {/* 제목 */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  제목 <span className="text-red-500">*</span>
+                  {tf('subject')} <span className="text-red-500">*</span>
                 </label>
                 <span className={`text-xs tabular-nums ${form.title.length > 180 ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'}`}>
                   {form.title.length}/200
@@ -377,7 +567,7 @@ function NewTicketContent() {
                 required
                 minLength={5}
                 maxLength={200}
-                placeholder="예: 컴퓨터가 켜지지 않습니다"
+                placeholder={t('subject_placeholder')}
                 className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -385,12 +575,12 @@ function NewTicketContent() {
             {/* 상세 내용 — 리치 텍스트 에디터 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                상세 내용 <span className="text-red-500">*</span>
+                {tf('description')} <span className="text-red-500">*</span>
               </label>
               <RichTextEditor
                 value={form.description}
                 onChange={(html) => setForm((prev) => ({ ...prev, description: html }))}
-                placeholder={'언제부터 발생했는지, 어떤 증상인지,\n이미 시도해본 방법 등을 적어주세요.'}
+                placeholder={t('content_placeholder')}
                 minHeight="180px"
                 onImageUpload={handleDescriptionImageUpload}
               />
@@ -398,11 +588,12 @@ function NewTicketContent() {
 
             {/* 파일 첨부 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                파일 첨부{' '}
-                <span className="text-xs font-normal text-gray-400 dark:text-gray-500">(선택, 최대 10MB)</span>
+              <label htmlFor="ticket-new-file-upload" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {t('attachment_label')}{' '}
+                <span className="text-xs font-normal text-gray-400 dark:text-gray-500">{t('attachment_optional')}</span>
               </label>
               <label
+                htmlFor="ticket-new-file-upload"
                 className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-md px-4 py-3 cursor-pointer transition-colors text-sm ${
                   isDragging
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
@@ -414,8 +605,9 @@ function NewTicketContent() {
                 onDrop={handleDrop}
               >
                 <span>📎</span>
-                <span>{isDragging ? '여기에 놓으세요' : '파일 선택 또는 드래그 앤 드롭'}</span>
+                <span>{isDragging ? t('drop_here') : t('file_select')}</span>
                 <input
+                  id="ticket-new-file-upload"
                   type="file"
                   multiple
                   onChange={handleFileChange}
@@ -441,7 +633,7 @@ function NewTicketContent() {
           {/* ③ 긴급도 */}
           <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5">
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center">
-              <SectionNum n={3} />긴급도
+              <SectionNum n={3} />{t('urgency')}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {PRIORITIES.map((p) => (
@@ -462,14 +654,14 @@ function NewTicketContent() {
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-base leading-none">{p.icon}</span>
                     <span className={`text-sm font-semibold ${form.priority === p.value ? p.labelColor : 'text-gray-700 dark:text-gray-300'}`}>
-                      {p.label}
+                      {tp(p.value as Parameters<typeof tp>[0])}
                     </span>
                   </div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">{p.desc}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">{t(('priority_' + p.value + '_desc') as Parameters<typeof t>[0])}</p>
                   <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">
-                    처리 목표:{' '}
+                    {t('processing_target')}{' '}
                     <span className={`font-semibold ${form.priority === p.value ? p.labelColor : 'text-gray-600 dark:text-gray-300'}`}>
-                      {p.sla}
+                      {t(('priority_' + p.value + '_sla') as Parameters<typeof t>[0])}
                     </span>
                   </p>
                 </label>
@@ -481,25 +673,27 @@ function NewTicketContent() {
           <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">
-                <SectionNum n={4} />신청자 정보
+                <SectionNum n={4} />{t('requester_info')}
               </p>
-              <span className="text-xs text-gray-400 dark:text-gray-500">GitLab 계정에서 자동 입력</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">{t('auto_filled')}</span>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">이름</label>
+                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{tportal('name_label')}</label>
                 <input
                   name="employee_name"
+                  aria-label={tportal('name_label')}
                   value={form.employee_name}
                   readOnly
                   className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">이메일</label>
+                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{tportal('email_label')}</label>
                 <input
                   name="employee_email"
                   type="email"
+                  aria-label={tportal('email_label')}
                   value={form.employee_email}
                   readOnly
                   className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 cursor-not-allowed"
@@ -507,25 +701,25 @@ function NewTicketContent() {
               </div>
               <div>
                 <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
-                  부서 <span className="text-gray-400 dark:text-gray-500">(선택)</span>
+                  {t('department')} <span className="text-gray-400 dark:text-gray-500">{t('optional')}</span>
                 </label>
                 <input
                   name="department"
                   value={form.department}
                   onChange={handleChange}
-                  placeholder="예: 개발팀, 영업부"
+                  placeholder={t('department_placeholder')}
                   className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
                 <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
-                  위치 <span className="text-gray-400 dark:text-gray-500">(선택)</span>
+                  {t('location_label')} <span className="text-gray-400 dark:text-gray-500">{t('optional')}</span>
                 </label>
                 <input
                   name="location"
                   value={form.location}
                   onChange={handleChange}
-                  placeholder="예: 3층 A동, 본사 2층"
+                  placeholder={t('location_placeholder')}
                   className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -536,19 +730,20 @@ function NewTicketContent() {
           {isAgent && (
             <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5">
               <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-                <SectionNum n={5} />관리자 설정
-                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-normal">에이전트 이상</span>
+                <SectionNum n={5} />{t('admin_settings')}
+                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-normal">{t('agent_only')}</span>
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {/* 프로젝트 (복수인 경우만) */}
                 {projects.length > 1 && (
                   <div>
-                    <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">프로젝트</label>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('project_label')}</label>
                     {projectsLoading ? (
-                      <div className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700/50">불러오는 중...</div>
+                      <div className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700/50">{tc('loading')}</div>
                     ) : (
                       <select
                         name="project_id"
+                        aria-label={t('project_label')}
                         value={form.project_id}
                         onChange={handleChange}
                         className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -564,15 +759,16 @@ function NewTicketContent() {
                 {members.length > 0 && (
                   <div>
                     <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
-                      담당자 <span className="text-gray-400 dark:text-gray-500">(선택)</span>
+                      {tf('assignee')} <span className="text-gray-400 dark:text-gray-500">{t('optional')}</span>
                     </label>
                     <select
                       name="assignee_id"
+                      aria-label={tf('assignee')}
                       value={form.assignee_id}
                       onChange={handleChange}
                       className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="">담당자 없음</option>
+                      <option value="">{t('assignee_none')}</option>
                       {members.map((m) => (
                         <option key={m.id} value={m.id}>{formatName(m.name)} (@{m.username})</option>
                       ))}
@@ -582,11 +778,12 @@ function NewTicketContent() {
                 {/* SLA */}
                 <div>
                   <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
-                    처리 기한 <span className="text-gray-400 dark:text-gray-500">(비워두면 자동)</span>
+                    {t('deadline_label')} <span className="text-gray-400 dark:text-gray-500">{t('deadline_optional')}</span>
                   </label>
                   <input
                     type="date"
                     name="sla_due_date"
+                    aria-label={t('deadline_label')}
                     value={form.sla_due_date}
                     onChange={handleChange}
                     min={new Date().toISOString().split('T')[0]}
@@ -597,15 +794,16 @@ function NewTicketContent() {
                 {milestones.length > 0 && (
                 <div>
                   <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
-                    마일스톤 <span className="text-gray-400 dark:text-gray-500">(선택)</span>
+                    {t('milestone_label')} <span className="text-gray-400 dark:text-gray-500">{t('optional')}</span>
                   </label>
                   <select
                     name="milestone_id"
+                    aria-label={t('milestone_label')}
                     value={form.milestone_id}
                     onChange={handleChange}
                     className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">마일스톤 없음</option>
+                    <option value="">{t('milestone_none')}</option>
                     {milestones.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.title}{m.due_date ? ` (${m.due_date})` : ''}
@@ -621,7 +819,7 @@ function NewTicketContent() {
           {/* 커스텀 필드 */}
           {customFieldDefs.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">추가 정보</h3>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t('extra_info')}</h3>
               <div className="space-y-3">
                 {customFieldDefs.map(f => (
                   <div key={f.id}>
@@ -637,6 +835,7 @@ function NewTicketContent() {
                       />
                     ) : f.field_type === 'select' ? (
                       <select
+                        aria-label={f.label}
                         value={customFieldValues[f.name] ?? ''}
                         onChange={e => setCustomFieldValues(prev => ({ ...prev, [f.name]: e.target.value }))}
                         className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -690,6 +889,14 @@ function NewTicketContent() {
             >
               {uploadingFiles ? '📤 파일 업로드 중...' : submitting ? '등록 중...' : '✓ 티켓 등록'}
             </button>
+            <button
+              type="button"
+              onClick={() => { saveDraft(); setHasDraft(true) }}
+              className="px-4 py-2.5 border border-amber-300 dark:border-amber-600 rounded-lg text-sm text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors font-medium"
+              title="현재 내용을 임시저장합니다"
+            >
+              💾 임시저장
+            </button>
             <a
               href="/"
               className="px-6 py-2.5 border dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors"
@@ -719,14 +926,14 @@ function NewTicketContent() {
               <div className="flex items-start gap-2">
                 <span className="text-lg leading-none shrink-0 mt-0.5">{selectedPriority?.icon ?? '🟡'}</span>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-none mb-0.5">긴급도</p>
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedPriority?.label ?? '-'}</p>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">처리 목표: <span className="font-semibold">{selectedPriority?.sla}</span></p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-none mb-0.5">{t('urgency')}</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedPriority ? tp(selectedPriority.value as Parameters<typeof tp>[0]) : '-'}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">{t('processing_target')} <span className="font-semibold">{selectedPriority ? t(('priority_' + selectedPriority.value + '_sla') as Parameters<typeof t>[0]) : '-'}</span></p>
                 </div>
               </div>
               {form.title && (
                 <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">제목</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">{tf('subject')}</p>
                   <p className="text-xs text-gray-700 dark:text-gray-300 line-clamp-3 leading-relaxed">{form.title}</p>
                 </div>
               )}
@@ -788,8 +995,8 @@ function NewTicketContent() {
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700/50 p-4">
             <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">⏱ 처리 예상</p>
             <p className="text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed">
-              <span className="font-semibold">{selectedPriority?.label}</span> 우선순위의 경우{' '}
-              <span className="font-semibold">{selectedPriority?.sla}</span> 내 처리를 목표로 합니다.
+              <span className="font-semibold">{selectedPriority ? tp(selectedPriority.value as Parameters<typeof tp>[0]) : '-'}</span> 우선순위의 경우{' '}
+              <span className="font-semibold">{selectedPriority ? t(('priority_' + selectedPriority.value + '_sla') as Parameters<typeof t>[0]) : '-'}</span> 내 처리를 목표로 합니다.
             </p>
             <p className="text-[10px] text-blue-500 dark:text-blue-500 mt-1">* 업무 시간 기준 / 상황에 따라 변동</p>
           </div>

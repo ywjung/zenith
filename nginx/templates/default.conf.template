@@ -1,7 +1,57 @@
+# ---------------------------------------------------------------------------
+# Upstream 정의 — web_backend만 정적 upstream 사용 (Next.js 서버는 재생성 빈도 낮음)
+#
+# api_backend는 upstream 블록 제거 → 변수 기반 proxy_pass 사용.
+# resolver valid=10s 와 결합하면 컨테이너 재생성 후 IP 변경을 자동 감지.
+# (정적 upstream 블록은 resolver 지시자를 무시하고 기동 시 DNS를 1회만 조회함)
+# ---------------------------------------------------------------------------
+upstream web_backend {
+  server itsm-web:3000;
+  keepalive 16;
+  keepalive_requests 1000;
+  keepalive_timeout  65s;
+}
+
+# ---------------------------------------------------------------------------
+# Rate limiting 존 — 메모리 10MB = 약 160,000 IP 추적 가능
+# ---------------------------------------------------------------------------
+limit_req_zone $binary_remote_addr zone=api_general:10m  rate=60r/s;
+limit_req_zone $binary_remote_addr zone=auth_login:10m   rate=10r/m;
+limit_req_zone $binary_remote_addr zone=auth_sensitive:5m rate=5r/m;   # sudo/exchange
+limit_req_zone $binary_remote_addr zone=admin_api:10m    rate=5r/s;    # 관리자 API
+limit_req_zone $binary_remote_addr zone=ws_connect:5m    rate=10r/m;   # WebSocket 연결
+limit_conn_zone $binary_remote_addr zone=ws_conn:10m;                   # WebSocket 동시 연결
+limit_req_status 429;
+limit_conn_status 429;
+
+# Docker 내장 DNS — 컨테이너 IP 변경 시 10초마다 재조회 (배포 후 502 방지)
+resolver 127.0.0.11 valid=10s;
+resolver_timeout 5s;
+
 server {
   listen 80;
 
-  # gzip 압축 — API JSON 응답 크기 ~80% 감소 (병목 5 개선)
+  server_tokens off;   # nginx 버전 노출 방지
+
+  # ---------------------------------------------------------------------------
+  # 기본 타임아웃 / 버퍼 설정
+  # ---------------------------------------------------------------------------
+  keepalive_timeout   75s;
+  send_timeout        30s;
+  client_header_timeout 15s;
+  client_body_timeout   30s;
+
+  proxy_connect_timeout  10s;
+  proxy_send_timeout     30s;
+  proxy_read_timeout     60s;
+
+  proxy_buffer_size        8k;
+  proxy_buffers            8 16k;
+  proxy_busy_buffers_size  32k;
+
+  # ---------------------------------------------------------------------------
+  # gzip 압축 — API JSON 응답 크기 ~80% 감소
+  # ---------------------------------------------------------------------------
   gzip on;
   gzip_types application/json text/plain text/css application/javascript text/javascript text/xml application/xml;
   gzip_min_length 1024;
@@ -9,19 +59,23 @@ server {
   gzip_vary on;
   gzip_proxied any;
 
+  # ---------------------------------------------------------------------------
   # Security headers
+  # ---------------------------------------------------------------------------
   add_header X-Frame-Options "DENY" always;
   add_header X-Content-Type-Options "nosniff" always;
   add_header X-XSS-Protection "1; mode=block" always;
   add_header Referrer-Policy "strict-origin-when-cross-origin" always;
   add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
-  # Next.js 다크모드 FOUC 인라인 스크립트 및 SSR 하이드레이션에 unsafe-inline 필요
-  # (nonce 기반 CSP 도입 전까지 유지. style-src unsafe-inline은 Tailwind 런타임 인젝션 필요)
-  add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:8929; connect-src 'self'; font-src 'self'; frame-src 'self' blob:; object-src blob: 'self'; frame-ancestors 'none';" always;
-  # MED-07: HSTS는 HTTPS 환경에서만 유효. HTTP 리버스 프록시(nginx)에서 전송해도
-  # 브라우저는 HTTPS 응답에서만 처리한다. TLS 종단이 nginx 앞단(로드밸런서 등)에 있는
-  # 경우 해당 계층에서도 HSTS를 설정해야 함.
-  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  # H2: CSP는 Next.js middleware(src/middleware.ts)에서 nonce 기반으로 동적 생성
+  # nginx에서 정적 CSP 헤더를 제거하여 middleware의 nonce 기반 CSP가 단독 적용되도록 함
+  # (두 헤더가 동시 존재하면 브라우저가 AND 교집합 적용 — 더 엄격한 쪽이 우선)
+  # HSTS — TLS 환경에서 유효. HTTP 리버스 프록시(nginx)에서 전송해도 브라우저는 HTTPS 응답에서만 처리
+  # preload: HSTS Preload List 등록 가능 (https://hstspreload.org)
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+  # Cross-Origin 격리 — SharedArrayBuffer, COEP 관련 보안 강화
+  add_header Cross-Origin-Opener-Policy "same-origin" always;
+  add_header Cross-Origin-Resource-Policy "same-origin" always;
 
   # Chrome DevTools workspace detection (Chrome 130+)
   location = /.well-known/appspecific/com.chrome.devtools.json {
@@ -29,95 +83,197 @@ server {
     add_header Content-Type application/json;
   }
 
+  # ---------------------------------------------------------------------------
+  # Next.js 정적 자산 — 장기 캐싱 (immutable, 1년)
+  # Next.js는 빌드마다 해시가 바뀌어 캐시 무효화가 자동 처리됨
+  # ---------------------------------------------------------------------------
+  location /_next/static/ {
+    proxy_pass http://web_backend/_next/static/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    access_log off;
+  }
+
   location / {
-    proxy_pass http://itsm-web:3000;
+    proxy_pass http://web_backend;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection 'upgrade';
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
     proxy_cache_bypass $http_upgrade;
   }
 
+  # ---------------------------------------------------------------------------
   # SSE (Server-Sent Events) — 버퍼링 비활성화 필수
+  # ---------------------------------------------------------------------------
+  # resolver 변수 방식 사용 → 컨테이너 재생성 후 IP 변경 시에도 자동 재조회 (502 방지)
+  # gzip off + X-Accel-Buffering: no → 청크 인코딩 중단(ERR_INCOMPLETE_CHUNKED_ENCODING) 방지
+  # ---------------------------------------------------------------------------
   location /api/notifications/stream {
-    proxy_pass http://itsm-api:8000/notifications/stream;
+    set $sse_api http://itsm-api:8000;
+    proxy_pass $sse_api/notifications/stream;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Connection '';
     proxy_buffering off;
     proxy_cache off;
     proxy_read_timeout 86400s;
     chunked_transfer_encoding on;
+    gzip off;                              # gzip 버퍼링이 SSE 청크를 끊음
+    add_header X-Accel-Buffering "no";     # nginx 프록시 버퍼링 명시적 비활성
   }
 
+  # ---------------------------------------------------------------------------
   # 티켓 실시간 협업 WebSocket
+  # ---------------------------------------------------------------------------
   location ~ ^/api/ws/tickets/ {
+    # WebSocket 연결: IP당 10회/분, 동시 연결 20개 제한
+    limit_req zone=ws_connect burst=5 nodelay;
+    limit_conn ws_conn 20;
+    set $ws_api http://itsm-api:8000;
     rewrite ^/api/(.*)$ /$1 break;
-    proxy_pass http://itsm-api:8000;
+    proxy_pass $ws_api;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
     proxy_read_timeout 86400s;
     proxy_connect_timeout 10s;
     proxy_send_timeout 86400s;
   }
 
-  # 티켓 실시간 이벤트 SSE 스트림 — 버퍼링 비활성화
+  # ---------------------------------------------------------------------------
+  # 티켓 실시간 이벤트 SSE 스트림
+  # ---------------------------------------------------------------------------
   location ~ ^/api/tickets/[0-9]+/stream {
+    set $sse_api http://itsm-api:8000;
     rewrite ^/api/(.*)$ /$1 break;
-    proxy_pass http://itsm-api:8000;
+    proxy_pass $sse_api;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Connection '';
     proxy_buffering off;
     proxy_cache off;
     proxy_read_timeout 86400s;
     chunked_transfer_encoding on;
+    gzip off;
+    add_header X-Accel-Buffering "no";
   }
 
+  # ---------------------------------------------------------------------------
   # 파일 프록시 — iframe 미리보기 허용을 위해 frame-ancestors를 'self'로 오버라이드
-  # (서버 블록 전체의 frame-ancestors 'none' 을 이 location에서만 예외 처리)
+  # ---------------------------------------------------------------------------
   location /api/tickets/uploads/proxy {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'self';" always;
-    proxy_pass http://itsm-api:8000/tickets/uploads/proxy;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass $api_backend;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
   }
 
-  # Health check endpoint — used by Docker healthcheck
+  # ---------------------------------------------------------------------------
+  # 로그인 엔드포인트만 rate limit 강화 (brute-force 방지)
+  # /api/auth/me, /api/auth/callback 등은 일반 API 존 적용
+  # ---------------------------------------------------------------------------
+  location = /api/auth/login {
+    limit_req zone=auth_login burst=5 nodelay;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^ /auth/login break;
+    proxy_pass $api_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  # sudo / exchange — 민감 인증 엔드포인트: nginx 레벨 5회/분 추가 제한
+  location ~ ^/api/auth/(sudo|exchange) {
+    limit_req zone=auth_sensitive burst=2 nodelay;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass $api_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  # 관리자 API — 5 req/s 제한 (대규모 bulk 작업 방지)
+  location /api/admin/ {
+    limit_req zone=admin_api burst=10 nodelay;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass $api_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 20m;
+  }
+
+  # ---------------------------------------------------------------------------
+  # Health check — Docker healthcheck 전용, 로그 제외
+  # ---------------------------------------------------------------------------
   location = /health {
-    proxy_pass http://itsm-api:8000/health;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^ /health break;
+    proxy_pass $api_backend;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     access_log off;
   }
 
+  # ---------------------------------------------------------------------------
+  # 일반 API — rate limit 적용
+  # ---------------------------------------------------------------------------
   location /api/ {
-    proxy_pass http://itsm-api:8000/;
-    proxy_redirect http://itsm-api:8000/ /api/;
+    limit_req zone=api_general burst=100 delay=20;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass $api_backend;
+    # FastAPI trailing-slash redirect URL을 클라이언트 origin으로 재작성
+    proxy_redirect ~^https?://[^/]+(/.*)$ $scheme://$http_host/api$1;
     proxy_http_version 1.1;
-    proxy_set_header Host $host;
+    proxy_set_header Connection "";
+    proxy_set_header Host $http_host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    client_max_body_size 20m;  # FastAPI 10MB 검사 앞단에서 막히지 않도록 여유값 설정
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 20m;
   }
 
+  # ---------------------------------------------------------------------------
   # HIGH-07: Prometheus metrics — 내부망 IP + X-Metrics-Token 헤더 이중 인증
-  # METRICS_TOKEN은 .env에서 주입됨 (envsubst로 처리).
-  # Prometheus scrape_config에 headers: {X-Metrics-Token: <동일값>} 설정 필요.
+  # ---------------------------------------------------------------------------
   location = /metrics {
     allow 127.0.0.1;
     allow 10.0.0.0/8;
@@ -125,27 +281,38 @@ server {
     allow 192.168.0.0/16;
     deny all;
     set $metrics_expected "${METRICS_TOKEN}";
+    # METRICS_TOKEN이 비어 있으면 설정 오류 — 모든 요청 차단 (우회 방지)
+    if ($metrics_expected = "") {
+      return 503 "Metrics endpoint not configured";
+    }
     if ($http_x_metrics_token != $metrics_expected) {
       return 403;
     }
-    proxy_pass http://itsm-api:8000/metrics;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^ /metrics break;
+    proxy_pass $api_backend;
     proxy_http_version 1.1;
+    proxy_set_header Connection "";
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   }
 
-  # Swagger UI / ReDoc — 내부망 IP만 허용 + CDN CSP 오버라이드
+  # ---------------------------------------------------------------------------
+  # Swagger UI / ReDoc — 내부망 IP만 허용
+  # ---------------------------------------------------------------------------
   location /docs {
     allow 127.0.0.1;
     allow 10.0.0.0/8;
     allow 172.16.0.0/12;
     allow 192.168.0.0/16;
     deny all;
-    # Swagger UI가 cdn.jsdelivr.net 과 fastapi.tiangolo.com 에서 JS/CSS/파비콘을 로드함
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https://fastapi.tiangolo.com; connect-src 'self'; font-src 'self' https://cdn.jsdelivr.net; frame-ancestors 'none';" always;
-    proxy_pass http://itsm-api:8000/docs;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^ /docs break;
+    proxy_pass $api_backend;
     proxy_http_version 1.1;
+    proxy_set_header Connection "";
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -158,8 +325,11 @@ server {
     allow 192.168.0.0/16;
     deny all;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https://fastapi.tiangolo.com; connect-src 'self'; font-src 'self' https://cdn.jsdelivr.net; frame-ancestors 'none';" always;
-    proxy_pass http://itsm-api:8000/docs/oauth2-redirect;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^ /docs/oauth2-redirect break;
+    proxy_pass $api_backend;
     proxy_http_version 1.1;
+    proxy_set_header Connection "";
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -171,10 +341,12 @@ server {
     allow 172.16.0.0/12;
     allow 192.168.0.0/16;
     deny all;
-    # ReDoc도 cdn.jsdelivr.net 에서 번들을 로드함
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https://fastapi.tiangolo.com; connect-src 'self'; font-src 'self' https://cdn.jsdelivr.net; frame-ancestors 'none';" always;
-    proxy_pass http://itsm-api:8000/redoc;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^ /redoc break;
+    proxy_pass $api_backend;
     proxy_http_version 1.1;
+    proxy_set_header Connection "";
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -186,15 +358,19 @@ server {
     allow 172.16.0.0/12;
     allow 192.168.0.0/16;
     deny all;
-    proxy_pass http://itsm-api:8000/openapi.json;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^ /openapi.json break;
+    proxy_pass $api_backend;
     proxy_http_version 1.1;
+    proxy_set_header Connection "";
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   }
 
+  # ---------------------------------------------------------------------------
   # Grafana 대시보드 (내부망 전용)
-  # regex matches /grafana and /grafana/* — passes full path so GF_SERVER_SERVE_FROM_SUB_PATH works
+  # ---------------------------------------------------------------------------
   location ~ ^/grafana(/.*)?$ {
     allow 127.0.0.1;
     allow 10.0.0.0/8;
@@ -209,14 +385,19 @@ server {
     proxy_redirect ~^https?://[^/]+(/.*)$ $scheme://$http_host$1;
   }
 
-  # Prometheus (내부망 전용)
-  # regex matches /prometheus and /prometheus/* — passes full path, --web.route-prefix=/prometheus/
+  # ---------------------------------------------------------------------------
+  # Prometheus (내부망 전용 + HTTP Basic Auth)
+  # .env에서 PROMETHEUS_HTPASSWD 설정 필요:
+  #   htpasswd -nB prometheus_user  →  "prometheus_user:$2y$..."
+  #   또는: python -c "import bcrypt; print('admin:' + bcrypt.hashpw(b'password', bcrypt.gensalt(12)).decode())"
+  # ---------------------------------------------------------------------------
   location ~ ^/prometheus(/.*)?$ {
     allow 127.0.0.1;
     allow 10.0.0.0/8;
     allow 172.16.0.0/12;
     allow 192.168.0.0/16;
     deny all;
+
     proxy_pass http://prometheus:9090;
     proxy_http_version 1.1;
     proxy_set_header Host $http_host;
@@ -225,14 +406,16 @@ server {
     proxy_redirect ~^https?://[^/]+(/.*)$ $scheme://$http_host$1;
   }
 
+  # ---------------------------------------------------------------------------
   # Celery Flower 모니터링 (내부망 전용)
+  # ---------------------------------------------------------------------------
   location /flower/ {
     allow 127.0.0.1;
     allow 10.0.0.0/8;
     allow 172.16.0.0/12;
     allow 192.168.0.0/16;
     deny all;
-    proxy_pass http://flower:5555/;
+    proxy_pass http://flower:5555/flower/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;

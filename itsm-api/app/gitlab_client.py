@@ -113,6 +113,7 @@ def _get_headers(gitlab_token: Optional[str] = None) -> dict:
 
 _USER_CACHE_TTL = 3600   # 1 hour
 _ISSUES_CACHE_TTL = 30   # 30초 — GitLab API rate-limit 방어용 (검색·필터 쿼리 공유)
+_PROJECTS_CACHE_TTL = 300  # 5분 — 프로젝트 목록은 자주 변경되지 않음
 
 def _redis_client():
     """공유 ConnectionPool 기반 Redis 클라이언트 반환. 연결 실패 시 None."""
@@ -208,7 +209,19 @@ def get_user_projects(user_id: str) -> list[dict]:
 
     GitLab API의 membership=true 파라미터를 사용해 해당 사용자가 멤버인
     프로젝트만 직접 반환한다 (전체 조회 후 필터링 방식 대비 불필요한 API 호출 제거).
+    Redis 캐시 TTL: 5분.
     """
+    import json as _js
+    _cache_key = f"gl:projects:{user_id}"
+    _r = _redis_client()
+    if _r:
+        try:
+            _cached = _r.get(_cache_key)
+            if _cached:
+                return _js.loads(_cached)
+        except Exception:
+            pass
+
     all_projects: list[dict] = []
     page = 1
     with _http_ctx() as client:
@@ -231,6 +244,12 @@ def get_user_projects(user_id: str) -> list[dict]:
             if len(batch) < 100:
                 break
             page += 1
+
+    if _r and all_projects:
+        try:
+            _r.setex(_cache_key, _PROJECTS_CACHE_TTL, _js.dumps(all_projects))
+        except Exception:
+            pass
     return all_projects
 
 
@@ -345,6 +364,7 @@ def get_issues(
     updated_before: Optional[str] = None,
     author_username: Optional[str] = None,
     assignee_username: Optional[str] = None,
+    iids: Optional[list[int]] = None,
 ) -> tuple[list[dict], int]:
     """이슈 목록과 전체 개수를 반환한다. (issues, total)"""
     safe_order_by = order_by if order_by in _ALLOWED_ORDER_BY else "created_at"
@@ -370,6 +390,8 @@ def get_issues(
         params["author_username"] = author_username
     if assignee_username:
         params["assignee_username"] = assignee_username
+    if iids:
+        params["iids[]"] = iids  # GitLab: 특정 iid 목록만 조회
 
     # 검색어·업데이트 필터가 있으면 캐시 건너뜀 (실시간성 필요)
     _use_cache = not (search or updated_after or updated_before)
@@ -551,6 +573,7 @@ def update_issue(
     iid: int,
     add_labels: list[str] | None = None,
     remove_labels: list[str] | None = None,
+    labels: list[str] | None = None,
     state_event: str | None = None,
     project_id: Optional[str] = None,
     assignee_id: Optional[int] = None,
@@ -563,10 +586,14 @@ def update_issue(
         payload["title"] = title
     if description is not None:
         payload["description"] = description
-    if add_labels:
-        payload["add_labels"] = ",".join(add_labels)
-    if remove_labels:
-        payload["remove_labels"] = ",".join(remove_labels)
+    if labels is not None:
+        # Send full labels list directly — more reliable than add/remove combo
+        payload["labels"] = ",".join(labels)
+    else:
+        if add_labels:
+            payload["add_labels"] = ",".join(add_labels)
+        if remove_labels:
+            payload["remove_labels"] = ",".join(remove_labels)
     if state_event:
         payload["state_event"] = state_event
     if assignee_id is not None:
@@ -633,13 +660,13 @@ REQUIRED_LABELS = [
 
 
 def get_category_labels_from_db() -> list[tuple[str, str]]:
-    """DB service_types → GitLab cat:: 라벨 목록 반환."""
+    """DB service_types → GitLab cat:: 라벨 목록 반환 (label 기준)."""
     try:
         from .database import SessionLocal
         from .models import ServiceType
         with SessionLocal() as db:
             types = db.query(ServiceType).all()
-            return [(f"cat::{t.value}", t.color or "#95a5a6") for t in types]
+            return [(f"cat::{t.label}", t.color or "#95a5a6") for t in types]
     except Exception:
         return []
 
@@ -653,7 +680,7 @@ def get_category_labels_with_meta() -> list[dict]:
             types = db.query(ServiceType).order_by(ServiceType.sort_order, ServiceType.id).all()
             return [
                 {
-                    "name": f"cat::{t.value}",
+                    "name": f"cat::{t.label}",
                     "color": t.color or "#95a5a6",
                     "service_label": t.label,
                     "service_emoji": t.emoji or "📋",

@@ -29,7 +29,7 @@ test.describe('티켓 생성 플로우', () => {
     const hasBtn = await submitBtn.isVisible().catch(() => false);
     if (!hasBtn) return; // skip if button not found
 
-    await submitBtn.click();
+    await submitBtn.click({ force: true });
     await page.waitForTimeout(500);
 
     // 유효성 오류 또는 여전히 같은 페이지에 있어야 함
@@ -67,7 +67,7 @@ test.describe('티켓 목록 접근', () => {
       // 티켓 없는 경우 스킵
       return;
     }
-    await firstRow.click();
+    await firstRow.click({ force: true });
     await page.waitForTimeout(500);
     // 티켓 상세 또는 관련 페이지에 있어야 함
     const url = page.url();
@@ -110,8 +110,8 @@ test.describe('티켓 네비게이션', () => {
     const homeLink = page.getByRole('link', { name: /홈|목록|전체|back/i }).first();
     const hasHome = await homeLink.isVisible().catch(() => false);
     if (hasHome) {
-      await homeLink.click();
-      await page.waitForTimeout(500);
+      await homeLink.click({ force: true });
+      await page.waitForURL((url) => !url.href.includes('/tickets/1'), { timeout: 5000 }).catch(() => {});
       expect(page.url()).not.toContain('/tickets/1');
     } else {
       // 페이지 자체는 정상 접근

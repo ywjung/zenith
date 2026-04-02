@@ -27,7 +27,7 @@ FAKE_CLOSED_ISSUE = {**FAKE_ISSUE, "state": "closed", "labels": ["cat::network",
 
 
 def _make_token(role="admin", sub="1", username="admin"):
-    from jose import jwt as _jwt
+    import jwt as _jwt
     return _jwt.encode({
         "sub": sub, "role": role, "name": "Test User", "username": username,
         "email": f"{username}@test.com",
@@ -530,7 +530,7 @@ def test_add_comment_internal_forbidden_for_user(client, user_cookies):
 def test_add_comment_no_gitlab_token(client):
     """Token without gitlab_token → 401 (covers lines 2009-2013)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
     token = _jwt.encode({
         "sub": "42", "role": "admin", "name": "Admin", "username": "admin",
         "exp": int(time.time()) + 7200,

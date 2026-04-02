@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, StrEnum
 from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from datetime import datetime, date
 from typing import Optional
@@ -6,9 +6,10 @@ from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Enum 타입 — 허용 값 집합 정의 (입력 유효성 + IDE 자동완성)
+# StrEnum 사용: Python 3.11+ 에서 str(enum) == enum.value 보장
 # ---------------------------------------------------------------------------
 
-class CategoryEnum(str, Enum):
+class CategoryEnum(StrEnum):
     HARDWARE = "hardware"
     SOFTWARE = "software"
     NETWORK = "network"
@@ -16,14 +17,14 @@ class CategoryEnum(str, Enum):
     OTHER = "other"
 
 
-class PriorityEnum(str, Enum):
+class PriorityEnum(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
 
 
-class StatusEnum(str, Enum):
+class StatusEnum(StrEnum):
     OPEN = "open"
     APPROVED = "approved"
     IN_PROGRESS = "in_progress"
@@ -36,7 +37,7 @@ class StatusEnum(str, Enum):
     REOPENED = "reopened"
 
 
-class BulkActionEnum(str, Enum):
+class BulkActionEnum(StrEnum):
     CLOSE = "close"
     ASSIGN = "assign"
     SET_PRIORITY = "set_priority"
@@ -55,7 +56,7 @@ class TicketCreate(BaseModel):
     category: CategoryEnum = Field(..., description="서비스 유형 value")
     priority: PriorityEnum = Field(default=PriorityEnum.MEDIUM, description="우선순위")
     employee_name: str = Field(..., min_length=2, max_length=100, description="신청자 이름")
-    employee_email: EmailStr = Field(..., description="신청자 이메일")
+    employee_email: str = Field(..., max_length=200, description="신청자 이메일")
     project_id: Optional[str] = Field(default=None, description="GitLab 프로젝트 ID")
     assignee_id: Optional[int] = Field(default=None, description="담당자 GitLab 사용자 ID")
     department: Optional[str] = Field(default=None, max_length=100, description="부서")
@@ -63,6 +64,7 @@ class TicketCreate(BaseModel):
     sla_due_date: Optional[date] = Field(default=None, description="요청 처리 기한 (YYYY-MM-DD)")
     confidential: bool = False
     milestone_id: Optional[int] = Field(default=None, description="GitLab 마일스톤 ID")
+    service_catalog_id: Optional[int] = Field(default=None, description="서비스 카탈로그 항목 ID")
 
 
 class TicketResponse(BaseModel):

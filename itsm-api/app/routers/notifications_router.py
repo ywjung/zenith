@@ -99,6 +99,11 @@ async def notification_stream(
             return
         except Exception as e:
             logger.error("SSE stream: Redis 연결 실패 %s", e)
+            # 브라우저에 30초 후 재시도 요청 후 keep-alive 모드로 유지
+            yield "retry: 30000\n\n"
+            while not await request.is_disconnected():
+                yield ": keep-alive\n\n"
+                await asyncio.sleep(30)
             return
 
         # get_message(timeout=1.0)으로 1초 대기 → tight loop 방지
@@ -124,6 +129,11 @@ async def notification_stream(
                         last_keepalive = now
         except Exception as e:
             logger.error("SSE stream error: %s", e)
+            # 루프 중 오류 — 브라우저가 즉시 재연결하지 않도록 30초 대기 지시
+            try:
+                yield "retry: 30000\n\n"
+            except Exception:
+                pass
         finally:
             # 클라이언트 강제 종료(탭 닫기 등) 시에도 반드시 정리
             try:

@@ -177,7 +177,7 @@ export default function CeleryMonitorPage() {
   // 정상 렌더
   // ---------------------------------------------------------------------------
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="space-y-6">
       <PageHeader loading={loading} onRefresh={load} lastRefresh={lastRefresh} />
 
       {/* 요약 통계 */}
@@ -401,7 +401,12 @@ function PageHeader({
   return (
     <div className="flex items-center justify-between">
       <div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Celery 모니터링</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+          </svg>
+          Celery 모니터링
+        </h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
           Flower API를 통해 워커·큐·태스크 상태를 실시간으로 확인합니다. 30초마다 자동 갱신.
         </p>

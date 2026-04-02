@@ -1,8 +1,9 @@
 # ZENITH ITSM 서버 이전 계획서
 
 **작성일**: 2026-03-17
-**버전**: v1.0
-**대상 시스템**: ZENITH ITSM (Docker Compose 기반)
+**최종 업데이트**: 2026-03-25
+**버전**: v2.0
+**대상 시스템**: ZENITH ITSM v2.2 (Docker Compose 기반)
 
 ---
 
@@ -33,8 +34,11 @@
 | nginx | nginx:1.27-alpine | 리버스 프록시 / 단일 진입점 | **8111** | — |
 | itsm-web | itsm-web:latest | Next.js 15 프론트엔드 | 3000 (내부) | — |
 | itsm-api | itsm-api:latest | FastAPI 백엔드 | 8000 (내부) | gitlab_data (읽기전용) |
+| itsm-celery | itsm-api:latest | Celery Worker (비동기 태스크) | — | — |
+| itsm-celery-beat | itsm-api:latest | Celery Beat (스케줄 태스크) | — | — |
+| itsm-flower | mher/flower | Celery 모니터링 UI | 5555 (내부) | — |
 | postgres | postgres:17 | 주 데이터베이스 | — | **itsm_pgdata** |
-| redis | redis:7.4-alpine | SSE Pub/Sub · 캐시 | — | **itsm_redis** |
+| redis | redis:7.4-alpine | SSE Pub/Sub · 캐시 · Celery 큐 | — | **itsm_redis** |
 | clamav | clamav/clamav:1.4 | 바이러스 스캔 | — | itsm_clamav |
 | prometheus | prom/prometheus | 메트릭 수집 | 9090 | itsm_prometheus |
 | grafana | grafana/grafana | 대시보드 | 3001 | itsm_grafana |
@@ -214,9 +218,14 @@ cat /tmp/itsm_premigration_*.dump | \
 # 데이터 건수 검증
 docker compose exec postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "
 SELECT
-  (SELECT COUNT(*) FROM issues)      AS tickets,
-  (SELECT COUNT(*) FROM user_roles)  AS users,
-  (SELECT COUNT(*) FROM kb_articles) AS kb;
+  (SELECT COUNT(*) FROM issues)                   AS tickets,
+  (SELECT COUNT(*) FROM user_roles)               AS users,
+  (SELECT COUNT(*) FROM kb_articles)              AS kb,
+  (SELECT COUNT(*) FROM sla_records)              AS sla_records,
+  (SELECT COUNT(*) FROM time_entries)             AS time_entries,
+  (SELECT COUNT(*) FROM recurring_ticket_rules)   AS recurring_rules,
+  (SELECT COUNT(*) FROM failed_notification_log)  AS failed_notifs,
+  (SELECT COUNT(*) FROM change_requests)          AS change_requests;
 "
 ```
 
@@ -346,13 +355,17 @@ cat itsm_final_*.dump | \
 docker compose exec postgres psql \
   -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "
 SELECT
-  (SELECT COUNT(*) FROM issues)       AS total_tickets,
-  (SELECT COUNT(*) FROM notes)        AS total_comments,
-  (SELECT COUNT(*) FROM sla_records)  AS sla_records,
-  (SELECT COUNT(*) FROM user_roles)   AS users,
-  (SELECT COUNT(*) FROM kb_articles)  AS kb_articles,
-  (SELECT COUNT(*) FROM audit_logs)   AS audit_logs,
-  (SELECT MAX(iid) FROM issues)       AS latest_iid;
+  (SELECT COUNT(*) FROM issues)                   AS total_tickets,
+  (SELECT COUNT(*) FROM notes)                    AS total_comments,
+  (SELECT COUNT(*) FROM sla_records)              AS sla_records,
+  (SELECT COUNT(*) FROM user_roles)               AS users,
+  (SELECT COUNT(*) FROM kb_articles)              AS kb_articles,
+  (SELECT COUNT(*) FROM audit_logs)               AS audit_logs,
+  (SELECT COUNT(*) FROM time_entries)             AS time_entries,
+  (SELECT COUNT(*) FROM recurring_ticket_rules)   AS recurring_rules,
+  (SELECT COUNT(*) FROM failed_notification_log)  AS failed_notifs,
+  (SELECT COUNT(*) FROM change_requests)          AS change_requests,
+  (SELECT MAX(iid) FROM issues)                   AS latest_iid;
 "
 ```
 
@@ -380,7 +393,7 @@ cd /opt/itsm
 docker compose up -d postgres redis clamav
 sleep 20
 
-# API (Alembic 마이그레이션 자동 실행 — 0048까지)
+# API (Alembic 마이그레이션 자동 실행 — 63단계 자동 적용, 0001~0063)
 docker compose up -d itsm-api
 
 # API 헬스체크 대기
@@ -390,6 +403,9 @@ until docker compose exec itsm-api \
   echo "API 기동 대기 중..."; sleep 5
 done
 echo "✅ API 기동 완료"
+
+# Celery 기동
+docker compose up -d itsm-celery itsm-celery-beat itsm-flower
 
 # 프론트·프록시·모니터링
 docker compose up -d itsm-web nginx prometheus grafana
@@ -500,13 +516,21 @@ docker compose ps
 | 5 | 실시간 알림 SSE | 헤더 🔔 아이콘 | 실시간 알림 수신 |
 | 6 | 칸반 보드 | `/kanban` | 9열 표시 정상 |
 | 7 | 지식베이스 | `/kb` | 아티클 목록 및 검색 |
-| 8 | 리포트 | `/reports` | 차트·통계 정상 |
-| 9 | 관리자 메뉴 | `/admin` | 전체 탭 접근 가능 |
-| 10 | SLA 배지 | 티켓 목록 | 🟢/🟡/🟠/🔴 배지 표시 |
-| 11 | 글로벌 검색 | `Ctrl+K` | 검색 결과 반환 |
-| 12 | GitLab 웹훅 | GitLab에서 테스트 전송 | 200 응답, API 로그 확인 |
-| 13 | Prometheus | `:9090` | 메트릭 스크래핑 정상 |
-| 14 | Grafana | `:3001` | 대시보드 4개 접근 |
+| 8 | 리포트 — 기본 탭 | `/reports` | 차트·통계 정상 |
+| 9 | 리포트 — 시간 추적 탭 | `/reports > 시간 추적` | 팀원별 소요 시간 집계 표시 |
+| 10 | 리포트 — SLA 리포트 탭 | `/reports > SLA 리포트` | 주별 준수·위반 트렌드 차트 |
+| 11 | 멀티 프로젝트 뷰 | `/multi-project` | 프로젝트별 SLA 현황 테이블·바 차트 |
+| 12 | SLA 대시보드 | `/sla` | SLA 현황 카드 및 필터 |
+| 13 | 캘린더 | `/calendar` | 티켓 일정 표시 |
+| 14 | 간트 차트 | `/gantt` | 진행 중 티켓 막대 표시 |
+| 15 | 관리자 메뉴 | `/admin` | 전체 탭 접근 가능 |
+| 16 | 반복 티켓 규칙 | `/admin/recurring-tickets` | 규칙 목록 표시 |
+| 17 | 실패 알림 추적 | `/admin/failed-notifications` | 실패 내역 표시 |
+| 18 | SLA 배지 | 티켓 목록 | 🟢/🟡/🟠/🔴 배지 표시 |
+| 19 | 글로벌 검색 | `Ctrl+K` | 검색 결과 반환 |
+| 20 | GitLab 웹훅 | GitLab에서 테스트 전송 | 200 응답, API 로그 확인 |
+| 21 | Prometheus | `:9090` | 메트릭 스크래핑 정상 |
+| 22 | Grafana | `:3001` | 대시보드 6개 이상 접근 |
 
 ### 7.3 데이터 정합성 검증
 
@@ -514,13 +538,17 @@ docker compose ps
 
 ```sql
 SELECT
-  (SELECT COUNT(*) FROM issues)       AS total_tickets,
-  (SELECT COUNT(*) FROM notes)        AS total_comments,
-  (SELECT COUNT(*) FROM sla_records)  AS sla_records,
-  (SELECT COUNT(*) FROM user_roles)   AS users,
-  (SELECT COUNT(*) FROM kb_articles)  AS kb_articles,
-  (SELECT COUNT(*) FROM audit_logs)   AS audit_logs,
-  (SELECT MAX(iid) FROM issues)       AS latest_ticket_iid;
+  (SELECT COUNT(*) FROM issues)                   AS total_tickets,
+  (SELECT COUNT(*) FROM notes)                    AS total_comments,
+  (SELECT COUNT(*) FROM sla_records)              AS sla_records,
+  (SELECT COUNT(*) FROM user_roles)               AS users,
+  (SELECT COUNT(*) FROM kb_articles)              AS kb_articles,
+  (SELECT COUNT(*) FROM audit_logs)               AS audit_logs,
+  (SELECT COUNT(*) FROM time_entries)             AS time_entries,
+  (SELECT COUNT(*) FROM recurring_ticket_rules)   AS recurring_rules,
+  (SELECT COUNT(*) FROM failed_notification_log)  AS failed_notifs,
+  (SELECT COUNT(*) FROM change_requests)          AS change_requests,
+  (SELECT MAX(iid) FROM issues)                   AS latest_ticket_iid;
 ```
 
 ---

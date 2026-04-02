@@ -11,6 +11,7 @@ import type { AssignmentRule } from '@/types'
 import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
 import { formatName } from '@/lib/utils'
+import { useTranslations } from 'next-intl'
 
 const PRIORITY_LABELS: Record<string, string> = {
   critical: '🔴 긴급',
@@ -49,22 +50,23 @@ function RuleFormPanel({
   onCancel: () => void
   serviceTypes: import('@/types').ServiceType[]
 }) {
+  const t = useTranslations('admin')
   return (
     <form onSubmit={onSubmit} className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-xl p-5 mb-2 shadow-sm">
       <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">{title}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">규칙 이름 *</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('assignment_rules.field_name')}</label>
           <input
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             required
             className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="예: 네트워크 이슈 → 홍길동"
+            placeholder={t('assignment_rules.field_name_placeholder')}
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">우선순위 순서 (높을수록 먼저)</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('assignment_rules.field_priority')}</label>
           <input
             type="number"
             value={form.priority}
@@ -75,37 +77,37 @@ function RuleFormPanel({
       </div>
 
       <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-4">
-        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3">조건 (비워두면 전체 티켓에 적용)</div>
+        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3">{t('assignment_rules.conditions_title')}</div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">카테고리</label>
+            <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">{t('assignment_rules.condition_category')}</label>
             <select
               value={form.match_category}
               onChange={(e) => setForm((f) => ({ ...f, match_category: e.target.value }))}
               className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
-              <option value="">전체</option>
+              <option value="">{t('assignment_rules.condition_all')}</option>
               {serviceTypes.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">우선순위</label>
+            <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">{t('assignment_rules.condition_priority')}</label>
             <select
               value={form.match_priority}
               onChange={(e) => setForm((f) => ({ ...f, match_priority: e.target.value }))}
               className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
-              <option value="">전체</option>
+              <option value="">{t('assignment_rules.condition_all')}</option>
               {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">제목 키워드</label>
+            <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">{t('assignment_rules.condition_keyword')}</label>
             <input
               value={form.match_keyword}
               onChange={(e) => setForm((f) => ({ ...f, match_keyword: e.target.value }))}
               className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="예: VPN, 프린터"
+              placeholder={t('assignment_rules.condition_keyword_placeholder')}
             />
           </div>
         </div>
@@ -113,31 +115,31 @@ function RuleFormPanel({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         <div>
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">담당자 GitLab ID *</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('assignment_rules.assignee_gitlab_id')}</label>
           <input
             type="number"
             value={form.assignee_gitlab_id || ''}
             onChange={(e) => setForm((f) => ({ ...f, assignee_gitlab_id: Number(e.target.value) }))}
             required
             className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="GitLab 사용자 ID"
+            placeholder={t('assignment_rules.assignee_gitlab_id_placeholder')}
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">담당자 이름 *</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">{t('assignment_rules.assignee_name')}</label>
           <input
             value={form.assignee_name}
             onChange={(e) => setForm((f) => ({ ...f, assignee_name: e.target.value }))}
             required
             className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="표시 이름"
+            placeholder={t('assignment_rules.assignee_name_placeholder')}
           />
         </div>
       </div>
 
       <div className="flex gap-2">
-        <button type="submit" className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700">저장</button>
-        <button type="button" onClick={onCancel} className="border border-gray-300 dark:border-gray-600 px-5 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">취소</button>
+        <button type="submit" className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700">{t('common.save')}</button>
+        <button type="button" onClick={onCancel} className="border border-gray-300 dark:border-gray-600 px-5 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">{t('common.cancel')}</button>
       </div>
     </form>
   )
@@ -146,6 +148,7 @@ function RuleFormPanel({
 function AssignmentRulesContent() {
   const { isAdmin } = useAuth()
   const { serviceTypes, getEmoji, getLabel } = useServiceTypes()
+  const t = useTranslations('admin')
   const [rules, setRules] = useState<AssignmentRule[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -166,7 +169,7 @@ function AssignmentRulesContent() {
     return (
       <div className="text-center py-20">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500">관리자 권한이 필요합니다.</p>
+        <p className="text-gray-500">{t('common.no_permission')}</p>
       </div>
     )
   }
@@ -184,7 +187,7 @@ function AssignmentRulesContent() {
       setShowCreateForm(false)
       setCreateForm(EMPTY_FORM)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '규칙 생성에 실패했습니다.')
+      alert(e instanceof Error ? e.message : t('assignment_rules.create_failed'))
     }
   }
 
@@ -218,7 +221,7 @@ function AssignmentRulesContent() {
       )
       setEditingId(null)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '규칙 수정에 실패했습니다.')
+      alert(e instanceof Error ? e.message : t('assignment_rules.edit_failed'))
     }
   }
 
@@ -227,32 +230,40 @@ function AssignmentRulesContent() {
       const updated = await updateAssignmentRule(rule.id, { enabled: !rule.enabled })
       setRules((prev) => prev.map((r) => (r.id === rule.id ? updated : r)))
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '변경에 실패했습니다.')
+      alert(e instanceof Error ? e.message : t('assignment_rules.toggle_failed'))
     }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('이 규칙을 삭제하시겠습니까?')) return
+    if (!confirm(t('assignment_rules.delete_confirm'))) return
     try {
       await deleteAssignmentRule(id)
       setRules((prev) => prev.filter((r) => r.id !== id))
       if (editingId === id) setEditingId(null)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+      alert(e instanceof Error ? e.message : t('assignment_rules.delete_failed'))
     }
   }
 
   return (
     <div>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {t('assignment_rules.title')}
+        </h1>
+      </div>
       <div className="flex items-start justify-between mb-5 gap-4">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          티켓 생성 시 조건에 맞는 담당자를 자동으로 배정합니다. 우선순위(숫자)가 높을수록 먼저 적용됩니다.
+          {t('assignment_rules.description')}
         </p>
         <button
           onClick={() => { setShowCreateForm(!showCreateForm); setCreateForm(EMPTY_FORM); setEditingId(null) }}
           className="flex-shrink-0 flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
         >
-          + 규칙 추가
+          {t('assignment_rules.add_btn')}
         </button>
       </div>
 
@@ -262,7 +273,7 @@ function AssignmentRulesContent() {
 
       {showCreateForm && (
         <RuleFormPanel
-          title="새 배정 규칙"
+          title={t('assignment_rules.new_title')}
           form={createForm}
           setForm={setCreateForm}
           onSubmit={handleCreate}
@@ -272,15 +283,15 @@ function AssignmentRulesContent() {
       )}
 
       {loading ? (
-        <div className="text-center py-16 text-gray-400">불러오는 중...</div>
+        <div className="text-center py-16 text-gray-400">{t('common.loading')}</div>
       ) : (
         <div className="space-y-2">
           {rules.length === 0 && !showCreateForm && (
             <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500">
               <div className="text-3xl mb-2">⚡</div>
-              <p>등록된 배정 규칙이 없습니다.</p>
+              <p>{t('assignment_rules.no_rules')}</p>
               <button onClick={() => setShowCreateForm(true)} className="mt-3 text-sm text-blue-600 hover:underline">
-                + 첫 번째 규칙 추가
+                {t('assignment_rules.add_first')}
               </button>
             </div>
           )}
@@ -289,7 +300,7 @@ function AssignmentRulesContent() {
             <div key={rule.id}>
               {editingId === rule.id ? (
                 <RuleFormPanel
-                  title={`규칙 수정 — ${rule.name}`}
+                  title={t('assignment_rules.edit_title', { name: rule.name })}
                   form={editForm}
                   setForm={setEditForm}
                   onSubmit={handleEdit}
@@ -327,11 +338,11 @@ function AssignmentRulesContent() {
                     )}
                     {rule.match_keyword && (
                       <span className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-700 px-2 py-0.5 rounded-full">
-                        키워드: &ldquo;{rule.match_keyword}&rdquo;
+                        {t('assignment_rules.condition_keyword_badge', { keyword: rule.match_keyword })}
                       </span>
                     )}
                     {!rule.match_category && !rule.match_priority && !rule.match_keyword && (
-                      <span className="text-xs text-gray-400 dark:text-gray-500 italic">모든 티켓</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500 italic">{t('assignment_rules.condition_all_tickets')}</span>
                     )}
                   </div>
 
@@ -354,19 +365,19 @@ function AssignmentRulesContent() {
                           : 'bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600'
                       }`}
                     >
-                      {rule.enabled ? '활성' : '비활성'}
+                      {rule.enabled ? t('common.active') : t('common.inactive')}
                     </button>
                     <button
                       onClick={() => startEdit(rule)}
                       className="text-xs text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
-                      title="수정"
+                      title={t('common.edit')}
                     >
-                      수정
+                      {t('common.edit')}
                     </button>
                     <button
                       onClick={() => handleDelete(rule.id)}
                       className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors text-lg leading-none"
-                      title="삭제"
+                      title={t('common.delete')}
                     >
                       ✕
                     </button>

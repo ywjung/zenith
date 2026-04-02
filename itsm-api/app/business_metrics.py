@@ -84,6 +84,30 @@ itsm_ip_allowlist_entries_total = Gauge(
     "itsm_ip_allowlist_entries_total", "IP 허용 목록 항목 수", ["enabled"]
 )
 
+# 문제 관리 (Problem Management)
+itsm_problems_total = Gauge(
+    "itsm_problems_total", "문제 티켓 수"
+)
+itsm_problem_linked_incidents_total = Gauge(
+    "itsm_problem_linked_incidents_total", "문제에 연결된 인시던트 총 수"
+)
+
+# 변경 관리 (Change Management)
+itsm_change_requests_total = Gauge(
+    "itsm_change_requests_total", "변경 요청(RFC) 수", ["status"]
+)
+itsm_change_requests_by_risk = Gauge(
+    "itsm_change_requests_by_risk", "위험 수준별 변경 요청 수", ["risk_level"]
+)
+itsm_change_requests_by_type = Gauge(
+    "itsm_change_requests_by_type", "변경 유형별 요청 수", ["change_type"]
+)
+
+# Web Push
+itsm_web_push_subscriptions_total = Gauge(
+    "itsm_web_push_subscriptions_total", "Web Push 구독 브라우저 수"
+)
+
 
 def _refresh(session_factory):
     """DB 집계 → Gauge 갱신 (예외 발생 시 로그만 남김)."""
@@ -187,6 +211,60 @@ def _refresh(session_factory):
             itsm_ip_allowlist_entries_total.labels(enabled="false").set(
                 scalar("SELECT COUNT(*) FROM ip_allowlist WHERE is_active=false")
             )
+
+            # 문제 관리 (Problem Management)
+            itsm_problems_total.set(
+                scalar("SELECT COUNT(*) FROM ticket_type_meta WHERE ticket_type='problem'")
+            )
+            itsm_problem_linked_incidents_total.set(
+                scalar("SELECT COUNT(*) FROM ticket_links WHERE link_type='causes'")
+            )
+
+            # 변경 관리 (Change Management) — change_requests 테이블
+            try:
+                cr_rows = db.execute(
+                    text("SELECT status, COUNT(*) FROM change_requests GROUP BY status")
+                ).all()
+                seen_cr = set()
+                for status, cnt in cr_rows:
+                    itsm_change_requests_total.labels(status=status).set(cnt)
+                    seen_cr.add(status)
+                for s in ("draft", "submitted", "reviewing", "approved", "implementing",
+                          "implemented", "failed", "cancelled"):
+                    if s not in seen_cr:
+                        itsm_change_requests_total.labels(status=s).set(0)
+
+                cr_risk = db.execute(
+                    text("SELECT risk_level, COUNT(*) FROM change_requests GROUP BY risk_level")
+                ).all()
+                seen_risk = set()
+                for risk, cnt in cr_risk:
+                    itsm_change_requests_by_risk.labels(risk_level=risk).set(cnt)
+                    seen_risk.add(risk)
+                for r in ("low", "medium", "high", "critical"):
+                    if r not in seen_risk:
+                        itsm_change_requests_by_risk.labels(risk_level=r).set(0)
+
+                cr_type = db.execute(
+                    text("SELECT change_type, COUNT(*) FROM change_requests GROUP BY change_type")
+                ).all()
+                seen_type = set()
+                for ctype, cnt in cr_type:
+                    itsm_change_requests_by_type.labels(change_type=ctype).set(cnt)
+                    seen_type.add(ctype)
+                for ct in ("standard", "emergency", "normal"):
+                    if ct not in seen_type:
+                        itsm_change_requests_by_type.labels(change_type=ct).set(0)
+            except Exception:
+                pass  # change_requests 테이블 없는 환경 대비
+
+            # Web Push 구독
+            try:
+                itsm_web_push_subscriptions_total.set(
+                    scalar("SELECT COUNT(*) FROM web_push_subscriptions")
+                )
+            except Exception:
+                pass  # web_push_subscriptions 테이블 없는 환경 대비
 
     except Exception as e:
         logger.warning("business_metrics refresh error: %s", e)

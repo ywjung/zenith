@@ -180,8 +180,9 @@ function EscalationContent() {
     loadPolicies()
     // 사용자 목록 로드 (agent 이상만 표시)
     apiFetch('/admin/users')
-      .then((data: SystemUser[]) => {
-        const eligible = (data ?? []).filter(u => ['admin', 'agent', 'developer'].includes(u.role))
+      .then((data: { items?: SystemUser[] } | SystemUser[]) => {
+        const list: SystemUser[] = Array.isArray(data) ? data : (data?.items ?? [])
+        const eligible = list.filter(u => ['admin', 'agent', 'developer'].includes(u.role))
         setUsers(eligible)
       })
       .catch(() => { setError('담당자 목록을 불러오지 못했습니다.') })
@@ -249,7 +250,12 @@ function EscalationContent() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">SLA 에스컬레이션 정책</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            SLA 에스컬레이션 정책
+          </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">SLA 위반/임박 시 자동으로 실행할 액션을 정의합니다.</p>
         </div>
         <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium">

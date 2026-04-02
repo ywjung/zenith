@@ -753,7 +753,7 @@ def test_ip_allowlist_allows_matching_ip(client, admin_cookies):
 
 def test_middleware_agent_jwt_triggers_ip_check(client):
     """Bearer JWT with agent role on non-admin path → should_check=True (lines 461-463)."""
-    from jose import jwt
+    import jwt
     import app.main as main_mod
     from app.config import get_settings
 
@@ -774,7 +774,7 @@ def test_middleware_agent_jwt_triggers_ip_check(client):
 
 def test_middleware_jwt_blacklist_sets_payload_none(client):
     """Blacklisted JTI → payload set to None (lines 451-453)."""
-    from jose import jwt
+    import jwt
     from app.config import get_settings
 
     settings = get_settings()

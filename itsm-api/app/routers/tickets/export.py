@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ...auth import get_current_user
 from ...database import get_db
 from ... import gitlab_client
-from ...rbac import require_pl
+from ...rbac import require_pl, require_agent
 from .helpers import _issue_to_response, _attach_sla_deadlines
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ def export_tickets_csv(
     project_id: Optional[str] = Query(default=None),
     _user: dict = Depends(require_pl),
 ):
-    """현재 필터 기준 티켓 목록을 CSV로 내보낸다 (agent 이상)."""
+    """현재 필터 기준 티켓 목록을 CSV로 내보낸다 (pl 이상)."""
     import csv
     import io
     from fastapi.responses import StreamingResponse as _StreamingResponse
@@ -183,83 +183,119 @@ def export_tickets_xlsx(
     )
 
 
+@export_router.get("/import/template")
+def download_import_template():
+    """CSV 가져오기 템플릿 파일을 다운로드한다 (샘플 데이터 2행 포함)."""
+    from fastapi.responses import Response as _Response
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["title", "description", "priority", "category", "assignee_username"])
+    writer.writerow(["VPN 접속 오류", "재택근무 중 VPN 연결이 되지 않습니다.", "high", "network", ""])
+    writer.writerow(["노트북 교체 요청", "노트북 배터리 수명이 다하여 교체가 필요합니다.", "medium", "hardware", "jdoe"])
+    output.seek(0)
+    content = "\ufeff" + output.getvalue()  # BOM for Excel compatibility
+    return _Response(
+        content=content.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="itsm_import_template.csv"'},
+    )
+
+
 @export_router.post("/import/csv", status_code=201)
 async def import_tickets_csv(
     file: UploadFile = File(...),
     project_id: Optional[str] = Query(default=None),
-    dry_run: bool = Query(default=False, description="true면 실제 생성 없이 파싱 결과만 반환"),
-    _user: dict = Depends(require_pl),
+    _user: dict = Depends(require_agent),
     db: Session = Depends(get_db),
 ):
     """CSV 파일로 티켓 일괄 생성.
 
-    필수 컬럼: title, description, category, priority, employee_name, employee_email
-    선택 컬럼: department, location
+    필수 컬럼: title
+    선택 컬럼: description, priority (critical/high/medium/low, 기본=medium),
+              category (서비스 유형 값), assignee_username
+    최대 200행.
+    응답: {"imported": N, "failed": [{"row": N, "title": "...", "error": "..."}]}
     """
     from ...config import get_settings
-    from ...schemas import TicketCreate
+
+    _VALID_PRIORITIES = {"critical", "high", "medium", "low"}
+    _MAX_CSV_SIZE = 5 * 1024 * 1024  # 5MB — M3: 파일 크기 제한으로 메모리 DoS 방지
+
+    # content-type 검증
+    ct = (file.content_type or "").lower()
+    if ct and ct not in {"text/csv", "application/csv", "text/plain", "application/octet-stream"}:
+        raise HTTPException(status_code=422, detail="CSV 파일만 업로드 가능합니다.")
 
     content = await file.read()
+    if len(content) > _MAX_CSV_SIZE:
+        raise HTTPException(status_code=422, detail="CSV 파일은 최대 5MB까지 허용됩니다.")
     try:
         text = content.decode("utf-8-sig")  # BOM 제거
     except UnicodeDecodeError:
         text = content.decode("cp949", errors="replace")
 
     reader = csv.DictReader(io.StringIO(text))
-    required = {"title", "description", "category", "priority", "employee_name", "employee_email"}
-    if not required.issubset(set(reader.fieldnames or [])):
-        missing = required - set(reader.fieldnames or [])
-        raise HTTPException(status_code=422, detail=f"누락된 필수 컬럼: {', '.join(sorted(missing))}")
+    fieldnames = set(reader.fieldnames or [])
+    if "title" not in fieldnames:
+        raise HTTPException(status_code=422, detail="필수 컬럼 'title'이 없습니다.")
 
     rows = list(reader)
-    if len(rows) > 500:
-        raise HTTPException(status_code=422, detail="한 번에 최대 500행까지 가져올 수 있습니다.")
+    if len(rows) > 200:
+        raise HTTPException(status_code=422, detail="한 번에 최대 200행까지 가져올 수 있습니다.")
 
     pid = project_id or get_settings().GITLAB_PROJECT_ID
-    results = {"total": len(rows), "success": [], "failed": []}
+    imported = 0
+    failed = []
 
     for idx, row in enumerate(rows, start=2):  # 1행 = 헤더
-        try:
-            data = TicketCreate(
-                title=row["title"].strip(),
-                description=row["description"].strip(),
-                category=row["category"].strip().lower(),
-                priority=row.get("priority", "medium").strip().lower(),
-                employee_name=row["employee_name"].strip(),
-                employee_email=row["employee_email"].strip(),
-                department=row.get("department", "").strip() or None,
-                location=row.get("location", "").strip() or None,
-                project_id=pid,
-            )
-        except Exception as e:
-            results["failed"].append({"row": idx, "error": str(e)})
+        title = (row.get("title") or "").strip()
+        if not title:
+            failed.append({"row": idx, "title": "", "error": "title이 비어있습니다."})
             continue
 
-        if dry_run:
-            results["success"].append({"row": idx, "title": data.title})
-            continue
+        description = (row.get("description") or "").strip()
+        priority = (row.get("priority") or "medium").strip().lower()
+        if priority not in _VALID_PRIORITIES:
+            priority = "medium"
+        category = (row.get("category") or "").strip().lower()
+        assignee_username = (row.get("assignee_username") or "").strip()
 
         try:
-            desc = (
-                f"**신청자:** {data.employee_name}\n"
-                f"**이메일:** {data.employee_email}\n"
-            )
-            if data.department:
-                desc += f"**부서:** {data.department}\n"
-            if data.location:
-                desc += f"**위치:** {data.location}\n"
-            desc += f"---\n{data.description}"
+            labels = ["status::open", f"prio::{priority}"]
+            if category:
+                labels.append(f"cat::{category}")
 
-            labels = [f"cat::{data.category}", f"prio::{data.priority}", "status::open"]
+            # assignee_username → GitLab user_id 조회
+            assignee_id: Optional[int] = None
+            if assignee_username:
+                try:
+                    from ...config import get_settings as _gs
+                    import httpx as _httpx
+                    settings = _gs()
+                    with _httpx.Client(timeout=10.0) as c:
+                        resp = c.get(
+                            f"{settings.GITLAB_API_URL}/api/v4/users",
+                            headers={"PRIVATE-TOKEN": settings.GITLAB_PROJECT_TOKEN},
+                            params={"username": assignee_username},
+                        )
+                        if resp.is_success:
+                            users = resp.json()
+                            if users:
+                                assignee_id = users[0].get("id")
+                except Exception as ae:
+                    logger.warning("CSV import row %d: assignee lookup failed for '%s': %s", idx, assignee_username, ae)
+
             issue = gitlab_client.create_issue(
-                title=data.title,
-                description=desc,
+                title=title,
+                description=description,
                 labels=labels,
                 project_id=pid,
+                assignee_id=assignee_id,
             )
-            results["success"].append({"row": idx, "iid": issue.get("iid"), "title": data.title})
+            imported += 1
         except Exception as e:
             logger.error("CSV import row %d failed: %s", idx, e)
-            results["failed"].append({"row": idx, "error": str(e)})
+            failed.append({"row": idx, "title": title, "error": str(e)})
 
-    return results
+    return {"imported": imported, "failed": failed}

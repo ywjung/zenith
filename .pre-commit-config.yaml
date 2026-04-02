@@ -1,6 +1,14 @@
 repos:
+  # 의존성 취약점 스캔 (L2)
+  - repo: https://github.com/pypa/pip-audit
+    rev: v2.7.3
+    hooks:
+      - id: pip-audit
+        args: [--requirement, itsm-api/requirements.txt]
+
+  # Python 코드 품질
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
+    rev: v0.8.6
     hooks:
       - id: ruff
         args: [--fix]
@@ -8,10 +16,17 @@ repos:
       - id: ruff-format
         files: itsm-api/.*\.py$
 
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+  # 공통 품질 검사
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
     hooks:
-      - id: prettier
-        files: itsm-web/.*\.(ts|tsx|json|css|md)$
-        additional_dependencies:
-          - prettier@3.1.0
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+        exclude: \.(svg|png|jpg|jpeg|gif|ico|lock|tsbuildinfo)$
+      - id: check-yaml
+      - id: check-json
+        exclude: tsconfig\.tsbuildinfo$
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: [--maxkb=500]

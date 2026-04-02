@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
 import { API_BASE } from '@/lib/constants'
+import { useTranslations } from 'next-intl'
 
 const PRIORITIES = [
-  { value: 'low', label: '낮음', color: 'text-gray-600 dark:text-gray-400' },
-  { value: 'medium', label: '보통', color: 'text-blue-600 dark:text-blue-400' },
-  { value: 'high', label: '높음', color: 'text-orange-600 dark:text-orange-400' },
-  { value: 'critical', label: '긴급', color: 'text-red-600 dark:text-red-400' },
+  { value: 'low', color: 'text-gray-600 dark:text-gray-400' },
+  { value: 'medium', color: 'text-blue-600 dark:text-blue-400' },
+  { value: 'high', color: 'text-orange-600 dark:text-orange-400' },
+  { value: 'critical', color: 'text-red-600 dark:text-red-400' },
 ]
 
 interface CatalogItem {
@@ -21,6 +22,7 @@ interface CatalogItem {
 }
 
 export default function PortalPage() {
+  const t = useTranslations()
   const { serviceTypes } = useServiceTypes()
 
   // 카탈로그
@@ -92,12 +94,12 @@ export default function PortalPage() {
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data.detail || '제출에 실패했습니다.')
+        throw new Error(data.detail || t('portal.submit_failed'))
       }
       const data = await res.json()
       setResult(data)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
+      setError(err instanceof Error ? err.message : t('common.error'))
       setSubmitting(false)
     }
   }
@@ -106,21 +108,26 @@ export default function PortalPage() {
     return (
       <div className="max-w-lg mx-auto py-12 text-center">
         <div className="text-5xl mb-4">✅</div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">접수 완료</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">{t('portal.success_title')}</h1>
         <p className="text-gray-600 dark:text-gray-400 mb-2">
-          티켓 <strong>#{result.ticket_iid}</strong>이 생성되었습니다.
+          {t('portal.success_msg', { iid: result.ticket_iid })}
         </p>
         <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
-          이메일로 발송된 링크 또는 아래 링크에서 진행 상황을 확인하실 수 있습니다.
+          {t('portal.success_hint')}
         </p>
-        {result.track_url.startsWith('/') ? (
+        {result.track_url ? (
           <a
             href={result.track_url}
             className="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
           >
-            진행 상황 확인하기
+            {t('portal.check_status')}
           </a>
         ) : null}
+        <div className="mt-4">
+          <a href="/portal" className="text-sm text-gray-500 dark:text-gray-400 hover:underline">
+            {t('portal.submit_another') || '새 요청 제출'}
+          </a>
+        </div>
       </div>
     )
   }
@@ -128,9 +135,9 @@ export default function PortalPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">IT 지원 요청</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('portal.title')}</h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-          GitLab 계정 없이도 IT 지원을 요청하실 수 있습니다.
+          {t('portal.no_gitlab')}
         </p>
       </div>
 
@@ -138,9 +145,9 @@ export default function PortalPage() {
       {catalogItems.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 mb-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">서비스 카탈로그 <span className="text-gray-400 dark:text-gray-500 font-normal">(선택)</span></h2>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('portal.catalog_title')} <span className="text-gray-400 dark:text-gray-500 font-normal">{t('portal.catalog_optional')}</span></h2>
             {selectedCatalog && (
-              <button onClick={clearCatalog} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">초기화</button>
+              <button onClick={clearCatalog} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">{t('portal.catalog_reset')}</button>
             )}
           </div>
 
@@ -169,7 +176,7 @@ export default function PortalPage() {
           {/* 선택된 카탈로그의 추가 필드 */}
           {selectedCatalog && selectedCatalog.fields_schema.length > 0 && (
             <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-3">
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-400">{selectedCatalog.icon} {selectedCatalog.name} — 추가 정보</p>
+              <p className="text-xs font-medium text-gray-600 dark:text-gray-400">{selectedCatalog.icon} {selectedCatalog.name} — {t('portal.catalog_extra_info')}</p>
               {selectedCatalog.fields_schema.map(field => (
                 <div key={field.name}>
                   <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
@@ -190,7 +197,7 @@ export default function PortalPage() {
                       required={field.required}
                       className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="">선택하세요</option>
+                      <option value="">{t('portal.select_placeholder')}</option>
                       {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   ) : field.type === 'date' ? (
@@ -220,10 +227,10 @@ export default function PortalPage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Contact Info */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">신청자 정보</h2>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('portal.requester_info')}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">이름 *</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('portal.name_label')} *</label>
               <input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -233,7 +240,7 @@ export default function PortalPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">이메일 *</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('portal.email_label')} *</label>
               <input
                 type="email"
                 value={form.email}
@@ -248,26 +255,26 @@ export default function PortalPage() {
 
         {/* Request Details */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">요청 내용</h2>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('portal.request_detail')}</h2>
           <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">제목 *</label>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('portal.subject_label')} *</label>
             <input
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
               required
               maxLength={200}
-              placeholder="문제를 간략히 설명해 주세요"
+              placeholder={t('portal.subject_placeholder')}
               className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">상세 내용 *</label>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('portal.content_label')} *</label>
             <textarea
               value={form.content}
               onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
               required
               rows={6}
-              placeholder="문제 상황, 발생 시점, 영향 범위 등을 자세히 작성해 주세요"
+              placeholder={t('portal.content_placeholder')}
               className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
@@ -276,7 +283,7 @@ export default function PortalPage() {
         {/* Category */}
         {serviceTypes.filter((t) => t.enabled).length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">분류 (선택)</h2>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t('portal.category_label')} {t('portal.catalog_optional')}</h2>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -287,7 +294,7 @@ export default function PortalPage() {
                     : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                 }`}
               >
-                미분류
+                {t('portal.uncategorized')}
               </button>
               {serviceTypes
                 .filter((t) => t.enabled)
@@ -311,7 +318,7 @@ export default function PortalPage() {
 
         {/* Priority */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">긴급도</h2>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t('portal.priority_label')}</h2>
           <div className="flex gap-2">
             {PRIORITIES.map((p) => (
               <button
@@ -324,7 +331,7 @@ export default function PortalPage() {
                     : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                 }`}
               >
-                <span className={p.color}>{p.label}</span>
+                <span className={p.color}>{t(`ticket.priority.${p.value}`)}</span>
               </button>
             ))}
           </div>
@@ -339,7 +346,7 @@ export default function PortalPage() {
               disabled={submitting}
               className="bg-blue-600 text-white px-8 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
-              {submitting ? '제출 중...' : '지원 요청 제출'}
+              {submitting ? t('portal.submitting') : t('portal.submit_btn')}
             </button>
           </div>
         </div>

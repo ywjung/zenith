@@ -241,16 +241,35 @@ export interface RatingStats {
     comment?: string
     created_at: string
   }[]
+  low_ratings?: {
+    id: number
+    gitlab_issue_iid: number
+    employee_name: string
+    score: number
+    comment?: string
+    created_at: string
+  }[]
+}
+
+export interface CsatTrendItem {
+  period: string
+  count: number
+  average: number | null
+  csat_pct: number | null
 }
 
 export interface TicketLink {
-  id: number
-  source_iid: number
+  id: number | string
+  source_iid?: number
   target_iid: number
-  project_id: string
-  link_type: 'related' | 'blocks' | 'duplicate_of'
-  created_by: string
-  created_at: string
+  project_id?: string
+  link_type: 'relates_to' | 'blocks' | 'is_blocked_by' | 'duplicate_of'
+  title?: string
+  state?: string
+  status?: string
+  web_url?: string | null
+  created_by?: string
+  created_at?: string
 }
 
 export interface DevProject {
@@ -408,4 +427,44 @@ export interface ApprovalRequest {
   approved_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface GanttTicket {
+  iid: number
+  title: string
+  status: string
+  priority: string
+  start: string
+  end: string
+  assignee?: string
+}
+
+export interface GanttLink {
+  from: number
+  to: number
+  type: string
+}
+
+export interface GanttData {
+  tickets: GanttTicket[]
+  links: GanttLink[]
+}
+
+export interface SessionInfo {
+  id: number
+  device_name: string | null
+  ip_address: string | null
+  last_used_at: string | null
+  expires_at: string
+  is_current: boolean
+}
+
+export interface DashboardWidget {
+  id: string
+  visible: boolean
+  order: number
+}
+
+export interface DashboardConfig {
+  widgets: DashboardWidget[]
 }

@@ -638,7 +638,7 @@ def test_get_stats_as_user(client, user_cookies):
 def test_get_stats_user_filter_own(client):
     """User with username sees only own tickets (covers line 558-560)."""
     import time
-    from jose import jwt as _jwt
+    import jwt as _jwt
     token = _jwt.encode({
         "sub": "42", "role": "user", "username": "hong", "name": "홍",
         "exp": int(time.time()) + 3600, "gitlab_token": "tok",

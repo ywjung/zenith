@@ -1,22 +1,20 @@
-// ZENITH ITSM Service Worker
-// Strategy: Network First for API, Cache First for static assets
+// ZENITH ITSM Service Worker v6
+// Strategy:
+//   - _next/static/ : Cache First (content-hashed, truly immutable)
+//   - /icons/, /manifest.json, /favicon.ico : Stale-While-Revalidate
+//     → serves cached version immediately, fetches fresh in background
+//     → ensures icon/manifest updates reach clients without cache-busting URLs
+//   - Everything else: pass-through (no caching)
+//     → prevents stale RSC payloads / page-chunk mismatch after deploys
 
-const CACHE_NAME = 'zenith-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/offline.html',
-];
+const CACHE_NAME = 'zenith-v6';
 
-// ── Install ──────────────────────────────────────────────────────────────────
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
-  // Activate immediately without waiting for old SW to finish
+// ── Install ───────────────────────────────────────────────────────────────────
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-// ── Activate ─────────────────────────────────────────────────────────────────
+// ── Activate — purge old caches ───────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -27,62 +25,56 @@ self.addEventListener('activate', (event) => {
       )
     )
   );
-  // Take control of all open clients immediately
   self.clients.claim();
 });
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  const url = new URL(request.url);
 
-  // Only handle same-origin or explicit API requests
+  // Only GET
   if (request.method !== 'GET') return;
 
-  // API requests: Network First — never serve stale API data from cache
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request));
-    return;
-  }
+  // Only http/https — chrome-extension:// etc. are unsupported by Cache API
+  if (!request.url.startsWith('http')) return;
 
-  // Next.js build assets (_next/static): Cache First — immutable by content hash
+  // Navigation: browser handles directly
+  if (request.mode === 'navigate') return;
+
+  const url = new URL(request.url);
+
+  // API calls: always network
+  if (url.pathname.startsWith('/api/')) return;
+
+  // Next.js RSC prefetch requests: always network (stale RSC = webpack chunk mismatch)
+  if (request.headers.get('RSC') || url.searchParams.has('_rsc')) return;
+
+  // _next/data/ (getServerSideProps / RSC flight): always network
+  if (url.pathname.startsWith('/_next/data/')) return;
+
+  // _next/static/ : Cache First — filenames are content-hashed, safe to cache forever
   if (url.pathname.startsWith('/_next/static/')) {
     event.respondWith(cacheFirst(request));
     return;
   }
 
-  // Everything else (pages, images, fonts): Cache First with network fallback
-  event.respondWith(cacheFirstWithOfflineFallback(request));
+  // Static public assets (icons, manifest): Stale-While-Revalidate
+  // Serves cached version immediately while fetching fresh in background,
+  // so icon/manifest updates propagate to existing clients without URL versioning.
+  if (
+    url.pathname.startsWith('/icons/') ||
+    url.pathname === '/manifest.json' ||
+    url.pathname === '/favicon.ico'
+  ) {
+    event.respondWith(staleWhileRevalidate(request));
+    return;
+  }
+
+  // Everything else (page routes, API routes, etc.): pass through — no caching
 });
 
-// ── Strategies ────────────────────────────────────────────────────────────────
-
-async function networkFirst(request) {
-  try {
-    const response = await fetch(request);
-    return response;
-  } catch {
-    // API offline: return a minimal JSON error so the UI can handle it
-    return new Response(
-      JSON.stringify({ error: 'offline', message: '네트워크에 연결되어 있지 않습니다.' }),
-      { status: 503, headers: { 'Content-Type': 'application/json' } }
-    );
-  }
-}
-
+// ── Cache First strategy ──────────────────────────────────────────────────────
 async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
-
-  const response = await fetch(request);
-  if (response.ok) {
-    const cache = await caches.open(CACHE_NAME);
-    cache.put(request, response.clone());
-  }
-  return response;
-}
-
-async function cacheFirstWithOfflineFallback(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
 
@@ -94,11 +86,55 @@ async function cacheFirstWithOfflineFallback(request) {
     }
     return response;
   } catch {
-    // Navigation requests: serve offline page
-    if (request.mode === 'navigate') {
-      const offlinePage = await caches.match('/offline.html');
-      if (offlinePage) return offlinePage;
-    }
-    return new Response('Offline', { status: 503 });
+    return new Response('', { status: 503 });
   }
 }
+
+// ── Stale-While-Revalidate strategy ──────────────────────────────────────────
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+
+  const networkFetch = fetch(request).then((response) => {
+    if (response.ok) {
+      cache.put(request, response.clone());
+    }
+    return response;
+  }).catch(() => null);
+
+  return cached ?? (await networkFetch) ?? new Response('', { status: 503 });
+}
+
+// ── Web Push ──────────────────────────────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  let data = { title: 'ZENITH ITSM', body: '새 알림이 있습니다.', url: '/' };
+  if (event.data) {
+    try { data = { ...data, ...JSON.parse(event.data.text()) }; } catch { /* keep defaults */ }
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      data: { url: data.url },
+      tag: 'itsm-push',
+      renotify: true,
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
+  );
+});

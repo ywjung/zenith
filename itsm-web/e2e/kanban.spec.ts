@@ -23,7 +23,7 @@ test.describe('칸반 보드', () => {
         test.skip();
         return;
       }
-      await expect(page.locator('main, [class*="kanban"], h1')).toBeVisible({
+      await expect(page.locator('main, [class*="kanban"], h1').first()).toBeVisible({
         timeout: 10000,
       });
     });
@@ -174,7 +174,7 @@ test.describe('칸반 보드', () => {
       const hasLink = await backLink.isVisible().catch(() => false);
 
       if (hasLink) {
-        await backLink.click();
+        await backLink.click({ force: true });
         await page.waitForTimeout(400);
         // 칸반 페이지를 벗어났어야 함
         expect(page.url()).not.toContain('/kanban');
@@ -194,7 +194,7 @@ test.describe('칸반 보드', () => {
       const hasLink = await kanbanLink.isVisible().catch(() => false);
 
       if (hasLink) {
-        await kanbanLink.click();
+        await kanbanLink.click({ force: true });
         await page.waitForURL('**/kanban**', { timeout: 5000 }).catch(() => {});
         await page
           .getByText('인증 확인 중')
@@ -215,10 +215,10 @@ test.describe('칸반 보드', () => {
   });
 
   test.describe('칸반 API', () => {
-    test('티켓 목록 API가 정상 응답한다 (칸반 데이터 소스)', async ({ request }) => {
-      const res = await request.get('/api/tickets?per_page=100', {
-        failOnStatusCode: false,
-      });
+    test('티켓 목록 API가 정상 응답한다 (칸반 데이터 소스)', async ({ page }) => {
+      await page.goto('/kanban');
+      // page.request: 브라우저 컨텍스트 request — dispose 문제 없음
+      const res = await page.request.get('/api/tickets/', { failOnStatusCode: false });
       expect([200, 401, 403]).toContain(res.status());
     });
   });

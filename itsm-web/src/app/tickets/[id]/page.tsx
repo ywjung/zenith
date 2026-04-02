@@ -3,9 +3,10 @@
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { fetchTicket, fetchComments, getMyRating, updateTicket, addComment, updateComment, deleteComment, deleteTicket, fetchProjectMembers, fetchMilestones, fetchTicketCustomFields, setTicketCustomFields, uploadFile, fetchTicketLinks, createTicketLink, deleteTicketLink, fetchTimeEntries, logTime, fetchDevProjects, fetchForwards, createForward, deleteForward, fetchTicketSLA, updateTicketSLA, fetchLinkedMRs, subscribeTicketEvents, fetchWatchers, watchTicket, unwatchTicket, fetchQuickReplies, suggestKBArticles, fetchSLAPrediction } from '@/lib/api'
+import { fetchTicket, fetchComments, getMyRating, updateTicket, addComment, updateComment, deleteComment, deleteTicket, fetchProjectMembers, fetchMilestones, fetchTicketCustomFields, setTicketCustomFields, uploadFile, fetchTicketLinks, createTicketLink, deleteTicketLink, fetchDevProjects, fetchForwards, createForward, deleteForward, fetchTicketSLA, updateTicketSLA, fetchLinkedMRs, subscribeTicketEvents, fetchWatchers, watchTicket, unwatchTicket, fetchQuickReplies, suggestKBArticles, fetchSLAPrediction, pauseTicketSLA, resumeTicketSLA, extendTicketSLA, fetchTicketAISummary } from '@/lib/api'
+import type { AISummaryResult } from '@/lib/api'
 import type { QuickReply } from '@/lib/api'
-import type { Ticket, Comment, Rating, ProjectMember, Milestone, TicketCustomFieldValue, TicketLink, TimeEntry, DevProject, ProjectForward, ForwardsResponse, SLARecord, LinkedMR, SLAPrediction } from '@/types'
+import type { Ticket, Comment, Rating, ProjectMember, Milestone, TicketCustomFieldValue, TicketLink, DevProject, ProjectForward, ForwardsResponse, SLARecord, LinkedMR, SLAPrediction } from '@/types'
 import { StatusBadge, PriorityBadge, CategoryBadge, SlaBadge } from '@/components/StatusBadge'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
@@ -18,6 +19,7 @@ import RichTextEditor from '@/components/RichTextEditor'
 import ResolutionNoteModal from '@/components/ResolutionNoteModal'
 import FilePreview from '@/components/FilePreview'
 import TimelineView from '@/components/TimelineView'
+import TimeTracker from '@/components/TimeTracker'
 import { useTicketWS } from '@/hooks/useTicketWS'
 
 function StarDisplay({ score }: { score: number }) {
@@ -128,6 +130,13 @@ interface DescPart {
  *   이미지  : ![name](url)  ← 인라인 이미지이므로 본문에 남김
  * HTML 형식(TipTap)도 동일하게 뒤쪽 마크다운 줄을 파싱한다.
  */
+// H4: target="_blank" 링크에 rel="noopener noreferrer" 강제 적용 (Tabnapping 방지)
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node instanceof Element && node.tagName === 'A' && node.getAttribute('target') === '_blank') {
+    node.setAttribute('rel', 'noopener noreferrer')
+  }
+})
+
 // CRIT-03: 커스텀 regex sanitizer 제거 → isomorphic-dompurify로 교체
 function _sanitizeHtml(html: string): string {
   return DOMPurify.sanitize(html, {
@@ -198,10 +207,11 @@ interface ApprovalRequest {
   created_at: string
 }
 
-function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername }: { ticketIid: number; projectId: string; isAgent: boolean; currentUsername?: string }) {
+function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketStatus }: { ticketIid: number; projectId: string; isAgent: boolean; currentUsername?: string; ticketStatus?: string }) {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
+  const [noAccess, setNoAccess] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [actionId, setActionId] = useState<number | null>(null)
@@ -215,6 +225,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername }: { tic
     setLoadError(false)
     try {
       const res = await fetch(`${approvalBase}?ticket_iid=${ticketIid}`, { credentials: 'include' })
+      if (res.status === 403) { setNoAccess(true); return }
       if (res.ok) setApprovals(await res.json())
       else setLoadError(true)
     } catch { setLoadError(true) }
@@ -282,10 +293,14 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername }: { tic
   }
 
   if (loading) return null
+  if (noAccess) return null
   if (loadError) return <p className="text-xs text-red-500 py-2">승인 요청을 불러오지 못했습니다.</p>
 
   const latest = approvals[0]
+  // 승인 요청 버튼: 이미 승인·종료·배포 상태이면 숨김
+  const noRequestNeeded = ['approved', 'closed', 'released', 'ready_for_release'].includes(ticketStatus || '')
   if (!hasPending && !latest) {
+    if (noRequestNeeded) return null
     return (
       <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
         <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">승인</h3>
@@ -856,6 +871,8 @@ function TicketDetailContent() {
   const [error, setError] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
   const [resolutionModal, setResolutionModal] = useState<'resolved' | 'closed' | null>(null)
+  const [waitingReasonModal, setWaitingReasonModal] = useState(false)
+  const [waitingReasonInput, setWaitingReasonInput] = useState('')
   const ticketEtag = useRef<string>('')
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -896,19 +913,19 @@ function TicketDetailContent() {
   const [slaSaving, setSlaSaving] = useState(false)
   const [slaError, setSlaError] = useState<string | null>(null)
   const [slaPrediction, setSlaPrediction] = useState<SLAPrediction | null>(null)
+  const [slaPausing, setSlaPausing] = useState(false)
+  const [slaResuming, setSlaResuming] = useState(false)
+  const [slaExtendMinutes, setSlaExtendMinutes] = useState('60')
+  const [slaExtending, setSlaExtending] = useState(false)
+  const [aiSummary, setAiSummary] = useState<AISummaryResult | null>(null)
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false)
+  const [aiSummaryError, setAiSummaryError] = useState<string | null>(null)
 
   // Linked tickets state
   const [links, setLinks] = useState<TicketLink[]>([])
   const [linkTargetIid, setLinkTargetIid] = useState('')
-  const [linkType, setLinkType] = useState('related')
+  const [linkType, setLinkType] = useState('relates_to')
   const [addingLink, setAddingLink] = useState(false)
-
-  // Time tracking state
-  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
-  const [totalMinutes, setTotalMinutes] = useState(0)
-  const [timeMinutes, setTimeMinutes] = useState('')
-  const [timeDesc, setTimeDesc] = useState('')
-  const [loggingTime, setLoggingTime] = useState(false)
 
   // Project forwarding state
   const [devProjects, setDevProjects] = useState<DevProject[]>([])
@@ -957,16 +974,13 @@ function TicketDetailContent() {
             setCustomFields(fields)
             setCustomFieldEdits(Object.fromEntries(fields.map(f => [String(f.id), f.value ?? ''])))
           }).catch(() => {})
-          // KB 관련 문서 추천 (에이전트 이상)
+          // KB 관련 문서 추천 (에이전트 이상) — 제목+카테고리+설명 발췌로 관련성 향상
           if (t.title) {
-            suggestKBArticles(t.title, 3).then(setKbSuggestions).catch(() => {})
+            const descExcerpt = (t.description || '').replace(/[#*`>\[\]()\-_~|!]/g, ' ').trim().slice(0, 200)
+            suggestKBArticles(t.title, 3, t.category, descExcerpt || undefined).then(setKbSuggestions).catch(() => {})
           }
-          if (isDeveloper) {
+          if (isDeveloper || isAgent) {
             fetchTicketLinks(iid, t.project_id).then(setLinks).catch(() => {})
-            fetchTimeEntries(iid, t.project_id).then(({ total_minutes, entries }) => {
-              setTotalMinutes(total_minutes)
-              setTimeEntries(entries)
-            }).catch(() => {})
             fetchForwards(iid, t.project_id).then((res) => {
               setForwards(res.forwards)
               setForwardsAllClosed(res.all_closed)
@@ -1064,6 +1078,12 @@ function TicketDetailContent() {
     // resolved/closed 전환 시 해결 노트 모달 표시 (에이전트 이상)
     if ((newStatus === 'resolved' || newStatus === 'closed') && isAgent) {
       setResolutionModal(newStatus as 'resolved' | 'closed')
+      return
+    }
+    // waiting/reopened 전환 시 이유 입력 모달 표시
+    if (newStatus === 'waiting') {
+      setWaitingReasonInput('')
+      setWaitingReasonModal(true)
       return
     }
     await _doStatusChange(newStatus, '', '', '')
@@ -1466,30 +1486,13 @@ function TicketDetailContent() {
     }
   }
 
-  async function handleDeleteLink(linkId: number) {
+  async function handleDeleteLink(linkId: number | string) {
     if (!ticket?.project_id) return
     try {
       await deleteTicketLink(iid, linkId)
       setLinks((prev) => prev.filter((l) => l.id !== linkId))
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : '링크 삭제 실패')
-    }
-  }
-
-  async function handleLogTime(e: React.FormEvent) {
-    e.preventDefault()
-    if (!ticket?.project_id || !timeMinutes) return
-    setLoggingTime(true)
-    try {
-      const entry = await logTime(iid, ticket.project_id, Number(timeMinutes), timeDesc || undefined)
-      setTimeEntries((prev) => [entry, ...prev])
-      setTotalMinutes((prev) => prev + Number(timeMinutes))
-      setTimeMinutes('')
-      setTimeDesc('')
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '시간 기록 실패')
-    } finally {
-      setLoggingTime(false)
     }
   }
 
@@ -1546,6 +1549,62 @@ function TicketDetailContent() {
       setSlaError(err instanceof Error ? err.message : 'SLA 기한 변경 실패')
     } finally {
       setSlaSaving(false)
+    }
+  }
+
+  async function handleSlaPause() {
+    setSlaPausing(true)
+    setSlaError(null)
+    try {
+      const updated = await pauseTicketSLA(iid, ticket?.project_id)
+      setSlaRecord(updated)
+    } catch (err: unknown) {
+      setSlaError(err instanceof Error ? err.message : 'SLA 일시정지 실패')
+    } finally {
+      setSlaPausing(false)
+    }
+  }
+
+  async function handleSlaResume() {
+    setSlaResuming(true)
+    setSlaError(null)
+    try {
+      const updated = await resumeTicketSLA(iid, ticket?.project_id)
+      setSlaRecord(updated)
+    } catch (err: unknown) {
+      setSlaError(err instanceof Error ? err.message : 'SLA 재개 실패')
+    } finally {
+      setSlaResuming(false)
+    }
+  }
+
+  async function handleSlaExtend(e: React.FormEvent) {
+    e.preventDefault()
+    const mins = parseInt(slaExtendMinutes, 10)
+    if (!mins || mins <= 0) return
+    setSlaExtending(true)
+    setSlaError(null)
+    try {
+      const updated = await extendTicketSLA(iid, mins, ticket?.project_id)
+      setSlaRecord(updated)
+      if (updated.sla_deadline) setSlaEditDate(updated.sla_deadline.split('T')[0])
+    } catch (err: unknown) {
+      setSlaError(err instanceof Error ? err.message : 'SLA 연장 실패')
+    } finally {
+      setSlaExtending(false)
+    }
+  }
+
+  async function handleAISummary() {
+    setAiSummaryLoading(true)
+    setAiSummaryError(null)
+    try {
+      const result = await fetchTicketAISummary(iid, ticket?.project_id)
+      setAiSummary(result)
+    } catch (err: unknown) {
+      setAiSummaryError(err instanceof Error ? err.message : 'AI 요약 실패')
+    } finally {
+      setAiSummaryLoading(false)
     }
   }
 
@@ -1616,6 +1675,44 @@ function TicketDetailContent() {
 
   return (
     <>
+    {/* 추가정보 대기 이유 입력 모달 */}
+    {waitingReasonModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">추가정보 요청 사유</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            어떤 추가 정보가 필요한지 작성해주세요. 티켓 타임라인에 기록됩니다.
+          </p>
+          <textarea
+            autoFocus
+            value={waitingReasonInput}
+            onChange={e => setWaitingReasonInput(e.target.value)}
+            rows={3}
+            placeholder="예: 오류 발생 스크린샷과 정확한 발생 시각을 알려주세요."
+            className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          />
+          <div className="flex gap-2 mt-4 justify-end">
+            <button
+              onClick={() => setWaitingReasonModal(false)}
+              className="px-4 py-2 rounded-lg text-sm border dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              취소
+            </button>
+            <button
+              disabled={!waitingReasonInput.trim()}
+              onClick={() => {
+                setWaitingReasonModal(false)
+                _doStatusChange('waiting', '', '', waitingReasonInput.trim())
+              }}
+              className="px-4 py-2 rounded-lg text-sm bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     {/* 해결 노트 모달 */}
     {resolutionModal && (
       <ResolutionNoteModal
@@ -1662,6 +1759,19 @@ function TicketDetailContent() {
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex-1">{ticket.title}</h1>
           </div>
         </div>
+
+        {/* 차단됨 경고 배너 */}
+        {links.some(l => l.link_type === 'is_blocked_by') && (
+          <div className="flex items-start gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
+            <span className="text-red-500 text-base shrink-0 mt-0.5">🚫</span>
+            <div className="text-sm text-red-700 dark:text-red-300">
+              <strong>이 티켓은 다른 티켓에 의해 차단되어 있습니다.</strong>
+              <span className="block text-xs mt-0.5 text-red-600 dark:text-red-400">
+                차단 티켓: {links.filter(l => l.link_type === 'is_blocked_by').map(l => `#${l.target_iid}`).join(', ')}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* 상세 내용 */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-5">
@@ -2256,6 +2366,7 @@ function TicketDetailContent() {
           projectId={ticket?.project_id || projectId || ''}
           isAgent={isAgent}
           currentUsername={user?.username}
+          ticketStatus={ticket?.status}
         />
 
         {/* 속성 패널 */}
@@ -2267,13 +2378,13 @@ function TicketDetailContent() {
             <span className="text-gray-500 dark:text-gray-400 text-xs">서비스 유형</span>
             {canEdit ? (
               <select
-                value={ticket.category || 'other'}
+                value={ticket.category || '기타'}
                 onChange={(e) => handleCategoryChange(e.target.value)}
                 disabled={updating}
                 className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
               >
                 {serviceTypes.map((c) => (
-                  <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
+                  <option key={c.value} value={c.label}>{c.emoji} {c.label}</option>
                 ))}
               </select>
             ) : (
@@ -2534,7 +2645,51 @@ function TicketDetailContent() {
               )}
             </div>
             {isAgent && (
-              <div>
+              <div className="space-y-2">
+                {/* Pause / Resume */}
+                {ticket?.state !== 'closed' && (
+                  <div className="flex gap-2">
+                    {slaRecord?.paused_at ? (
+                      <button
+                        onClick={handleSlaResume}
+                        disabled={slaResuming}
+                        className="flex-1 text-xs px-2 py-1.5 bg-green-50 dark:bg-green-900/30 border border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:opacity-50 font-medium"
+                      >
+                        {slaResuming ? '...' : '▶ SLA 재개'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleSlaPause}
+                        disabled={slaPausing}
+                        className="flex-1 text-xs px-2 py-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-50 font-medium"
+                      >
+                        {slaPausing ? '...' : '⏸ SLA 일시정지'}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {/* Extend */}
+                <form onSubmit={handleSlaExtend} className="flex gap-1.5 items-center">
+                  <select
+                    value={slaExtendMinutes}
+                    onChange={e => setSlaExtendMinutes(e.target.value)}
+                    className="border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="60">+1시간</option>
+                    <option value="240">+4시간</option>
+                    <option value="480">+8시간</option>
+                    <option value="1440">+1일</option>
+                    <option value="4320">+3일</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={slaExtending}
+                    className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {slaExtending ? '...' : '연장'}
+                  </button>
+                </form>
+                {/* Manual date change */}
                 <form onSubmit={handleSlaUpdate} className="flex gap-2 items-center">
                   <input
                     type="date"
@@ -2546,14 +2701,118 @@ function TicketDetailContent() {
                   <button
                     type="submit"
                     disabled={slaSaving || !slaEditDate}
-                    className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                    className="bg-gray-600 text-white px-2 py-1 rounded text-xs hover:bg-gray-700 disabled:opacity-50 whitespace-nowrap"
                   >
-                    {slaSaving ? '...' : '변경'}
+                    {slaSaving ? '...' : '날짜 변경'}
                   </button>
                 </form>
                 {slaError && <p className="text-red-600 dark:text-red-400 text-[10px] mt-1">⚠️ {slaError}</p>}
               </div>
             )}
+          </div>
+        )}
+
+        {/* AI 활동 요약 패널 */}
+        {isDeveloper && (
+          <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">🤖 AI 활동 요약</h3>
+              <button
+                onClick={handleAISummary}
+                disabled={aiSummaryLoading}
+                className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50 font-medium"
+              >
+                {aiSummaryLoading ? '분석 중...' : aiSummary ? '재분석' : '요약 생성'}
+              </button>
+            </div>
+            {aiSummaryError && (
+              <p className="text-xs text-red-500 dark:text-red-400">⚠️ {aiSummaryError}</p>
+            )}
+            {aiSummary && (
+              <div className="space-y-2 text-xs">
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{aiSummary.summary}</p>
+                {aiSummary.key_points.length > 0 && (
+                  <ul className="space-y-0.5 pl-2">
+                    {aiSummary.key_points.map((pt, i) => (
+                      <li key={i} className="text-gray-600 dark:text-gray-400 flex gap-1.5">
+                        <span className="text-purple-500 shrink-0">•</span>{pt}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {aiSummary.suggested_action && (
+                  <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded p-2">
+                    <span className="text-purple-700 dark:text-purple-300 font-medium">권장 조치: </span>
+                    <span className="text-purple-600 dark:text-purple-400">{aiSummary.suggested_action}</span>
+                  </div>
+                )}
+                <p className="text-gray-400 dark:text-gray-600 text-[10px]">댓글 {aiSummary.comment_count}개 분석 완료</p>
+              </div>
+            )}
+            {!aiSummary && !aiSummaryLoading && !aiSummaryError && (
+              <p className="text-xs text-gray-400 dark:text-gray-500">버튼을 눌러 AI가 댓글 스레드를 분석합니다.</p>
+            )}
+          </div>
+        )}
+
+        {/* 연관 티켓 패널 — 에이전트 (개발자 탭과 중복 방지) */}
+        {isAgent && !isDeveloper && (
+          <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+              연관 티켓 ({links.length})
+            </h3>
+            {links.length > 0 && (
+              <ul className="space-y-1.5 mb-3">
+                {links.map((link) => (
+                  <li key={link.id} className="flex items-center justify-between text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`shrink-0 px-1 py-0.5 rounded text-[10px] font-medium ${
+                        link.link_type === 'blocks'         ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400' :
+                        link.link_type === 'is_blocked_by'  ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' :
+                        link.link_type === 'duplicate_of'   ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400' :
+                                                              'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                      }`}>
+                        {link.link_type === 'blocks'       ? '차단' :
+                         link.link_type === 'is_blocked_by'? '차단됨' :
+                         link.link_type === 'duplicate_of' ? '중복' : '관련'}
+                      </span>
+                      <a href={`/tickets/${link.target_iid}`} className="font-mono text-blue-600 dark:text-blue-400 hover:underline truncate">
+                        #{link.target_iid}
+                      </a>
+                    </div>
+                    <button onClick={() => handleDeleteLink(link.id)} className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 ml-1">✕</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form onSubmit={handleAddLink} className="space-y-2">
+              <select
+                value={linkType}
+                onChange={(e) => setLinkType(e.target.value)}
+                className="w-full border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="relates_to">관련</option>
+                <option value="blocks">차단</option>
+                <option value="duplicate_of">중복</option>
+              </select>
+              <div className="flex gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  value={linkTargetIid}
+                  onChange={(e) => setLinkTargetIid(e.target.value)}
+                  placeholder="#번호"
+                  className="flex-1 border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={addingLink || !linkTargetIid}
+                  className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {addingLink ? '...' : '추가'}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
@@ -2588,12 +2847,14 @@ function TicketDetailContent() {
                         <li key={link.id} className="flex items-center justify-between text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className={`shrink-0 px-1 py-0.5 rounded text-[10px] font-medium ${
-                              link.link_type === 'blocks'       ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400' :
-                              link.link_type === 'duplicate_of' ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400' :
-                                                                  'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                              link.link_type === 'blocks'          ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400' :
+                              link.link_type === 'is_blocked_by'   ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' :
+                              link.link_type === 'duplicate_of'    ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400' :
+                                                                     'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                             }`}>
-                              {link.link_type === 'blocks'       ? '차단' :
-                               link.link_type === 'duplicate_of' ? '중복' : '관련'}
+                              {link.link_type === 'blocks'        ? '차단' :
+                               link.link_type === 'is_blocked_by' ? '차단됨' :
+                               link.link_type === 'duplicate_of'  ? '중복' : '관련'}
                             </span>
                             <Link
                               href={`/tickets/${link.target_iid}`}
@@ -2613,7 +2874,7 @@ function TicketDetailContent() {
                       onChange={(e) => setLinkType(e.target.value)}
                       className="w-full border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                      <option value="related">관련</option>
+                      <option value="relates_to">관련</option>
                       <option value="blocks">차단</option>
                       <option value="duplicate_of">중복</option>
                     </select>
@@ -2639,57 +2900,14 @@ function TicketDetailContent() {
               )}
 
               {/* 탭: 시간 기록 */}
-              {sideTab === 'time' && (
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                    시간 기록
-                    {totalMinutes > 0 && <span className="ml-1 text-blue-600 dark:text-blue-400 font-medium">총 {Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m</span>}
-                  </p>
-                  {timeEntries.length > 0 && (
-                    <ul className="space-y-1 mb-3 max-h-40 overflow-y-auto">
-                      {timeEntries.map((entry) => (
-                        <li key={entry.id} className="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-blue-600 dark:text-blue-400">
-                              {Math.floor(entry.minutes / 60) > 0 ? `${Math.floor(entry.minutes / 60)}h ` : ''}
-                              {entry.minutes % 60 > 0 ? `${entry.minutes % 60}m` : ''}
-                            </span>
-                            <span className="text-gray-400 dark:text-gray-500">{new Date(entry.logged_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
-                          </div>
-                          <div className="text-gray-500 dark:text-gray-400 mt-0.5">
-                            {formatName(entry.agent_name)}{entry.description && ` — ${entry.description}`}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <form onSubmit={handleLogTime} className="space-y-2">
-                    <div className="flex gap-1.5">
-                      <input
-                        type="number"
-                        min={1}
-                        max={999}
-                        value={timeMinutes}
-                        onChange={(e) => setTimeMinutes(e.target.value)}
-                        placeholder="분"
-                        className="w-16 border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                      <input
-                        value={timeDesc}
-                        onChange={(e) => setTimeDesc(e.target.value)}
-                        placeholder="설명 (선택)"
-                        className="flex-1 border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={loggingTime || !timeMinutes}
-                      className="w-full bg-blue-600 text-white py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {loggingTime ? '기록 중...' : '시간 기록'}
-                    </button>
-                  </form>
-                </div>
+              {sideTab === 'time' && ticket?.project_id && (
+                <TimeTracker
+                  iid={iid}
+                  projectId={ticket.project_id}
+                  canLog={isAgent}
+                  currentUserId={user?.sub ? String(user.sub) : undefined}
+                  isAdmin={isAdmin || isAgent}
+                />
               )}
 
               {/* 탭: 개발 프로젝트 전달 */}

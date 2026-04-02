@@ -1,6 +1,13 @@
 # 환경 변수 (시크릿 포함)
 .env
 
+# Docker 볼륨 데이터 (로컬 바인드 마운트 — git 제외)
+volumes/
+
+# nginx Basic Auth 비밀번호 파일 (실제 해시 포함 — git 제외)
+nginx/htpasswd/prometheus
+nginx/htpasswd/grafana
+
 # macOS
 .DS_Store
 
@@ -34,3 +41,12 @@ CLAUDE.md
 itsm-web/playwright-report/
 itsm-web/test-results/
 itsm-web/e2e/.auth/*.json
+
+# 개발 중 캡처한 스크린샷 (docs/screenshots/dev/)
+docs/screenshots/dev/
+
+# 루트 레벨 임시 스크린샷 (UI 테스트 중 생성)
+/*.png
+
+# 빌드 아티팩트
+itsm-web/tsconfig.tsbuildinfo

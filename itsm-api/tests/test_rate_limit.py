@@ -111,7 +111,7 @@ def test_rate_limit_login_username_no_body():
 
 def test_rate_limit_user_or_ip_key_with_valid_token():
     """_get_user_or_ip returns username from JWT when valid."""
-    from jose import jwt
+    import jwt
     import app.rate_limit as rl_mod
 
     if not hasattr(rl_mod, "_get_user_or_ip"):

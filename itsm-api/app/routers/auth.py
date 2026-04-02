@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 import httpx
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
-from jose import jwt as jose_jwt, JWTError
+import jwt as jose_jwt
+from jwt.exceptions import InvalidTokenError as JWTError
 from pydantic import BaseModel
 
 from ..auth import TOKEN_EXPIRE_HOURS, ALGORITHM, create_token, get_current_user, blacklist_token, store_gitlab_token, delete_gitlab_token
@@ -269,7 +270,7 @@ def callback(request: Request, code: str = "", error: str = "", state: str = "",
 
     token = create_token(user, role=role)
     # VULN-01: gitlab_token은 JWT payload 대신 Redis에 저장
-    _jti = jose_jwt.get_unverified_claims(token).get("jti", "")
+    _jti = jose_jwt.decode(token, options={"verify_signature": False}, algorithms=[ALGORITHM]).get("jti", "")
     if _jti:
         store_gitlab_token(_jti, access_token, TOKEN_EXPIRE_HOURS * 3600)
     refresh_raw = _create_refresh_token(db, str(user["id"]), gitlab_refresh_token=gitlab_refresh_token)
@@ -341,7 +342,7 @@ def exchange(request: Request, body: _ExchangeBody, db: Session = Depends(get_db
     role = _sync_role_from_gitlab(db, user["id"], user["username"], name=user.get("name", ""), avatar_url=user.get("avatar_url", ""))
     token = create_token(user, role=role)
     # VULN-01: gitlab_token은 JWT payload 대신 Redis에 저장
-    _jti = jose_jwt.get_unverified_claims(token).get("jti", "")
+    _jti = jose_jwt.decode(token, options={"verify_signature": False}, algorithms=[ALGORITHM]).get("jti", "")
     if _jti:
         store_gitlab_token(_jti, access_token, TOKEN_EXPIRE_HOURS * 3600)
     refresh_raw = _create_refresh_token(db, str(user["id"]), gitlab_refresh_token=gitlab_refresh_token)
@@ -477,7 +478,10 @@ def logout(request: Request, db: Session = Depends(get_db)):
     if raw_access:
         try:
             settings = get_settings()
-            from jose import jwt as _jwt, JWTError as _JWTError
+            import jwt as _jwt
+            _JWTError = _jwt.exceptions.InvalidTokenError
+            # verify_exp=False: 만료된 토큰도 JTI를 읽어 gitlab_token을 Redis에서 삭제.
+            # 만료된 토큰은 다른 엔드포인트에서 verify_exp=True로 거부되므로 보안상 안전.
             payload = _jwt.decode(
                 raw_access, settings.SECRET_KEY,
                 algorithms=[ALGORITHM],
@@ -485,13 +489,15 @@ def logout(request: Request, db: Session = Depends(get_db)):
             )
             jti = payload.get("jti")
             exp = payload.get("exp")
-            if jti and exp:
+            if jti:
                 import time as _time
-                ttl = int(exp - _time.time())
-                if ttl > 0:
-                    blacklist_token(jti, ttl)
-                # VULN-01: 로그아웃 시 Redis에서 gitlab_token도 삭제
+                # VULN-01: 로그아웃 시 Redis에서 gitlab_token 항상 삭제 (만료 여부 무관)
                 delete_gitlab_token(jti)
+                if exp:
+                    ttl = int(exp - _time.time())
+                    if ttl > 0:
+                        # 아직 유효한 토큰만 JTI 블랙리스트에 등록 (잔여 유효 시간만큼 보관)
+                        blacklist_token(jti, ttl)
         except Exception:
             pass
 
@@ -509,7 +515,7 @@ def logout(request: Request, db: Session = Depends(get_db)):
     if sudo_token:
         try:
             settings_for_sudo = get_settings()
-            from jose import jwt as _sudo_jwt
+            import jwt as _sudo_jwt
             sudo_payload = _sudo_jwt.decode(
                 sudo_token, settings_for_sudo.SECRET_KEY,
                 algorithms=[ALGORITHM],
@@ -639,7 +645,7 @@ def create_sudo_token(
     """현재 GitLab Access Token이 유효함을 재확인하고 10분 유효 sudo_token을 발급한다.
 
     프론트엔드가 고위험 Admin 작업 전 이 엔드포인트를 호출하고,
-    응답받은 sudo_token을 X-Sudo-Token 헤더에 포함시킨다.
+    sudo_token은 HttpOnly 쿠키(itsm_sudo)로 자동 전달된다.
     """
     from ..models import SudoToken
     from ..rbac import ROLE_LEVELS, require_admin
@@ -696,7 +702,7 @@ def verify_sudo_token(request: Request, user: dict, db) -> None:
     """sudo_token 검증 헬퍼 — 유효하지 않으면 403 raise.
 
     고위험 Admin 엔드포인트에서 호출한다.
-    VULN-07: itsm_sudo HttpOnly 쿠키에서 토큰을 읽는다 (X-Sudo-Token 헤더 폴백 유지).
+    VULN-07: itsm_sudo HttpOnly 쿠키에서만 토큰을 읽는다 (헤더 폴백 제거).
     SUDO_MODE_ENABLED=false 환경변수로 전체 비활성화 가능 (개발 환경용).
     """
     from ..models import SudoToken
@@ -704,8 +710,8 @@ def verify_sudo_token(request: Request, user: dict, db) -> None:
     if not getattr(settings, "SUDO_MODE_ENABLED", True):
         return  # 개발 환경에서 비활성화
 
-    # 쿠키 우선, 헤더 폴백 (마이그레이션 호환)
-    token = request.cookies.get("itsm_sudo") or request.headers.get("X-Sudo-Token")
+    # HttpOnly 쿠키에서만 sudo 토큰 읽기 — 헤더 폴백 제거 (XSS에서 JS로 읽기 방지)
+    token = request.cookies.get("itsm_sudo")
     if not token:
         raise HTTPException(
             status_code=403,

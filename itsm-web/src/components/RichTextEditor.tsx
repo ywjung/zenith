@@ -327,6 +327,7 @@ export default function RichTextEditor({
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              aria-label="이미지 삽입"
               className="sr-only"
               onChange={handleImageInputChange}
             />

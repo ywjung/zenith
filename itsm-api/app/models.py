@@ -36,6 +36,11 @@ class UserRole(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    __table_args__ = (
+        Index("ix_user_roles_username", "username"),
+        Index("ix_user_roles_role_active", "role", "is_active"),
+    )
+
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
@@ -78,10 +83,14 @@ class SLARecord(Base):
     paused_at = Column(DateTime, nullable=True)
     total_paused_seconds = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_sla_records_issue_project", "gitlab_issue_iid", "project_id", unique=True),
         Index("ix_sla_records_deadline_active", "sla_deadline"),
+        Index("ix_sla_records_breach_check", "breached", "sla_deadline"),
+        Index("ix_sla_records_updated_at", "updated_at"),
     )
 
 
@@ -162,9 +171,12 @@ class Notification(Base):
     link = Column(String(500), nullable=True)
     is_read = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_notifications_recipient_unread", "recipient_id", "is_read", "created_at"),
+        Index("ix_notifications_updated_at", "updated_at"),
     )
 
 
@@ -648,6 +660,9 @@ class ServiceCatalogItem(Base):
     fields_schema = Column(JSONB, nullable=False, server_default="[]")
     is_active = Column(Boolean, nullable=False, default=True)
     order = Column(Integer, nullable=False, default=0)
+    requires_approval = Column(Boolean, nullable=False, default=False)
+    approver_username = Column(String(100), nullable=True)   # None = any agent/admin
+    approval_note = Column(Text, nullable=True)              # 요청자에게 보여줄 안내 메시지
     created_by = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -690,6 +705,42 @@ class UserDashboardConfig(Base):
     )
 
 
+class FailedNotification(Base):
+    """알림 전송 최종 실패 기록 — max_retries 소진 후 추적."""
+    __tablename__ = "failed_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_name = Column(String(100), nullable=False)   # e.g. "itsm.send_ticket_notification"
+    task_id = Column(String(100), nullable=True)
+    payload = Column(JSONB, nullable=True)            # 태스크 인자 (민감정보 제외)
+    error_message = Column(Text, nullable=True)
+    retry_count = Column(Integer, nullable=False, default=0)
+    resolved = Column(Boolean, nullable=False, default=False)  # 관리자가 확인 표시
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_failed_notifications_task_name", "task_name"),
+        Index("ix_failed_notifications_resolved_created", "resolved", "created_at"),
+    )
+
+
+class WebPushSubscription(Base):
+    """브라우저 Web Push 구독 정보 (VAPID)."""
+    __tablename__ = "web_push_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(100), nullable=False, index=True)
+    endpoint = Column(Text, nullable=False, unique=True)
+    p256dh = Column(Text, nullable=False)   # keys.p256dh
+    auth = Column(Text, nullable=False)     # keys.auth
+    user_agent = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_web_push_subscriptions_username", "username"),
+    )
+
+
 class TicketSearchIndex(Base):
     """GitLab 이슈 제목·설명 전문검색 색인 (pg_trgm + GIN 인덱스).
 
@@ -720,4 +771,99 @@ class TicketSearchIndex(Base):
         Index("ix_ticket_search_desc_trgm", "description_text",
               postgresql_using="gin",
               postgresql_ops={"description_text": "gin_trgm_ops"}),
+        # 상태별/담당자별 필터 (대시보드 · 내 티켓)
+        Index("ix_ticket_search_state_project", "state", "project_id"),
+        Index("ix_ticket_search_assignee", "assignee_username"),
     )
+
+
+class ChangeRequest(Base):
+    """ITIL 변경 관리 — RFC (Request for Change).
+
+    상태 전이:
+      draft → submitted → reviewing → approved/rejected
+      approved → implementing → implemented/failed/cancelled
+    """
+    __tablename__ = "change_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    # standard | normal | emergency
+    change_type = Column(String(20), nullable=False, default="normal")
+    # low | medium | high | critical
+    risk_level = Column(String(20), nullable=False, default="medium")
+    # draft | submitted | reviewing | approved | rejected | implementing | implemented | failed | cancelled
+    status = Column(String(30), nullable=False, default="draft")
+    related_ticket_iid = Column(Integer, nullable=True)
+    project_id = Column(String(50), nullable=False)
+    scheduled_start_at = Column(DateTime, nullable=True)
+    scheduled_end_at = Column(DateTime, nullable=True)
+    actual_start_at = Column(DateTime, nullable=True)
+    actual_end_at = Column(DateTime, nullable=True)
+    rollback_plan = Column(Text, nullable=True)
+    impact = Column(Text, nullable=True)
+    requester_username = Column(String(100), nullable=False)
+    requester_name = Column(String(200), nullable=True)
+    approver_username = Column(String(100), nullable=True)
+    approver_name = Column(String(200), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    approval_comment = Column(Text, nullable=True)
+    implementer_username = Column(String(100), nullable=True)
+    result_note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_change_requests_status", "status"),
+        Index("ix_change_requests_requester", "requester_username"),
+        Index("ix_change_requests_created_at", "created_at"),
+        Index("ix_change_requests_scheduled_start", "scheduled_start_at"),
+    )
+
+
+class RecurringTicket(Base):
+    """반복 티켓 — 정기적으로 GitLab 이슈를 자동 생성하는 스케줄 정의."""
+    __tablename__ = "recurring_tickets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(50), nullable=False, default="other")
+    priority = Column(String(20), nullable=False, default="medium")
+    project_id = Column(String(50), nullable=False)
+    assignee_id = Column(Integer, nullable=True)
+    cron_expr = Column(String(100), nullable=False)  # e.g. "0 9 1 * *"
+    cron_label = Column(String(100), nullable=True)  # 사람이 읽을 수 있는 설명
+    is_active = Column(Boolean, nullable=False, default=True)
+    last_run_at = Column(DateTime, nullable=True)
+    next_run_at = Column(DateTime, nullable=True)
+    created_by = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        # Celery beat이 매분 실행: WHERE is_active=true AND next_run_at <= NOW()
+        Index("ix_recurring_tickets_active_next_run", "is_active", "next_run_at"),
+    )
+
+
+class UserNotificationRule(Base):
+    """사용자 정의 알림 규칙 — 조건에 맞는 티켓 이벤트 시 선택한 채널로 알림."""
+    __tablename__ = "user_notification_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(100), nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    # 조건 필터 (빈 배열 = 모두 해당)
+    match_priorities = Column(JSONB, nullable=False, default=list)    # ["high", "critical"]
+    match_categories = Column(JSONB, nullable=False, default=list)    # ["hardware", "software"]
+    match_states = Column(JSONB, nullable=False, default=list)        # ["open", "in_progress"]
+    match_sla_warning = Column(Boolean, nullable=False, default=False)
+    # 알림 채널
+    notify_in_app = Column(Boolean, nullable=False, default=True)
+    notify_email = Column(Boolean, nullable=False, default=False)
+    notify_push = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

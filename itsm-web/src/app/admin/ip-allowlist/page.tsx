@@ -123,9 +123,13 @@ export default function IpAllowlistPage() {
       {/* 헤더 */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center text-2xl shrink-0">🛡️</div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">IP 접근 제한</h2>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              IP 접근 제한
+            </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               관리자 API(<code className="font-mono bg-gray-100 dark:bg-gray-700 dark:text-gray-200 px-1 rounded">/admin/*</code>)에
               접근 가능한 IP 대역을 관리합니다. 목록이 비어있으면 모든 IP가 허용됩니다.

@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# Root .dockerignore — docker build context 크기 축소
+# (itsm-api/.dockerignore, itsm-web/.dockerignore 와 별도로 적용)
+# ---------------------------------------------------------------------------
+
+# 개발 문서 및 스크린샷
+docs/
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# 스크립트 (CI 전용, 이미지 불필요)
+scripts/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 테스트 결과
+coverage/
+.coverage
+*.xml
+junit*.xml
+
+# 환경 설정 (절대 이미지에 포함되면 안 됨)
+.env
+.env.*
+!.env.example
+
+# 임시 파일
+*.tmp
+*.log

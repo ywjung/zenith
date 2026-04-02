@@ -217,13 +217,27 @@ def get_ticket_stats(
             from ...models import SLARecord
             from ...database import SessionLocal
             from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+            from sqlalchemy import or_, and_
             _now_naive = _dt.now(_tz.utc).replace(tzinfo=None)
             with SessionLocal() as _db:
-                _sla_over     = _db.query(SLARecord).filter(SLARecord.breached == True).count()
+                # SLA 초과: DB breached 플래그 OR deadline이 이미 지난 미해결 티켓
+                _sla_over = _db.query(SLARecord).filter(
+                    or_(
+                        SLARecord.breached == True,  # noqa: E712
+                        and_(
+                            SLARecord.sla_deadline != None,  # noqa: E711
+                            SLARecord.sla_deadline < _now_naive,
+                            SLARecord.resolved_at == None,  # noqa: E711
+                        ),
+                    )
+                ).count()
+                # SLA 임박: 초과 아닌데 2시간 이내
                 _sla_imminent = _db.query(SLARecord).filter(
-                    SLARecord.breached == False,
+                    SLARecord.breached == False,  # noqa: E712
                     SLARecord.sla_deadline != None,  # noqa: E711
+                    SLARecord.sla_deadline >= _now_naive,
                     SLARecord.sla_deadline <= _now_naive + _td(hours=2),
+                    SLARecord.resolved_at == None,  # noqa: E711
                 ).count()
                 _result["sla_over"]     = _sla_over
                 _result["sla_imminent"] = _sla_imminent
@@ -393,7 +407,13 @@ def proxy_upload(
             raise HTTPException(status_code=400, detail="잘못된 파일 경로입니다.")
 
         content_type = mimetypes.guess_type(safe_filename)[0] or "application/octet-stream"
-        force_download = download or content_type == "image/svg+xml"
+        # L3: inline 허용 MIME allowlist — 외부 allowlist에 없는 타입은 attachment 강제
+        # HTML/JS/SVG inline 제공 시 Stored XSS 위험
+        _INLINE_SAFE_MIMES = frozenset({
+            "image/jpeg", "image/png", "image/gif", "image/webp",
+            "image/avif", "application/pdf",
+        })
+        force_download = download or (content_type not in _INLINE_SAFE_MIMES)
 
         def _make_disposition(fname: str, attach: bool) -> str:
             if not attach:
@@ -416,6 +436,7 @@ def proxy_upload(
                 if len(entries) == 1:
                     actual_path = os.path.join(upload_dir, entries[0])
                     content_type = mimetypes.guess_type(entries[0])[0] or content_type
+                    force_download = download or (content_type not in _INLINE_SAFE_MIMES)
                     disposition = _make_disposition(entries[0], force_download)
 
         if os.path.isfile(actual_path):

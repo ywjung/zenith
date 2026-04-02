@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { logger } from '@/lib/logger'
 
 interface Props {
   children: React.ReactNode
@@ -23,7 +24,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[ErrorBoundary]', error, info.componentStack)
+    logger.error('[ErrorBoundary]', error, info.componentStack)
   }
 
   render() {
@@ -31,13 +32,13 @@ export default class ErrorBoundary extends React.Component<Props, State> {
       if (this.props.fallback) return this.props.fallback
       return (
         <div className="min-h-[200px] flex flex-col items-center justify-center gap-3 text-center p-8">
-          <p className="text-red-500 font-medium">페이지를 불러오는 중 오류가 발생했습니다.</p>
+          <p className="text-red-500 font-medium">An error occurred while loading the page.</p>
           <p className="text-sm text-gray-400">{this.state.error?.message}</p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
             className="text-sm text-blue-600 hover:underline"
           >
-            다시 시도
+            Retry
           </button>
         </div>
       )

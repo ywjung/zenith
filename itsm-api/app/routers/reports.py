@@ -15,6 +15,12 @@ from ..database import get_db
 from .. import gitlab_client
 from ..models import DailyStatsSnapshot, Rating, SLARecord, TimeEntry
 from ..rbac import require_agent
+from ..redis_client import get_redis
+
+_CACHE_TTL_STATS = 60        # current-stats: 1분
+_CACHE_TTL_BREAKDOWN = 60    # breakdown: 1분
+_CACHE_TTL_SLA_DASH = 120    # sla-dashboard: 2분
+_CACHE_TTL_AGENT_PERF = 120  # agent-performance: 2분 (GitLab 페이지네이션 비용 큼)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 logger = logging.getLogger(__name__)
@@ -45,6 +51,18 @@ def get_current_stats(
     # GitLab API 날짜 필터: ISO 형식 (날짜 경계를 명확히 하기 위해 datetime 문자열 사용)
     from_iso = datetime.combine(from_date, dt_time.min).isoformat() if from_date else None
     to_iso = datetime.combine(to_date, dt_time.max).isoformat() if to_date else None
+
+    # Redis 캐시 조회
+    import json as _json
+    _r = get_redis()
+    _cache_key = f"rpt:cs:{from_date}:{to_date}:{project_id or ''}"
+    if _r:
+        try:
+            _cached = _r.get(_cache_key)
+            if _cached:
+                return _json.loads(_cached)
+        except Exception:
+            pass
 
     def _count_new():
         """기간 내 신규 생성된 티켓 수"""
@@ -126,7 +144,7 @@ def get_current_stats(
             f_resolved    = pool.submit(_count_resolved)
             f_closed      = pool.submit(_count_closed)
 
-            return {
+            result = {
                 "new":         f_new.result(),
                 "open":        f_open.result(),
                 "in_progress": f_in_progress.result(),
@@ -135,6 +153,13 @@ def get_current_stats(
                 "sla_breached":sla_breached_count,
                 "fetched_at":  datetime.now(timezone.utc).isoformat(),
             }
+
+        if _r:
+            try:
+                _r.setex(_cache_key, _CACHE_TTL_STATS, _json.dumps(result))
+            except Exception:
+                pass
+        return result
     except Exception as e:
         logger.error("current-stats GitLab error: %s", e)
         raise HTTPException(status_code=502, detail="통계를 불러오는 중 오류가 발생했습니다.")
@@ -162,7 +187,7 @@ def get_trends(
     if project_id:
         q = q.filter(DailyStatsSnapshot.project_id == project_id)
 
-    rows = q.all()
+    rows = q.limit(3650).all()  # 최대 10년치 일별 스냅샷 (무제한 방지)
     return [
         {
             "snapshot_date":      str(r.snapshot_date),
@@ -199,7 +224,7 @@ def export_report(
     if project_id:
         q = q.filter(DailyStatsSnapshot.project_id == project_id)
 
-    rows = q.all()
+    rows = q.limit(3650).all()  # 최대 10년치 (내보내기용)
     date_str = datetime.now().strftime("%Y%m%d")
 
     if format == "xlsx":
@@ -245,7 +270,7 @@ def export_report(
         return StreamingResponse(
             iter([xlsx_buf.read()]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
         )
 
     # 기본: CSV
@@ -268,7 +293,7 @@ def export_report(
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv; charset=utf-8-sig",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )
 
 
@@ -289,6 +314,17 @@ def get_breakdown(
     from_iso = datetime.combine(from_date, dt_time.min).isoformat() if from_date else None
     to_iso = datetime.combine(to_date, dt_time.max).isoformat() if to_date else None
 
+    import json as _json
+    _r = get_redis()
+    _cache_key = f"rpt:bk:{from_date}:{to_date}:{project_id or ''}"
+    if _r:
+        try:
+            _cached = _r.get(_cache_key)
+            if _cached:
+                return _json.loads(_cached)
+        except Exception:
+            pass
+
     all_issues: list[dict] = []
     page = 1
     while True:
@@ -302,9 +338,15 @@ def get_breakdown(
             break
         page += 1
 
-    by_status: dict[str, int] = {"open": 0, "in_progress": 0, "resolved": 0, "closed": 0}
+    by_status: dict[str, int] = {
+        "open": 0, "in_progress": 0, "waiting": 0,
+        "resolved": 0, "closed": 0,
+    }
     by_category: dict[str, int] = {}
     by_priority: dict[str, int] = {}
+    _VALID_PRIORITIES = {"low", "medium", "high", "critical"}
+    _CAT_KO = {"hardware": "하드웨어", "software": "소프트웨어",
+               "network": "네트워크", "account": "계정/권한", "other": "기타"}
 
     for issue in all_issues:
         labels = issue.get("labels", [])
@@ -314,32 +356,40 @@ def get_breakdown(
             by_status["closed"] += 1
         else:
             status_lbl = next((l[8:] for l in labels if l.startswith("status::")), None)
-            if status_lbl in ("in_progress", "waiting"):
+            if status_lbl == "in_progress":
                 by_status["in_progress"] += 1
+            elif status_lbl == "waiting":
+                by_status["waiting"] += 1
             elif status_lbl == "resolved":
                 by_status["resolved"] += 1
             else:
                 by_status["open"] += 1
 
         cat = next((l[5:] for l in labels if l.startswith("cat::")), "기타")
-        # 영문 카테고리 키를 한국어로 정규화 (영문/한국어 혼재 방지)
-        _CAT_KO = {"hardware": "하드웨어", "software": "소프트웨어",
-                   "network": "네트워크", "account": "계정/권한", "other": "기타"}
         cat = _CAT_KO.get(cat, cat)
         by_category[cat] = by_category.get(cat, 0) + 1
 
         prio = next((l[6:] for l in labels if l.startswith("prio::")), "medium")
-        # corrupt 라벨 정규화: PriorityEnum.MEDIUM → medium
-        if "." in prio and prio[0].isupper():
-            prio = prio.split(".")[-1].lower()
+        # corrupt 라벨 정규화: PriorityEnum.MEDIUM → medium, HIGH → high
+        if "." in prio:
+            prio = prio.split(".")[-1]
+        prio = prio.lower()
+        if prio not in _VALID_PRIORITIES:
+            prio = "medium"
         by_priority[prio] = by_priority.get(prio, 0) + 1
 
-    return {
+    breakdown_result = {
         "total": len(all_issues),
         "by_status": by_status,
         "by_category": by_category,
         "by_priority": by_priority,
     }
+    if _r:
+        try:
+            _r.setex(_cache_key, _CACHE_TTL_BREAKDOWN, _json.dumps(breakdown_result))
+        except Exception:
+            pass
+    return breakdown_result
 
 
 @router.get("/ratings")
@@ -355,7 +405,7 @@ def get_rating_stats(
         q = q.filter(Rating.created_at >= datetime.combine(from_date, dt_time.min))
     if to_date:
         q = q.filter(Rating.created_at <= datetime.combine(to_date, dt_time.max))
-    ratings = q.all()
+    ratings = q.limit(50000).all()  # 평가 집계용 최대 5만건
     total = len(ratings)
 
     if total == 0:
@@ -383,11 +433,25 @@ def get_rating_stats(
         for r in ratings[:20]
     ]
 
+    low_ratings = [
+        {
+            "id": r.id,
+            "gitlab_issue_iid": r.gitlab_issue_iid,
+            "employee_name": r.employee_name,
+            "score": r.score,
+            "comment": r.comment,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in ratings
+        if r.score <= 2
+    ][:20]
+
     return {
         "total": total,
         "average": average,
         "distribution": distribution,
         "recent": recent,
+        "low_ratings": low_ratings,
     }
 
 
@@ -400,8 +464,20 @@ def get_agent_performance(
     _user: dict = Depends(require_agent),
 ):
     """F-7: Per-agent performance stats: assigned, resolved, avg_rating, sla_met_rate."""
+    import json as _json
     from_dt = datetime.combine(from_date, dt_time.min) if from_date else None
     to_dt = datetime.combine(to_date, dt_time.max) if to_date else None
+
+    # Redis 캐시 조회
+    _r = get_redis()
+    _cache_key = f"rpt:ap:{from_date}:{to_date}:{project_id or ''}"
+    if _r:
+        try:
+            _cached = _r.get(_cache_key)
+            if _cached:
+                return _json.loads(_cached)
+        except Exception:
+            pass
 
     # Gather all issues from GitLab with assignees
     all_issues: list[dict] = []
@@ -509,6 +585,14 @@ def get_agent_performance(
         })
 
     result.sort(key=lambda x: x["assigned"], reverse=True)
+
+    # Redis 캐시 저장
+    if _r:
+        try:
+            _r.setex(_cache_key, _CACHE_TTL_AGENT_PERF, _json.dumps(result))
+        except Exception:
+            pass
+
     return result
 
 
@@ -764,6 +848,147 @@ def get_dora_metrics(
     }
 
 
+@router.get("/sla-dashboard")
+def get_sla_dashboard(
+    project_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_agent),
+):
+    """SLA 에스컬레이션 대시보드.
+
+    위반/임박/정상 티켓 수와 함께 위반·임박 티켓 목록, 최근 7일 위반 트렌드를 반환한다.
+    """
+    import json as _json
+    _r = get_redis()
+    _cache_key = f"rpt:sla_dash:{project_id or ''}"
+    if _r:
+        try:
+            _cached = _r.get(_cache_key)
+            if _cached:
+                return _json.loads(_cached)
+        except Exception:
+            pass
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    base_q = db.query(SLARecord).filter(
+        SLARecord.resolved_at == None,  # noqa: E711
+        SLARecord.paused_at == None,    # noqa: E711
+    )
+    if project_id:
+        base_q = base_q.filter(SLARecord.project_id == project_id)
+
+    active_records: list[SLARecord] = base_q.all()
+
+    breach_list = []
+    warning_list = []
+    on_track_count = 0
+
+    for rec in active_records:
+        deadline = rec.sla_deadline
+        if deadline is None:
+            continue
+        total_seconds = (now - rec.created_at).total_seconds() if rec.created_at else 1
+        sla_window = (deadline - rec.created_at).total_seconds() if rec.created_at else 1
+        elapsed_pct = round((total_seconds / sla_window) * 100, 1) if sla_window > 0 else 0
+
+        remaining_seconds = round((deadline - now).total_seconds())
+        ticket_data = {
+            "iid": rec.gitlab_issue_iid,
+            "project_id": rec.project_id,
+            "priority": rec.priority,
+            "sla_deadline": deadline.isoformat(),
+            "elapsed_pct": elapsed_pct,
+            "remaining_seconds": remaining_seconds,
+            "breached": rec.breached,
+        }
+
+        if rec.breached or now >= deadline:
+            breach_list.append(ticket_data)
+        elif elapsed_pct >= 80:
+            warning_list.append(ticket_data)
+        else:
+            on_track_count += 1
+
+    # GitLab에서 위반/임박 티켓 상세 정보 병렬 조회
+    combined = breach_list + warning_list
+
+    def _enrich_one(item: dict) -> dict:
+        try:
+            issue = gitlab_client.get_issue(item["iid"], project_id=item["project_id"])
+            assignee = None
+            if issue.get("assignee"):
+                assignee = issue["assignee"].get("name") or issue["assignee"].get("username")
+            elif issue.get("assignees"):
+                first = issue["assignees"][0]
+                assignee = first.get("name") or first.get("username")
+            return {
+                "iid": item["iid"],
+                "title": issue.get("title", f"티켓 #{item['iid']}"),
+                "status": next(
+                    (lb.split("::")[1] for lb in issue.get("labels", []) if lb.startswith("status::")),
+                    "open",
+                ),
+                "priority": item["priority"],
+                "sla_deadline": item["sla_deadline"],
+                "elapsed_pct": item["elapsed_pct"],
+                "remaining_seconds": item["remaining_seconds"],
+                "assignee": assignee,
+                "breached": item["breached"],
+            }
+        except Exception as e:
+            logger.warning("SLA dashboard: failed to fetch issue #%s: %s", item["iid"], e)
+            # 404 또는 기타 오류 시 None 반환 → 목록에서 제외
+            return None
+
+    enriched_tickets: list[dict] = []
+    if combined:
+        max_workers = min(len(combined), 10)
+        with ThreadPoolExecutor(max_workers=max_workers) as _pool:
+            enriched_tickets = [t for t in _pool.map(_enrich_one, combined) if t is not None]
+
+    # breach 먼저, 그 다음 elapsed_pct 내림차순 정렬
+    enriched_tickets.sort(key=lambda t: (0 if t["breached"] else 1, -t["elapsed_pct"]))
+
+    # 최근 7일 일별 위반 건수
+    today_d = date.today()
+    seven_days_ago = today_d - timedelta(days=6)
+    trend_rows = (
+        db.query(DailyStatsSnapshot)
+        .filter(DailyStatsSnapshot.snapshot_date >= seven_days_ago)
+        .order_by(DailyStatsSnapshot.snapshot_date)
+        .all()
+    )
+    from collections import defaultdict
+    by_date: dict[str, int] = defaultdict(int)
+    for r in trend_rows:
+        by_date[str(r.snapshot_date)] += r.total_breached or 0
+
+    trend = []
+    cursor = seven_days_ago
+    while cursor <= today_d:
+        key = str(cursor)
+        trend.append({"date": key, "count": by_date[key]})
+        cursor += timedelta(days=1)
+
+    # enriched 목록 기준으로 카운트 (orphan SLA 레코드 제외)
+    enriched_breach = sum(1 for t in enriched_tickets if t["breached"])
+    enriched_warning = len(enriched_tickets) - enriched_breach
+    sla_dash_result = {
+        "breach_count": enriched_breach,
+        "warning_count": enriched_warning,
+        "on_track_count": on_track_count,
+        "tickets": enriched_tickets,
+        "trend": trend,
+    }
+    if _r:
+        try:
+            _r.setex(_cache_key, _CACHE_TTL_SLA_DASH, _json.dumps(sla_dash_result))
+        except Exception:
+            pass
+    return sla_dash_result
+
+
 @router.get("/sla/heatmap")
 def get_sla_heatmap(
     weeks: int = Query(default=12, ge=4, le=52),
@@ -808,5 +1033,275 @@ def get_sla_heatmap(
             "total": by_date[key]["total"],
         })
         cursor += timedelta(days=1)
-
     return result
+
+
+@router.get("/csat-trend")
+def get_csat_trend(
+    from_date: Optional[date] = Query(default=None, alias="from"),
+    to_date: Optional[date] = Query(default=None, alias="to"),
+    granularity: str = Query(default="weekly", pattern="^(weekly|monthly)$"),
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_agent),
+):
+    """CSAT 트렌드: 주별 또는 월별로 만족도 통계를 집계합니다.
+
+    - granularity=weekly : ISO 연도-주(YYYY-Www) 기준
+    - granularity=monthly: YYYY-MM 기준
+    csat_pct = 4점 이상 비율(%)
+    """
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(status_code=400, detail="종료일은 시작일 이후여야 합니다.")
+
+    q = db.query(Rating).order_by(Rating.created_at)
+    if from_date:
+        q = q.filter(Rating.created_at >= datetime.combine(from_date, dt_time.min))
+    if to_date:
+        q = q.filter(Rating.created_at <= datetime.combine(to_date, dt_time.max))
+    ratings = q.all()
+
+    buckets: dict[str, list[int]] = {}
+    for r in ratings:
+        dt = r.created_at
+        if dt is None:
+            continue
+        if granularity == "monthly":
+            key = dt.strftime("%Y-%m")
+        else:
+            iso_cal = dt.isocalendar()
+            key = f"{iso_cal[0]}-W{iso_cal[1]:02d}"
+        buckets.setdefault(key, []).append(r.score)
+
+    result = []
+    for period in sorted(buckets.keys()):
+        scores = buckets[period]
+        count = len(scores)
+        average = round(sum(scores) / count, 2) if count else None
+        csat_count = sum(1 for s in scores if s >= 4)
+        csat_pct = round(csat_count / count * 100, 1) if count else None
+        result.append({
+            "period": period,
+            "count": count,
+            "average": average,
+            "csat_pct": csat_pct,
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Task 4: 시간 추적 리포트
+# ---------------------------------------------------------------------------
+
+@router.get("/time-tracking")
+def get_time_tracking_report(
+    project_id: Optional[str] = None,
+    agent: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_agent),
+):
+    """팀원별·티켓별 시간 기록 집계."""
+    from sqlalchemy import func as sqlfunc
+    q = db.query(TimeEntry)
+    if project_id:
+        q = q.filter(TimeEntry.project_id == project_id)
+    if agent:
+        q = q.filter(TimeEntry.agent_id == agent)
+    if start:
+        try:
+            start_dt = datetime.fromisoformat(start)
+            q = q.filter(TimeEntry.logged_at >= start_dt)
+        except ValueError:
+            pass
+    if end:
+        try:
+            end_dt = datetime.fromisoformat(end) + timedelta(days=1)
+            q = q.filter(TimeEntry.logged_at < end_dt)
+        except ValueError:
+            pass
+
+    entries = q.order_by(TimeEntry.logged_at.desc()).all()
+
+    # per-agent aggregation
+    agent_map: dict[str, dict] = {}
+    for e in entries:
+        key = e.agent_id
+        if key not in agent_map:
+            agent_map[key] = {
+                "agent_id": e.agent_id,
+                "agent_name": e.agent_name,
+                "total_minutes": 0,
+                "ticket_count": 0,
+                "tickets": set(),
+            }
+        agent_map[key]["total_minutes"] += e.minutes
+        agent_map[key]["tickets"].add(e.issue_iid)
+
+    by_agent = []
+    for a in sorted(agent_map.values(), key=lambda x: -x["total_minutes"]):
+        by_agent.append({
+            "agent_id": a["agent_id"],
+            "agent_name": a["agent_name"],
+            "total_minutes": a["total_minutes"],
+            "total_hours": round(a["total_minutes"] / 60, 1),
+            "ticket_count": len(a["tickets"]),
+        })
+
+    # per-date aggregation
+    date_map: dict[str, int] = {}
+    for e in entries:
+        key = e.logged_at.strftime("%Y-%m-%d") if e.logged_at else "unknown"
+        date_map[key] = date_map.get(key, 0) + e.minutes
+    by_date = [{"date": k, "minutes": v} for k, v in sorted(date_map.items())]
+
+    # recent entries
+    recent = [
+        {
+            "id": e.id,
+            "issue_iid": e.issue_iid,
+            "project_id": e.project_id,
+            "agent_id": e.agent_id,
+            "agent_name": e.agent_name,
+            "minutes": e.minutes,
+            "description": e.description,
+            "logged_at": e.logged_at.isoformat() if e.logged_at else None,
+        }
+        for e in entries[:50]
+    ]
+
+    total_minutes = sum(e.minutes for e in entries)
+    return {
+        "total_minutes": total_minutes,
+        "total_hours": round(total_minutes / 60, 1),
+        "entry_count": len(entries),
+        "agent_count": len(by_agent),
+        "by_agent": by_agent,
+        "by_date": by_date,
+        "recent_entries": recent,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Task 6: 멀티 프로젝트 통합 뷰
+# ---------------------------------------------------------------------------
+
+@router.get("/multi-project")
+def get_multi_project_stats(
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_agent),
+):
+    """등록된 모든 GitLab 프로젝트의 SLA·티켓 현황을 통합 조회한다."""
+    from ..models import SLARecord
+
+    # 사용된 project_id 목록 (SLA 기록 기준)
+    rows = db.query(SLARecord.project_id).distinct().all()
+    project_ids = [r[0] for r in rows if r[0]]
+
+    # GitLab 프로젝트 이름 캐시
+    project_names: dict[str, str] = {}
+    try:
+        projects = gitlab_client.get_user_accessible_projects(
+            user.get("gitlab_token", "")
+        )
+        for p in projects:
+            project_names[str(p.get("id", ""))] = p.get("name", "")
+    except Exception:
+        pass
+
+    result = []
+    for pid in project_ids:
+        sla_records = db.query(SLARecord).filter(SLARecord.project_id == pid).all()
+        total = len(sla_records)
+        breached = sum(1 for r in sla_records if r.breached)
+        active = sum(1 for r in sla_records if r.resolved_at is None and not r.breached)
+        time_entries = db.query(TimeEntry).filter(TimeEntry.project_id == pid).all()
+        total_minutes = sum(e.minutes for e in time_entries)
+
+        result.append({
+            "project_id": pid,
+            "project_name": project_names.get(pid, pid),
+            "total_sla_records": total,
+            "sla_breached": breached,
+            "sla_active": active,
+            "sla_compliance_rate": round((total - breached) / total * 100, 1) if total else None,
+            "total_time_hours": round(total_minutes / 60, 1),
+        })
+
+    result.sort(key=lambda x: -x["total_sla_records"])
+    return {"projects": result}
+
+
+# ---------------------------------------------------------------------------
+# Task 9: SLA 준수율 트렌드 리포트
+# ---------------------------------------------------------------------------
+
+@router.get("/sla-compliance")
+def get_sla_compliance_report(
+    project_id: Optional[str] = None,
+    weeks: int = Query(12, ge=1, le=52),
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_agent),
+):
+    """주별 SLA 준수율 트렌드를 반환한다."""
+    from ..models import SLARecord
+
+    end_date = date.today()
+    start_date = end_date - timedelta(weeks=weeks)
+    start_dt = datetime.combine(start_date, dt_time.min)
+
+    q = db.query(SLARecord).filter(SLARecord.created_at >= start_dt)
+    if project_id:
+        q = q.filter(SLARecord.project_id == project_id)
+    records = q.all()
+
+    # 주별 집계
+    week_map: dict[str, dict] = {}
+    for r in records:
+        created = r.created_at
+        if not created:
+            continue
+        # ISO 주 시작일 (월요일)
+        iso_date = created.date()
+        dow = iso_date.weekday()  # Mon=0
+        week_start = iso_date - timedelta(days=dow)
+        key = week_start.isoformat()
+        if key not in week_map:
+            week_map[key] = {"week": key, "total": 0, "met": 0, "breached": 0}
+        week_map[key]["total"] += 1
+        if r.breached:
+            week_map[key]["breached"] += 1
+        else:
+            week_map[key]["met"] += 1
+
+    trend = []
+    for wk in sorted(week_map.keys()):
+        d = week_map[wk]
+        rate = round(d["met"] / d["total"] * 100, 1) if d["total"] else None
+        trend.append({**d, "compliance_rate": rate})
+
+    # 우선순위별 통계
+    priority_map: dict[str, dict] = {}
+    for r in records:
+        p = r.priority or "unknown"
+        if p not in priority_map:
+            priority_map[p] = {"priority": p, "total": 0, "breached": 0}
+        priority_map[p]["total"] += 1
+        if r.breached:
+            priority_map[p]["breached"] += 1
+    by_priority = []
+    for p, d in sorted(priority_map.items()):
+        rate = round((d["total"] - d["breached"]) / d["total"] * 100, 1) if d["total"] else None
+        by_priority.append({**d, "compliance_rate": rate})
+
+    total = len(records)
+    breached = sum(1 for r in records if r.breached)
+    return {
+        "period_weeks": weeks,
+        "total": total,
+        "met": total - breached,
+        "breached": breached,
+        "overall_compliance_rate": round((total - breached) / total * 100, 1) if total else None,
+        "trend": trend,
+        "by_priority": by_priority,
+    }

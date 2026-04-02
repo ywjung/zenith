@@ -6,16 +6,17 @@ import { useSearchParams } from 'next/navigation'
 import RequireAuth from '@/components/RequireAuth'
 import { API_BASE } from '@/lib/constants'
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge'
+import { useTranslations } from 'next-intl'
 
 /* ─── 알림 설정 데이터 ─────────────────────────────────── */
 
 const EVENTS = [
-  { key: 'ticket_created', label: '티켓 생성',     desc: '새 티켓이 접수되었을 때',          icon: '🎫' },
-  { key: 'status_changed', label: '상태 변경',     desc: '담당 티켓 상태가 바뀌었을 때',     icon: '🔄' },
-  { key: 'comment_added',  label: '댓글 추가',     desc: '담당 티켓에 새 댓글이 달렸을 때',  icon: '💬' },
-  { key: 'assigned',       label: '담당자 배정',   desc: '내게 티켓이 배정되었을 때',        icon: '👤' },
-  { key: 'sla_warning',    label: 'SLA 임박 경고', desc: 'SLA 기한 1시간 전 알림',           icon: '⏰' },
-  { key: 'sla_breach',     label: 'SLA 위반',      desc: 'SLA 기한이 초과되었을 때',         icon: '🚨' },
+  { key: 'ticket_created', icon: '🎫' },
+  { key: 'status_changed', icon: '🔄' },
+  { key: 'comment_added',  icon: '💬' },
+  { key: 'assigned',       icon: '👤' },
+  { key: 'sla_warning',    icon: '⏰' },
+  { key: 'sla_breach',     icon: '🚨' },
 ] as const
 
 type PrefsRecord = Record<string, boolean>
@@ -59,6 +60,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: () =
 /* ─── 탭: 알림 수신 설정 ────────────────────────────────── */
 
 function TabPrefs() {
+  const t = useTranslations()
   const [prefs, setPrefs] = useState<PrefsRecord>(buildDefaultPrefs)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -89,13 +91,13 @@ function TabPrefs() {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
       <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-5 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">이벤트</span>
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 w-16 text-center"><span className="mr-1">📧</span>이메일</span>
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 w-16 text-center"><span className="mr-1">🔔</span>인앱</span>
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('notifications.col_event')}</span>
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 w-16 text-center"><span className="mr-1">📧</span>{t('notifications.col_email')}</span>
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 w-16 text-center"><span className="mr-1">🔔</span>{t('notifications.col_inapp')}</span>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-gray-400 dark:text-gray-500 text-sm animate-pulse">설정을 불러오는 중...</div>
+        <div className="py-12 text-center text-gray-400 dark:text-gray-500 text-sm animate-pulse">{t('notifications.loading_prefs')}</div>
       ) : (
         <ul>
           {EVENTS.map((ev, idx) => (
@@ -104,19 +106,19 @@ function TabPrefs() {
               <div className="flex items-center gap-3 min-w-0">
                 <span className="text-xl shrink-0">{ev.icon}</span>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{ev.label}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{ev.desc}</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{t(`notifications.event_${ev.key}`)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t(`notifications.event_${ev.key}_desc`)}</p>
                 </div>
               </div>
               <div className="w-16 flex justify-center">
                 <Toggle checked={prefs[`${ev.key}_email`] ?? true}
                   onChange={() => setPrefs(p => ({ ...p, [`${ev.key}_email`]: !p[`${ev.key}_email`] }))}
-                  label={`${ev.label} 이메일`} />
+                  label={`${t(`notifications.event_${ev.key}`)} ${t('notifications.col_email')}`} />
               </div>
               <div className="w-16 flex justify-center">
                 <Toggle checked={prefs[`${ev.key}_inapp`] ?? true}
                   onChange={() => setPrefs(p => ({ ...p, [`${ev.key}_inapp`]: !p[`${ev.key}_inapp`] }))}
-                  label={`${ev.label} 인앱`} />
+                  label={`${t(`notifications.event_${ev.key}`)} ${t('notifications.col_inapp')}`} />
               </div>
             </li>
           ))}
@@ -125,12 +127,12 @@ function TabPrefs() {
 
       <div className="px-5 py-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4">
         <div className="text-sm">
-          {status === 'success' && <span className="text-green-600 dark:text-green-400 font-medium">✅ 저장됐습니다.</span>}
-          {status === 'error'   && <span className="text-red-600 dark:text-red-400 font-medium">저장 실패. 다시 시도해주세요.</span>}
+          {status === 'success' && <span className="text-green-600 dark:text-green-400 font-medium">{t('notifications.save_success')}</span>}
+          {status === 'error'   && <span className="text-red-600 dark:text-red-400 font-medium">{t('notifications.save_error')}</span>}
         </div>
         <button type="button" onClick={handleSave} disabled={saving || loading}
           className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-          {saving ? '저장 중...' : '저장'}
+          {saving ? t('notifications.saving') : t('common.save')}
         </button>
       </div>
     </div>
@@ -140,6 +142,7 @@ function TabPrefs() {
 /* ─── 탭: 구독 중인 티켓 ────────────────────────────────── */
 
 function TabWatches() {
+  const t = useTranslations()
   const [watches, setWatches] = useState<WatchedTicket[]>([])
   const [loading, setLoading] = useState(true)
   const [unwatching, setUnwatching] = useState<Set<number>>(new Set())
@@ -150,7 +153,7 @@ function TabWatches() {
     fetch(`${API_BASE}/notifications/my-watches`, { credentials: 'include', cache: 'no-store' })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(setWatches)
-      .catch(() => setError('구독 목록을 불러오지 못했습니다.'))
+      .catch(() => setError(t('notifications.watch_load_error')))
       .finally(() => setLoading(false))
   }
 
@@ -203,9 +206,9 @@ function TabWatches() {
     return (
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm py-16 text-center">
         <p className="text-4xl mb-3">🔕</p>
-        <p className="text-gray-500 dark:text-gray-400 text-sm">구독 중인 티켓이 없습니다.</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">{t('notifications.no_watches')}</p>
         <p className="text-gray-400 dark:text-gray-500 text-xs mt-2">
-          티켓 상세 화면 사이드바의 <strong className="text-gray-600 dark:text-gray-300">&quot;🔕 이 티켓 구독&quot;</strong> 버튼으로 구독할 수 있습니다.
+          {t('notifications.no_watches_hint')}
         </p>
       </div>
     )
@@ -216,11 +219,11 @@ function TabWatches() {
       {/* 헤더 */}
       <div className="hidden sm:grid grid-cols-[56px_1fr_96px_80px_128px_96px] items-center gap-4 px-5 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
         <span>#</span>
-        <span>제목 / 담당자</span>
-        <span className="text-center">상태</span>
-        <span className="text-center">우선순위</span>
-        <span className="hidden lg:block">구독일</span>
-        <span className="text-center">구독 취소</span>
+        <span>{t('notifications.col_title_assignee')}</span>
+        <span className="text-center">{t('ticket.fields.status')}</span>
+        <span className="text-center">{t('ticket.fields.priority')}</span>
+        <span className="hidden lg:block">{t('notifications.col_subscribed_at')}</span>
+        <span className="text-center">{t('notifications.col_unwatch')}</span>
       </div>
 
       <ul className="divide-y divide-gray-100 dark:divide-gray-700/60">
@@ -250,13 +253,13 @@ function TabWatches() {
                     onClick={() => handleUnwatch(w.ticket_iid, w.project_id)}
                     disabled={isUnwatching}
                     className="sm:hidden shrink-0 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-base leading-none mt-0.5"
-                    title="구독 취소"
+                    title={t('notifications.col_unwatch')}
                   >
                     {isUnwatching ? '⏳' : '🔕'}
                   </button>
                 </div>
                 {w.assignee_name && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">담당: {w.assignee_name}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{t('notifications.assignee_label')}: {w.assignee_name}</p>
                 )}
                 {/* 모바일: 상태·우선순위·구독일 인라인 */}
                 <div className="flex gap-1.5 mt-1.5 sm:hidden flex-wrap items-center">
@@ -287,12 +290,12 @@ function TabWatches() {
                   onClick={() => handleUnwatch(w.ticket_iid, w.project_id)}
                   disabled={isUnwatching}
                   className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-red-300 dark:hover:border-red-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  title="구독 취소"
+                  title={t('notifications.col_unwatch')}
                 >
                   {isUnwatching ? (
                     <span className="animate-spin text-xs">⏳</span>
                   ) : (
-                    <><span>🔕</span><span className="hidden sm:inline">취소</span></>
+                    <><span>🔕</span><span className="hidden sm:inline">{t('notifications.unwatch')}</span></>
                   )}
                 </button>
               </div>
@@ -302,8 +305,8 @@ function TabWatches() {
       </ul>
 
       <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500 flex items-center justify-between">
-        <span>총 <strong className="text-gray-700 dark:text-gray-300">{watches.length}</strong>개 구독 중</span>
-        <span>구독 티켓의 상태 변경·댓글 발생 시 이메일로 알림을 받습니다.</span>
+        <span>{t('notifications.total_watches', { count: watches.length })}</span>
+        <span>{t('notifications.watches_hint')}</span>
       </div>
     </div>
   )
@@ -314,6 +317,7 @@ function TabWatches() {
 type TabId = 'prefs' | 'watches'
 
 function NotificationsContent() {
+  const t = useTranslations()
   const searchParams = useSearchParams()
   const [tab, setTab] = useState<TabId>(
     searchParams.get('tab') === 'prefs' ? 'prefs' : 'watches'
@@ -327,23 +331,23 @@ function NotificationsContent() {
     <div className="w-full">
       {/* 페이지 헤더 */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">알림 &amp; 구독 관리</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">알림 수신 설정과 구독 중인 티켓을 관리합니다.</p>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('notifications.pref_title')}</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('notifications.pref_desc')}</p>
       </div>
 
       {/* 탭 */}
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-6">
         {([
-          { id: 'watches', label: '🔔 구독 중인 티켓' },
-          { id: 'prefs',   label: '⚙️ 알림 수신 설정' },
-        ] as { id: TabId; label: string }[]).map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          { id: 'watches', label: t('notifications.tab_watches') },
+          { id: 'prefs',   label: t('notifications.tab_prefs') },
+        ] as { id: TabId; label: string }[]).map(tabItem => (
+          <button key={tabItem.id} onClick={() => setTab(tabItem.id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === t.id
+              tab === tabItem.id
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}>
-            {t.label}
+            {tabItem.label}
           </button>
         ))}
       </div>

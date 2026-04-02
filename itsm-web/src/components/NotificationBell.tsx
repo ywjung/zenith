@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from '@/lib/api'
 import type { NotificationItem } from '@/types'
 import { API_BASE } from '@/lib/constants'
 
 export default function NotificationBell() {
+  const t = useTranslations('notifications')
+  const tc = useTranslations('common')
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
@@ -116,18 +119,18 @@ export default function NotificationBell() {
     const d = new Date(iso)
     const now = new Date()
     const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
-    if (diff < 60) return '방금'
-    if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
-    return d.toLocaleDateString('ko-KR')
+    if (diff < 60) return t('just_now')
+    if (diff < 3600) return t('minutes_ago', { n: Math.floor(diff / 60) })
+    if (diff < 86400) return t('hours_ago', { n: Math.floor(diff / 3600) })
+    return d.toLocaleDateString()
   }
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef} data-tour="notification-bell">
       <button
         onClick={() => setOpen((o) => !o)}
         className="relative p-1.5 rounded-md hover:bg-blue-600 transition-colors"
-        aria-label="알림"
+        aria-label={t('title')}
       >
         <span className="text-xl">🔔</span>
         {unreadCount > 0 && (
@@ -141,13 +144,13 @@ export default function NotificationBell() {
         <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
           {/* 헤더 */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-            <span className="font-semibold text-gray-800 dark:text-gray-100 text-sm">알림</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-100 text-sm">{t('title')}</span>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
                 className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
               >
-                모두 읽음
+                {t('mark_all_read_btn')}
               </button>
             )}
           </div>
@@ -155,9 +158,9 @@ export default function NotificationBell() {
           {/* 목록 */}
           <div className="max-h-80 overflow-y-auto">
             {loading ? (
-              <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">불러오는 중...</div>
+              <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">{tc('loading')}</div>
             ) : notifications.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">알림이 없습니다.</div>
+              <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">{t('empty')}</div>
             ) : (
               notifications.map((n) => (
                 <div
@@ -193,7 +196,7 @@ export default function NotificationBell() {
                       <button
                         onClick={() => handleMarkRead(n.id)}
                         className="shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1.5"
-                        title="읽음 처리"
+                        title={t('mark_read_title')}
                       />
                     )}
                   </div>
@@ -210,7 +213,7 @@ export default function NotificationBell() {
               onClick={() => setOpen(false)}
             >
               <span>🔔</span>
-              <span>구독 중인 티켓</span>
+              <span>{t('subscribed_tickets_link')}</span>
             </Link>
             <Link
               href="/notifications?tab=prefs"
@@ -218,7 +221,7 @@ export default function NotificationBell() {
               onClick={() => setOpen(false)}
             >
               <span>⚙️</span>
-              <span>알림 설정</span>
+              <span>{t('settings_link')}</span>
             </Link>
           </div>
         </div>

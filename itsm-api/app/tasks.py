@@ -6,8 +6,81 @@ autoretry_for + max_retries 를 통해 내결함성을 보장한다.
 import logging
 
 from celery import shared_task
+from celery.exceptions import MaxRetriesExceededError
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# 멱등성 헬퍼 — Redis로 task_id 중복 실행 방지 (재시도 시 중복 알림 방지)
+# ---------------------------------------------------------------------------
+
+def _is_duplicate(task_id: str | None, ttl: int = 300) -> bool:
+    """Redis에 task_id가 이미 있으면 True(중복) 반환. 없으면 등록 후 False 반환."""
+    if not task_id:
+        return False
+    try:
+        from .config import get_settings
+        import redis as _redis
+        r = _redis.Redis.from_url(get_settings().REDIS_URL, socket_connect_timeout=2)
+        key = f"celery:done:{task_id}"
+        # SET NX: 없을 때만 설정 (원자적 CAS)
+        return not r.set(key, "1", ex=ttl, nx=True)
+    except Exception:
+        return False  # Redis 장애 시 실행 허용 (가용성 우선)
+
+
+# ---------------------------------------------------------------------------
+# 실패 알림 추적 헬퍼
+# ---------------------------------------------------------------------------
+
+_SENSITIVE_KEYS = frozenset({"password", "token", "secret", "key", "access_token", "refresh_token"})
+
+
+def _sanitize_payload(payload: object) -> object:
+    """payload에서 민감 키를 제거한 복사본을 반환한다."""
+    if isinstance(payload, dict):
+        return {
+            k: "***" if k.lower() in _SENSITIVE_KEYS else _sanitize_payload(v)
+            for k, v in payload.items()
+        }
+    if isinstance(payload, (list, tuple)):
+        return [_sanitize_payload(item) for item in payload]
+    return payload
+
+
+def _record_failed_notification(
+    task_name: str,
+    task_id: str | None,
+    payload: object,
+    exc: BaseException,
+    retry_count: int = 0,
+) -> None:
+    """MaxRetriesExceededError 발생 시 FailedNotification 테이블에 기록한다."""
+    from .database import SessionLocal
+    from .models import FailedNotification
+
+    safe_payload = _sanitize_payload(payload)
+    error_msg = repr(exc)[:2000]
+
+    try:
+        with SessionLocal() as db:
+            record = FailedNotification(
+                task_name=task_name,
+                task_id=task_id,
+                payload=safe_payload,
+                error_message=error_msg,
+                retry_count=retry_count,
+            )
+            db.add(record)
+            db.commit()
+            logger.warning(
+                "FailedNotification recorded | task=%s id=%s",
+                task_name,
+                task_id,
+            )
+    except Exception as db_exc:
+        logger.error("Failed to record FailedNotification: %s", db_exc)
 
 
 # ---------------------------------------------------------------------------
@@ -21,15 +94,26 @@ logger = logging.getLogger(__name__)
     max_retries=3,
     default_retry_delay=30,
     acks_late=True,
+    time_limit=120,         # 하드 한도 2분
+    soft_time_limit=100,    # 소프트 한도 100s (정상 종료 유도)
 )
 def send_ticket_notification(self, ticket: dict) -> None:
     """신규 티켓 생성 알림 (이메일 + Telegram + 아웃바운드 웹훅)."""
+    if _is_duplicate(self.request.id):
+        logger.info("send_ticket_notification: duplicate task_id=%s — skipped", self.request.id)
+        return
     from .notifications import notify_ticket_created
     try:
         notify_ticket_created(ticket)
+    except MaxRetriesExceededError as exc:
+        _record_failed_notification(
+            "itsm.send_ticket_notification", self.request.id, {"ticket": ticket}, exc,
+            retry_count=self.request.retries,
+        )
+        raise
     except Exception as exc:
         logger.error("send_ticket_notification failed (attempt %d): %s", self.request.retries + 1, exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc, countdown=min(300, 30 * (2 ** self.request.retries)))
 
 
 @shared_task(
@@ -39,15 +123,40 @@ def send_ticket_notification(self, ticket: dict) -> None:
     max_retries=3,
     default_retry_delay=30,
     acks_late=True,
+    time_limit=120,
+    soft_time_limit=100,
 )
 def send_status_notification(self, ticket: dict, old_status: str, new_status: str, actor_name: str) -> None:
-    """티켓 상태 변경 알림 (이메일 + Telegram + 아웃바운드 웹훅)."""
+    """티켓 상태 변경 알림 (이메일 + Telegram + 아웃바운드 웹훅 + Web Push)."""
+    if _is_duplicate(self.request.id):
+        logger.info("send_status_notification: duplicate task_id=%s — skipped", self.request.id)
+        return
     from .notifications import notify_status_changed
     try:
         notify_status_changed(ticket, old_status, new_status, actor_name)
+        # Web Push — 담당자에게 상태 변경 알림
+        assignee_username = ticket.get("assignee_username") or ticket.get("assignee", {}).get("username")
+        if assignee_username:
+            iid = ticket.get("iid", "?")
+            title_text = ticket.get("title", "")[:60]
+            push_title = f"티켓 상태 변경 — #{iid}"
+            push_body = f"{title_text} → {new_status}"
+            send_web_push.delay(
+                username=assignee_username,
+                title=push_title,
+                body=push_body,
+                url=f"/tickets/{iid}",
+            )
+    except MaxRetriesExceededError as exc:
+        _record_failed_notification(
+            "itsm.send_status_notification", self.request.id,
+            {"ticket": ticket, "old_status": old_status, "new_status": new_status, "actor_name": actor_name},
+            exc, retry_count=self.request.retries,
+        )
+        raise
     except Exception as exc:
         logger.error("send_status_notification failed (attempt %d): %s", self.request.retries + 1, exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc, countdown=min(300, 30 * (2 ** self.request.retries)))
 
 
 @shared_task(
@@ -57,15 +166,27 @@ def send_status_notification(self, ticket: dict, old_status: str, new_status: st
     max_retries=3,
     default_retry_delay=30,
     acks_late=True,
+    time_limit=120,
+    soft_time_limit=100,
 )
 def send_comment_notification(self, ticket: dict, comment_body: str, author_name: str, is_internal: bool) -> None:
     """댓글 추가 알림."""
+    if _is_duplicate(self.request.id):
+        logger.info("send_comment_notification: duplicate task_id=%s — skipped", self.request.id)
+        return
     from .notifications import notify_comment_added
     try:
         notify_comment_added(ticket, comment_body, author_name, is_internal)
+    except MaxRetriesExceededError as exc:
+        _record_failed_notification(
+            "itsm.send_comment_notification", self.request.id,
+            {"ticket": ticket, "author_name": author_name, "is_internal": is_internal},
+            exc, retry_count=self.request.retries,
+        )
+        raise
     except Exception as exc:
         logger.error("send_comment_notification failed (attempt %d): %s", self.request.retries + 1, exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc, countdown=min(300, 30 * (2 ** self.request.retries)))
 
 
 @shared_task(
@@ -75,15 +196,54 @@ def send_comment_notification(self, ticket: dict, comment_body: str, author_name
     max_retries=3,
     default_retry_delay=30,
     acks_late=True,
+    time_limit=120,
+    soft_time_limit=100,
 )
 def send_assigned_notification(self, assignee_email: str, ticket: dict, actor_name: str) -> None:
     """담당자 배정 알림."""
     from .notifications import notify_assigned
     try:
         notify_assigned(assignee_email, ticket, actor_name)
+    except MaxRetriesExceededError as exc:
+        _record_failed_notification(
+            "itsm.send_assigned_notification", self.request.id,
+            {"assignee_email": assignee_email, "ticket": ticket, "actor_name": actor_name},
+            exc, retry_count=self.request.retries,
+        )
+        raise
     except Exception as exc:
         logger.error("send_assigned_notification failed (attempt %d): %s", self.request.retries + 1, exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc, countdown=min(300, 30 * (2 ** self.request.retries)))
+
+
+# ---------------------------------------------------------------------------
+# Web Push 알림
+# ---------------------------------------------------------------------------
+
+@shared_task(
+    name="itsm.send_web_push",
+    bind=True,
+    autoretry_for=(Exception,),
+    max_retries=2,
+    default_retry_delay=15,
+    acks_late=True,
+    time_limit=60,
+    soft_time_limit=50,
+)
+def send_web_push(
+    self,
+    username: str,
+    title: str,
+    body: str,
+    url: str = "/",
+) -> None:
+    """특정 사용자에게 Web Push 알림을 전송한다."""
+    try:
+        from .routers.push import send_push_to_user
+        send_push_to_user(username, title, body, url)
+    except Exception as exc:
+        logger.warning("send_web_push failed (attempt %d): %s", self.request.retries + 1, exc)
+        raise self.retry(exc=exc, countdown=min(300, 30 * (2 ** self.request.retries)))
 
 
 # ---------------------------------------------------------------------------
@@ -103,9 +263,16 @@ def send_sla_warning(self, ticket_iid: int, project_id: str, minutes_left: int) 
     from .notifications import notify_sla_warning
     try:
         notify_sla_warning(ticket_iid, project_id, minutes_left)
+    except MaxRetriesExceededError as exc:
+        _record_failed_notification(
+            "itsm.send_sla_warning", self.request.id,
+            {"ticket_iid": ticket_iid, "project_id": project_id, "minutes_left": minutes_left},
+            exc, retry_count=self.request.retries,
+        )
+        raise
     except Exception as exc:
         logger.error("send_sla_warning failed: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc, countdown=min(300, 30 * (2 ** self.request.retries)))
 
 
 @shared_task(
@@ -121,9 +288,16 @@ def send_sla_breach(self, ticket_iid: int, project_id: str, assignee_email: str 
     from .notifications import notify_sla_breach
     try:
         notify_sla_breach(ticket_iid, project_id, assignee_email)
+    except MaxRetriesExceededError as exc:
+        _record_failed_notification(
+            "itsm.send_sla_breach", self.request.id,
+            {"ticket_iid": ticket_iid, "project_id": project_id, "assignee_email": assignee_email},
+            exc, retry_count=self.request.retries,
+        )
+        raise
     except Exception as exc:
         logger.error("send_sla_breach failed: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc, countdown=min(300, 30 * (2 ** self.request.retries)))
 
 
 # ---------------------------------------------------------------------------
@@ -394,3 +568,167 @@ def periodic_email_ingest() -> dict:
     except Exception as exc:
         logger.error("periodic_email_ingest failed: %s", exc)
         raise
+
+
+@shared_task(
+    name="itsm.periodic_db_backup",
+    max_retries=1,
+    default_retry_delay=300,
+    time_limit=1200,
+    soft_time_limit=1100,
+)
+def periodic_db_backup() -> dict:
+    """매일 새벽 2시: PostgreSQL pg_dump → AES-256 암호화 → /tmp/itsm_backups/ 보관 (7일 초과분 삭제)."""
+    import os
+    import subprocess
+    from datetime import datetime, timezone, timedelta
+    from pathlib import Path
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    import secrets as _secrets
+
+    from .config import get_settings
+    settings = get_settings()
+
+    backup_dir = Path(settings.BACKUP_DIR)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    now = datetime.now(timezone.utc)
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    enc_filename = f"itsm_backup_{timestamp}.sql.enc"
+    enc_path = backup_dir / enc_filename
+
+    # pg_dump 실행 — DATABASE_URL에서 접속 정보 파싱 (CRIT-2)
+    pg_parts = settings.postgres_url_parts
+    pg_user = pg_parts["user"]
+    pg_db = pg_parts["db"]
+    pg_host = pg_parts["host"]
+    pg_port = pg_parts["port"]
+
+    env = os.environ.copy()
+    pg_password = pg_parts["password"]
+    if pg_password:
+        env["PGPASSWORD"] = pg_password
+
+    try:
+        result = subprocess.run(
+            ["pg_dump", "-U", pg_user, "-h", pg_host, "-p", pg_port, pg_db],
+            capture_output=True,
+            env=env,
+            timeout=900,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"pg_dump failed: {result.stderr.decode(errors='replace')[:500]}")
+        sql_data = result.stdout
+    except FileNotFoundError:
+        raise RuntimeError("pg_dump 실행 파일을 찾을 수 없습니다. PostgreSQL client가 설치되어 있는지 확인하세요.")
+
+    # AES-256-GCM 암호화 (cryptography 패키지)
+    # H-01: BACKUP_ENCRYPTION_KEY가 설정된 경우 우선 사용 (JWT SECRET_KEY와 독립적 관리).
+    #       미설정 시 SECRET_KEY에서 HKDF 파생 (하위 호환).
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF as _HKDF
+    from cryptography.hazmat.primitives import hashes as _hashes
+    if settings.BACKUP_ENCRYPTION_KEY:
+        # 전용 키를 HKDF로 정규화하여 정확히 32바이트 AES 키 생성
+        key_bytes = _HKDF(
+            algorithm=_hashes.SHA256(), length=32, salt=None, info=b"itsm-backup"
+        ).derive(settings.BACKUP_ENCRYPTION_KEY.encode())
+    else:
+        logger.warning(
+            "BACKUP_ENCRYPTION_KEY가 설정되지 않아 SECRET_KEY에서 백업 키를 파생합니다. "
+            "보안 강화를 위해 별도의 BACKUP_ENCRYPTION_KEY 설정을 권장합니다."
+        )
+        key_bytes = _HKDF(
+            algorithm=_hashes.SHA256(), length=32, salt=None, info=b"itsm-backup"
+        ).derive(settings.SECRET_KEY.encode())
+    aesgcm = AESGCM(key_bytes)
+    nonce = _secrets.token_bytes(12)
+    encrypted = aesgcm.encrypt(nonce, sql_data, None)
+
+    # nonce(12B) + ciphertext 저장
+    with open(enc_path, "wb") as f:
+        f.write(nonce + encrypted)
+
+    size_mb = enc_path.stat().st_size / (1024 * 1024)
+
+    # 7일 초과 파일 삭제
+    cutoff = now - timedelta(days=7)
+    deleted_count = 0
+    for old_file in backup_dir.glob("itsm_backup_*.sql.enc"):
+        try:
+            file_mtime = datetime.fromtimestamp(old_file.stat().st_mtime, tz=timezone.utc)
+            if file_mtime < cutoff:
+                old_file.unlink()
+                deleted_count += 1
+        except Exception as e:
+            logger.warning("Failed to delete old backup %s: %s", old_file, e)
+
+    logger.info(
+        "periodic_db_backup: file=%s size_mb=%.2f deleted_old=%d",
+        enc_path,
+        size_mb,
+        deleted_count,
+    )
+
+    result_dict = {
+        "file": str(enc_path),
+        "size_mb": round(size_mb, 2),
+        "deleted_old": deleted_count,
+    }
+
+    # Slack 알림 (실패 시에만 — 성공은 로그로 충분)
+    return result_dict
+
+
+@shared_task(
+    name="itsm.periodic_create_recurring_tickets",
+    bind=True,
+    max_retries=2,
+    time_limit=300,
+    soft_time_limit=270,
+)
+def periodic_create_recurring_tickets(self) -> dict:
+    """만기된 반복 티켓을 GitLab 이슈로 생성하고 next_run_at 갱신."""
+    from datetime import datetime, timezone
+    from .database import SessionLocal
+    from .models import RecurringTicket
+    from . import gitlab_client
+
+    now = datetime.now(timezone.utc)
+    created = 0
+    errors = 0
+
+    with SessionLocal() as db:
+        due = db.query(RecurringTicket).filter(
+            RecurringTicket.is_active == True,  # noqa: E712
+            RecurringTicket.next_run_at <= now,
+        ).all()
+
+        for rt in due:
+            try:
+                labels = [f"cat::{rt.category}", f"prio::{rt.priority}", "status::open", "recurring"]
+                result = gitlab_client.create_issue(
+                    title=rt.title,
+                    description=(rt.description or "") + f"\n\n> 🔄 반복 티켓 (ID: {rt.id})",
+                    labels=labels,
+                    project_id=rt.project_id,
+                    assignee_id=rt.assignee_id,
+                )
+                if result:
+                    created += 1
+
+                # next_run_at 계산
+                try:
+                    from croniter import croniter
+                    it = croniter(rt.cron_expr, now)
+                    rt.next_run_at = it.get_next(datetime).replace(tzinfo=timezone.utc)
+                except Exception:
+                    rt.next_run_at = None  # cron 파싱 실패 시 일시 정지
+
+                rt.last_run_at = now
+                db.commit()
+            except Exception as e:
+                errors += 1
+                logger.error("recurring ticket %d failed: %s", rt.id, e)
+
+    logger.info("Recurring tickets: created=%d errors=%d", created, errors)
+    return {"created": created, "errors": errors}

@@ -9,37 +9,42 @@ import { useAuth } from '@/context/AuthContext'
 interface MenuItem { href: string; label: string; icon: string; desc: string }
 interface MenuGroup { group: string; icon: string; adminOnly: boolean; items: MenuItem[] }
 
-// 카테고리별 메뉴 그룹
 const MENU_GROUPS: MenuGroup[] = [
   {
-    group: '사용자 & 접근',
+    group: '사용자 & 권한',
     icon: '👥',
     adminOnly: true,
     items: [
-      { href: '/admin/users', label: '사용자 관리', icon: '👤', desc: '역할 부여 · 계정 관리' },
-      { href: '/admin/role-labels', label: '역할 명칭 설정', icon: '🏷️', desc: '역할 표시 이름 커스터마이즈' },
+      { href: '/admin/users',        label: '사용자 관리',      icon: '👤', desc: '역할 부여 · 계정 관리' },
+      { href: '/admin/role-labels',  label: '역할 명칭 설정',   icon: '🏷️', desc: '역할 표시 이름 커스터마이즈' },
+      { href: '/admin/ip-allowlist', label: 'IP 접근 제한',     icon: '🛡️', desc: '관리자 API CIDR 허용 목록' },
+      { href: '/admin/audit',        label: '감사 로그',        icon: '🔍', desc: '변경 이력 · IP 추적' },
     ],
   },
   {
-    group: 'SLA & 에스컬레이션',
-    icon: '⏱️',
-    adminOnly: true,
-    items: [
-      { href: '/admin/sla-policies', label: 'SLA 정책', icon: '⏱️', desc: '우선순위별 목표 시간' },
-      { href: '/admin/business-hours', label: '업무 시간 설정', icon: '🕘', desc: '공휴일 · 요일별 업무 시간' },
-      { href: '/admin/escalation-policies', label: '에스컬레이션', icon: '🚨', desc: 'SLA 위반 자동 액션' },
-    ],
-  },
-  {
-    group: '자동화',
+    group: 'SLA & 자동화',
     icon: '⚡',
     adminOnly: true,
     items: [
-      { href: '/admin/assignment-rules', label: '자동 배정 규칙', icon: '⚡', desc: '티켓 자동 담당자 배정' },
-      { href: '/admin/automation-rules', label: '자동화 규칙', icon: '🤖', desc: '이벤트 기반 자동 액션' },
-      { href: '/admin/service-types', label: '서비스 유형', icon: '🗂️', desc: '카테고리 · 색상 관리' },
-      { href: '/admin/custom-fields', label: '커스텀 필드', icon: '📝', desc: '티켓 추가 입력 필드 정의' },
-      { href: '/admin/service-catalog', label: '서비스 카탈로그', icon: '📦', desc: '포털 신청 카탈로그 항목 관리' },
+      { href: '/admin/sla-policies',       label: 'SLA 정책',        icon: '⏱️', desc: '우선순위별 목표 시간' },
+      { href: '/admin/business-hours',     label: '업무 시간',        icon: '🕘', desc: '공휴일 · 요일별 업무 시간' },
+      { href: '/admin/escalation-policies',label: '에스컬레이션',     icon: '🚨', desc: 'SLA 위반 자동 액션' },
+      { href: '/admin/assignment-rules',   label: '자동 배정 규칙',   icon: '⚡', desc: '티켓 자동 담당자 배정' },
+      { href: '/admin/automation-rules',   label: '자동화 규칙',      icon: '🤖', desc: '이벤트 기반 자동 액션' },
+      { href: '/admin/recurring-tickets',  label: '반복 티켓',        icon: '🔄', desc: '정기 자동 생성 스케줄' },
+    ],
+  },
+  {
+    group: '티켓 설정',
+    icon: '🗂️',
+    adminOnly: true,
+    items: [
+      { href: '/admin/service-types',   label: '서비스 유형',    icon: '🗂️', desc: '카테고리 · 색상 관리' },
+      { href: '/admin/custom-fields',   label: '커스텀 필드',    icon: '📝', desc: '티켓 추가 입력 필드 정의' },
+      { href: '/admin/service-catalog', label: '서비스 카탈로그',icon: '📦', desc: '포털 신청 카탈로그 항목 관리' },
+      { href: '/admin/templates',       label: '티켓 템플릿',    icon: '📋', desc: '자주 쓰는 티켓 양식' },
+      { href: '/admin/quick-replies',   label: '빠른 답변',      icon: '💬', desc: '에이전트 답변 템플릿' },
+      { href: '/admin/faq',             label: 'FAQ 관리',       icon: '❓', desc: '자주 묻는 질문 관리' },
     ],
   },
   {
@@ -47,101 +52,112 @@ const MENU_GROUPS: MenuGroup[] = [
     icon: '🔔',
     adminOnly: true,
     items: [
-      { href: '/admin/announcements', label: '공지사항 / 배너', icon: '📢', desc: '시스템 공지 · 배너 관리' },
-      { href: '/admin/notification-channels', label: '알림 채널 설정', icon: '🔔', desc: '이메일 · 텔레그램 · Slack 발송 ON/OFF' },
-      { href: '/admin/email-templates', label: '이메일 템플릿', icon: '📧', desc: 'Jinja2 이메일 편집' },
-      { href: '/admin/email-ingest', label: '이메일 수신 현황', icon: '📥', desc: 'IMAP 수신 모니터링' },
-      { href: '/admin/outbound-webhooks', label: '아웃바운드 웹훅', icon: '🔗', desc: 'Slack · Teams 연동' },
-      { href: '/admin/api-keys', label: 'API 키', icon: '🔑', desc: '외부 시스템 인증 키' },
-      { href: '/admin/labels', label: 'GitLab 라벨 동기화', icon: '🏷️', desc: '라벨 현황 확인 · 수동 동기화' },
-      { href: '/admin/search-index', label: '전문검색 색인', icon: '🔎', desc: '검색 색인 현황 · 수동 동기화' },
-      { href: '/admin/db-cleanup', label: 'DB 정리', icon: '🗑️', desc: '로그·알림·KB 버전 선택 정리' },
+      { href: '/admin/announcements',         label: '공지사항 / 배너',   icon: '📢', desc: '시스템 공지 · 배너 관리' },
+      { href: '/admin/notification-channels', label: '알림 채널',         icon: '🔔', desc: '이메일 · 텔레그램 · Slack' },
+      { href: '/admin/email-templates',       label: '이메일 템플릿',     icon: '📧', desc: 'Jinja2 이메일 편집' },
+      { href: '/admin/email-ingest',          label: '이메일 수신',       icon: '📥', desc: 'IMAP 수신 모니터링' },
+      { href: '/admin/outbound-webhooks',     label: '아웃바운드 웹훅',   icon: '🔗', desc: 'Slack · Teams 연동' },
+      { href: '/admin/api-keys',              label: 'API 키',            icon: '🔑', desc: '외부 시스템 인증 키' },
     ],
   },
   {
-    group: '모니터링',
+    group: '운영 & 모니터링',
     icon: '📊',
     adminOnly: true,
     items: [
-      { href: '/admin/monitoring', label: '시스템 모니터링', icon: '📊', desc: 'Celery 작업 · 성능 지표' },
-      { href: '/admin/celery', label: 'Celery 모니터링', icon: '🔄', desc: '워커 · 큐 · 태스크 상세 현황' },
-    ],
-  },
-  {
-    group: '템플릿 & 답변',
-    icon: '📋',
-    adminOnly: false,
-    items: [
-      { href: '/admin/templates', label: '티켓 템플릿', icon: '📋', desc: '자주 쓰는 티켓 양식' },
-      { href: '/admin/quick-replies', label: '빠른 답변', icon: '💬', desc: '에이전트 답변 템플릿' },
-      { href: '/admin/faq', label: 'FAQ 관리', icon: '❓', desc: 'DB 기반 자주 묻는 질문 관리' },
-    ],
-  },
-  {
-    group: '리포트',
-    icon: '📈',
-    adminOnly: true,
-    items: [
-      { href: '/admin/workload', label: '업무 현황 및 성과', icon: '📈', desc: '담당·완료율·SLA·성과등급' },
-    ],
-  },
-  {
-    group: '보안 & 감사',
-    icon: '🔍',
-    adminOnly: true,
-    items: [
-      { href: '/admin/ip-allowlist', label: 'IP 접근 제한', icon: '🛡️', desc: '관리자 API CIDR 허용 목록' },
-      { href: '/admin/audit', label: '감사 로그', icon: '🔍', desc: '변경 이력 · IP 추적' },
+      { href: '/admin/workload',             label: '업무 현황 및 성과', icon: '📈', desc: '담당·완료율·SLA·성과등급' },
+      { href: '/admin/monitoring',           label: '시스템 모니터링',   icon: '📊', desc: 'Celery 작업 · 성능 지표' },
+      { href: '/admin/celery',               label: 'Celery 모니터링',   icon: '🔄', desc: '워커 · 큐 · 태스크 상세' },
+      { href: '/admin/failed-notifications', label: '실패 알림 추적',    icon: '⚠️', desc: '재시도 초과 알림 관리' },
+      { href: '/admin/labels',               label: 'GitLab 라벨 동기화',icon: '🏷️', desc: '라벨 현황 · 수동 동기화' },
+      { href: '/admin/search-index',         label: '전문검색 색인',     icon: '🔎', desc: '검색 색인 · 수동 동기화' },
+      { href: '/admin/db-cleanup',           label: 'DB 정리',           icon: '🗑️', desc: '로그·알림·KB 버전 정리' },
     ],
   },
 ]
 
-// 모든 href → 그룹명 매핑 (active 그룹 강조용)
 const HREF_TO_GROUP: Record<string, string> = {}
 MENU_GROUPS.forEach(g => g.items.forEach(item => { HREF_TO_GROUP[item.href] = g.group }))
 
 function AdminSidebar({ pathname, isAdmin }: { pathname: string; isAdmin: boolean }) {
-  const activeGroup = HREF_TO_GROUP[pathname] ?? ''
+  const activeGroupName = HREF_TO_GROUP[pathname] ?? ''
+
+  // 현재 활성 그룹만 기본 펼침
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {}
+    MENU_GROUPS.forEach(g => { init[g.group] = g.group === activeGroupName })
+    return init
+  })
+
+  const toggle = (name: string) =>
+    setOpenGroups(prev => ({ ...prev, [name]: !prev[name] }))
 
   return (
-    <aside className="w-56 shrink-0">
-      <nav className="space-y-1">
-        {MENU_GROUPS.filter(g => !g.adminOnly || isAdmin).map(group => (
-          <div key={group.group}>
-            {/* 그룹 헤더 */}
-            <div className="flex items-center gap-1.5 px-3 pt-4 pb-1 first:pt-0">
-              <span className="text-xs">{group.icon}</span>
-              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                {group.group}
-              </span>
-            </div>
-            {/* 그룹 항목 */}
-            {group.items.map(item => {
-              const isActive = pathname === item.href
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg transition-all text-sm ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
+    <aside className="w-52 shrink-0">
+      <nav className="space-y-0.5">
+        {MENU_GROUPS.filter(g => !g.adminOnly || isAdmin).map(group => {
+          const isOpen = openGroups[group.group] ?? false
+          const hasActive = group.items.some(i => i.href === pathname)
+          return (
+            <div key={group.group}>
+              {/* 그룹 헤더 - 클릭으로 접기/펼치기 */}
+              <button
+                onClick={() => toggle(group.group)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors ${
+                  hasActive
+                    ? 'bg-blue-50 dark:bg-blue-900/20'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{group.icon}</span>
+                  <span className={`text-xs font-semibold uppercase tracking-wider ${
+                    hasActive
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : 'text-gray-500 dark:text-gray-400'
+                  }`}>
+                    {group.group}
+                  </span>
+                </div>
+                <svg
+                  className={`w-3.5 h-3.5 transition-transform shrink-0 ${
+                    isOpen ? 'rotate-180' : ''
+                  } ${hasActive ? 'text-blue-500' : 'text-gray-400'}`}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor"
                 >
-                  <span className="text-base w-5 text-center shrink-0">{item.icon}</span>
-                  <div className="min-w-0">
-                    <div className={`font-medium leading-tight ${isActive ? 'text-white' : 'text-gray-800 dark:text-gray-200'}`}>
-                      {item.label}
-                    </div>
-                    <div className={`text-xs leading-tight mt-0.5 truncate ${isActive ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'}`}>
-                      {item.desc}
-                    </div>
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-        ))}
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* 그룹 항목 */}
+              {isOpen && (
+                <div className="ml-2 mb-1">
+                  {group.items.map(item => {
+                    const isActive = pathname === item.href
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${
+                          isActive
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
+                        }`}
+                      >
+                        <span className="text-sm w-4 text-center shrink-0">{item.icon}</span>
+                        <span className={`font-medium leading-tight text-sm ${
+                          isActive ? 'text-white' : 'text-gray-800 dark:text-gray-200'
+                        }`}>
+                          {item.label}
+                        </span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </nav>
     </aside>
   )
@@ -225,9 +241,31 @@ function AdminMobileMenu({ pathname, isAdmin }: { pathname: string; isAdmin: boo
 
 function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { isAdmin } = useAuth()
+  const { isAdmin, isAgent, loading } = useAuth()
 
-  // 현재 페이지 정보
+  // 인증 정보 로딩 중 — 권한 플래시(Flash of Unauthorized Content) 방지
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-gray-400 dark:text-gray-500">
+        <svg className="animate-spin w-6 h-6 mr-2" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+        </svg>
+        <span className="text-sm">권한 확인 중…</span>
+      </div>
+    )
+  }
+
+  if (!isAgent) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-gray-500 dark:text-gray-400">
+        <div className="text-5xl mb-4">🔒</div>
+        <p className="text-lg font-medium">에이전트 이상 권한이 필요합니다.</p>
+        <p className="text-sm mt-1">관리자에게 권한을 요청하세요.</p>
+      </div>
+    )
+  }
+
   const allItems = MENU_GROUPS.flatMap(g => g.items)
   const currentItem = allItems.find(i => i.href === pathname)
   const currentGroup = MENU_GROUPS.find(g => g.items.some(i => i.href === pathname))
@@ -247,7 +285,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-gray-900 dark:text-gray-100">시스템 관리</h1>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">시스템 관리</h1>
                 {currentGroup && (
                   <>
                     <span className="text-gray-300 dark:text-gray-600">/</span>
@@ -276,12 +314,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
 
         {/* 데스크톱: 사이드바 + 콘텐츠 */}
         <div className="hidden md:flex gap-6 items-start">
-          {/* 사이드바 */}
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-3 sticky top-6">
             <AdminSidebar pathname={pathname} isAdmin={isAdmin} />
           </div>
-
-          {/* 콘텐츠 */}
           <div className="flex-1 min-w-0">
             {children}
           </div>

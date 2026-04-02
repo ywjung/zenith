@@ -5,7 +5,8 @@ import hashlib
 import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError as JWTError
 
 from app.auth import ALGORITHM
 

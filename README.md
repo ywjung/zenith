@@ -102,8 +102,11 @@ GitLab CE 기반 IT 서비스 관리(ITSM) 플랫폼.
 | `postgres` | `postgres:17` | 5432(내부) | 주 데이터베이스 |
 | `redis` | `redis:7.4-alpine` | 6379(내부) | 캐시 · 알림 Pub/Sub |
 | `clamav` | `clamav/clamav:1.4` | 3310(내부) | 파일 바이러스 스캔 |
-| `prometheus` | `prom/prometheus:latest` | **9090** | 메트릭 수집 |
-| `grafana` | `grafana/grafana:latest` | **3001** | 대시보드 |
+| `itsm-celery` | `${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}` | — | Celery 비동기 워커 |
+| `itsm-celery-beat` | `${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}` | — | Celery Beat 스케줄러 |
+| `itsm-flower` | `${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}` | 5555(내부) | Celery Flower 모니터링 |
+| `prometheus` | `prom/prometheus:v2.55.1` | **9090** | 메트릭 수집 |
+| `grafana` | `grafana/grafana:11.4.0` | **3001** | 대시보드 |
 
 > **로컬 개발 시**: `docker-compose.override.yml`이 자동 적용되어 `itsm-api` · `itsm-web`을 소스에서 직접 빌드합니다.
 > **CI/CD 배포 시**: 레지스트리에 푸시된 이미지를 `IMAGE_API_TAG` / `IMAGE_WEB_TAG` 환경변수로 지정합니다.
@@ -409,8 +412,15 @@ CLAMAV_PORT=3310
 # ── 모니터링 ────────────────────────────────────────────────
 GRAFANA_PASSWORD=<Grafana 관리자 비밀번호>  # 미설정 시 docker compose up 실패
 GRAFANA_PORT=3001
-GRAFANA_ROOT_URL=http://<HOST>:3001
+GRAFANA_ROOT_URL=http://<HOST>:8111/grafana
 METRICS_TOKEN=<openssl rand -hex 32>        # nginx /metrics 엔드포인트 토큰 인증
+
+# ── Celery Flower 모니터링 ────────────────────────────────────
+FLOWER_USER=admin                           # Flower Basic 인증 사용자명
+FLOWER_PASSWORD=<강력한 비밀번호>            # 미설정 시 docker compose up 실패
+
+# ── API 워커 수 ──────────────────────────────────────────────
+WORKERS=2                                   # gunicorn UvicornWorker 프로세스 수 (CPU 코어 수 × 2 권장)
 ```
 
 ### 시크릿 생성 명령어 모음
@@ -580,13 +590,13 @@ docker compose logs -f clamav
 
 ## 7. DB 마이그레이션
 
-Alembic 마이그레이션 **47단계** (0001~0047)가 관리됩니다.
+Alembic 마이그레이션 **63단계** (0001~0063)가 관리됩니다.
 API 컨테이너 시작 시 **자동으로 최신 버전까지 적용**됩니다.
 
 ```bash
 # 현재 버전 확인
 docker compose exec itsm-api alembic current
-# 출력 예: 0047 (head)
+# 출력 예: 0063 (head)
 
 # 수동으로 최신 버전 적용
 docker compose exec itsm-api alembic upgrade head
@@ -623,13 +633,19 @@ docker compose exec itsm-api alembic upgrade head
 |--------|-----|------|
 | **ZENITH** | `http://<HOST>:8111` | 메인 서비스 (로그인 필요) |
 | **고객 포털** | `http://<HOST>:8111/portal` | 비로그인 티켓 접수 |
+| **칸반 보드** | `http://<HOST>:8111/kanban` | 드래그앤드롭 티켓 관리 (developer 이상) |
+| **간트 차트** | `http://<HOST>:8111/gantt` | 티켓 의존성 시각화 (developer 이상) |
+| **SLA 대시보드** | `http://<HOST>:8111/sla` | SLA 위반·임박 현황 (agent 이상) |
+| **캘린더 뷰** | `http://<HOST>:8111/calendar` | 월간 티켓 기한 캘린더 (developer 이상) |
+| **프로필** | `http://<HOST>:8111/profile` | 개인 정보·활성 세션 관리 |
 | **GitLab** | `http://<HOST>:8929` | OAuth 제공자 |
-| **Prometheus** | `http://<HOST>:9090` | 메트릭 수집 (내부망) |
-| **Grafana** | `http://<HOST>:3001` | 대시보드 (내부망) |
+| **Celery Flower** | `http://<HOST>:8111/flower/` | Celery 태스크 모니터링 (내부망, Basic 인증) |
+| **Prometheus** | `http://<HOST>:8111/prometheus/` | 메트릭 수집 (내부망 nginx 프록시) |
+| **Grafana** | `http://<HOST>:8111/grafana/` | 대시보드 (내부망 nginx 프록시) |
 | **API 문서 (Swagger)** | `http://<HOST>:8111/docs` | 내부망만 접근 가능 |
 | **API 문서 (ReDoc)** | `http://<HOST>:8111/redoc` | 내부망만 접근 가능 |
 
-> `/docs`, `/redoc`, `/metrics` 는 보안상 `10.x.x.x`, `172.16–31.x.x`, `192.168.x.x`, `127.0.0.1` 대역에서만 접근됩니다.
+> `/docs`, `/redoc`, `/metrics`, `/flower/`, `/prometheus/`, `/grafana/` 는 보안상 `10.x.x.x`, `172.16–31.x.x`, `192.168.x.x`, `127.0.0.1` 대역에서만 접근됩니다. Flower는 `FLOWER_USER` / `FLOWER_PASSWORD` Basic 인증이 추가로 적용됩니다.
 
 ---
 
@@ -711,10 +727,19 @@ docker compose exec itsm-api alembic upgrade head
 ### 편의 기능
 - **칸반 보드**: 드래그앤드롭 상태 변경 + **전환 규칙 강제** (이동 불가 컬럼 🚫 자동 비활성화) + **기간 필터** (전체·오늘·이번 주·이번 달)
 - **DORA 4대 지표**: 배포 빈도 / 리드타임 / 변경 실패율 / MTTR — 리포트 탭에서 기간별 조회
-- 리포트 & 에이전트 성과 분석 (날짜 필터 정확 적용, 역방향 날짜 검증) + **리포트 CSV · Excel 내보내기**
+- 리포트 & 에이전트 성과 분석 (날짜 필터 정확 적용, 역방향 날짜 검증) + **리포트 CSV · Excel 내보내기** + **리포트 PDF 내보내기**
 - 빠른 답변 (Canned Response) 템플릿, 티켓 구독 (Watcher)
 - 공지사항·배너 시스템 (info/warning/critical)
 - **키보드 단축키**: `g+t`(티켓), `g+k`(칸반), `g+b`(KB), `g+r`(리포트), `n`(새 티켓), `?`(도움말)
+- **온보딩 투어**: 첫 로그인 시 주요 기능 단계별 안내 자동 시작 — localStorage 완료 기록, 헤더에서 재시작 가능
+- **간트 차트** (`/gantt`): 티켓 간 blocks/relates_to 의존 관계 SVG 시각화 — 14일/30일/60일 기간 필터
+- **시간 추적**: 티켓 상세 > 시간 탭에서 작업 소요 시간 입력·조회·삭제, 총 합계 표시
+- **SLA 에스컬레이션 대시보드** (`/sla`): 위반·임박·정상 카운트 카드, 경과율 프로그레스 바, 7일 트렌드 차트 (agent 이상)
+- **캘린더 뷰** (`/calendar`): 티켓 생성일·SLA 기한 기반 월간 캘린더, 날짜 클릭 시 티켓 패널
+- **활성 세션 관리**: 프로필 페이지 하단에서 로그인 기기 목록 확인 및 개별/전체 세션 종료
+- **시간 추적 리포트** (`/reports > 시간 추적`): 기간·담당자 필터로 팀원별 소요 시간·기록 건수 집계, 비율 막대 차트, 최근 50건 상세 내역
+- **SLA 준수율 리포트** (`/reports > SLA 리포트`): 4/12/26/52주 주별 준수·위반 트렌드 누적 막대 차트, 우선순위별 분석, PDF 인쇄 지원
+- **멀티 프로젝트 통합 뷰** (`/multi-project`): 모든 GitLab 프로젝트의 SLA 현황·기록 시간 비교, 준수율 수평 바 차트 (agent 이상)
 - 고객 셀프서비스 포털 (비로그인 접수 · 진행 상황 추적)
 - IMAP 이메일 → 티켓 자동 생성
 
@@ -922,10 +947,11 @@ cd itsm-web && npm audit
 
 | 서비스 | URL | 계정 |
 |--------|-----|------|
-| Prometheus | `http://127.0.0.1:9090` | — |
-| Grafana | `http://127.0.0.1:3001` | `admin` / `GRAFANA_PASSWORD` |
+| Prometheus | `http://<HOST>:8111/prometheus/` | — |
+| Grafana | `http://<HOST>:8111/grafana/` | `admin` / `GRAFANA_PASSWORD` |
+| Celery Flower | `http://<HOST>:8111/flower/` | `FLOWER_USER` / `FLOWER_PASSWORD` |
 
-> **보안**: Prometheus와 Grafana는 `127.0.0.1`에만 바인딩되어 외부에서 직접 접근이 불가능합니다. 외부 접근이 필요하다면 SSH 터널 또는 VPN을 통해 접속하세요.
+> **보안**: Prometheus·Grafana·Flower는 nginx를 통해서만 접근 가능하며, 내부망(10.x/172.16–31.x/192.168.x/127.0.0.1)에서만 허용됩니다. Flower는 Basic 인증이 추가로 적용됩니다.
 
 ### Prometheus 설정
 
@@ -1539,6 +1565,27 @@ nginx가 이전 컨테이너 IP를 캐시한 경우:
 docker compose exec nginx nginx -s reload
 ```
 
+### 429 Too Many Requests
+
+nginx rate limit에 걸린 경우. `/api/auth/login`에만 강화 제한(10r/m)이 적용되며, 나머지 `/api/`는 30r/s(burst=50)입니다. 로그인 엔드포인트 외 경로에서 429가 발생하면 비정상 트래픽 여부를 확인하세요.
+
+```bash
+# nginx rate limit 로그 확인
+docker compose logs nginx --since 10m | grep "limiting requests"
+```
+
+### gunicorn 워커 수 조정
+
+기본 2개 워커. CPU 코어가 많다면 `WORKERS` 환경변수로 늘릴 수 있습니다(권장: CPU 코어 수 × 2).
+
+```bash
+# .env 또는 실행 시
+WORKERS=4 docker compose up -d itsm-api
+
+# 현재 워커 프로세스 확인
+docker compose exec itsm-api ps aux | grep gunicorn
+```
+
 ### label_sync 오류 (레이블 드리프트)
 
 ```bash
@@ -1629,20 +1676,39 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ## 20. 버전 이력
 
-### 현재 버전 (2026-03-23)
+### 현재 버전 (2026-04-02)
 
-- **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22 · Celery 5
-- **DB 마이그레이션**: 55단계 (0001~0055)
-- **API 엔드포인트**: 160개+
+- **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22 · Celery 5 · Gunicorn 23
+- **DB 마이그레이션**: 67단계 (0001~0067)
+- **API 엔드포인트**: 170개+
 - **테스트**: pytest 1,713개 통과 · 코드 커버리지 97%+ · CI --cov-fail-under=95 강제
-- **Grafana 대시보드**: 5개 자동 프로비저닝 (알림 & 인시던트 대시보드 추가)
+- **Grafana 대시보드**: 6개 자동 프로비저닝 (알림 & 인시던트 대시보드, Web Vitals 대시보드 포함)
 - **v1.7 추가**: Celery 실패 메트릭·Slack, DB 슬로우 쿼리 감지, Web Vitals 수집, MinIO 스토리지, 서버 이전 자동화, i18n 한/영
 - **v1.8 추가**: WebSocket 실시간 협업, PWA 홈 화면 설치, 다크모드 이메일 템플릿, SLA 예측 모델, Celery 모니터링 UI, DB 정리 UI, OpenTelemetry 분산 추적, Grafana Web Vitals 대시보드, E2E 테스트 확대
+- **v1.9 추가**: 온보딩 투어, 리포트 PDF 내보내기, 간트 차트(`/gantt`), 시간 추적(Time Tracking), SLA 에스컬레이션 대시보드(`/sla`), 대시보드 위젯 커스터마이징, 캘린더 뷰(`/calendar`), 활성 세션 관리
+- **v2.0 추가**: 앱 아이콘 전면 통합(favicon·PWA·헤더·드롭다운 SVG 통일), Service Worker 배포 캐시 수정(navigation network-first, 캐시 버전 zenith-v2), i18n 영어 번역 전면 완성(dashboard·filter·table·bulk·pagination 30개+ 키), IntlContext 초기 메시지 프리로드(MISSING_MESSAGE 에러 제거), PWA 설치 배너 영어화
+- **v2.1 추가**: 전 페이지 헤더 아이콘·제목 통일(27개 관리 서브페이지 포함), SW navigation pass-through(페이지 지연 해소), Celery Flower 모니터링 수정(URL prefix·무인증 API·타임아웃), 시스템 모니터링 health 파싱 수정(PostgreSQL·Redis·Celery 정상 표시), 관리 5개 페이지 전폭 레이아웃, 리포트 i18n 완성(전 컴포넌트 한/영), KB·칸반·간트·SLA·캘린더 UI 폭 통일, 캘린더 ESC 패널 닫기
+- **v2.2 추가**: 시간 추적 리포트(팀원별·날짜별 집계), SLA 준수율 리포트(주별 트렌드·우선순위 분석), 멀티 프로젝트 통합 뷰(`/multi-project`), 자동화 규칙 실행 이력 UI
+- **v2.2 추가**: 구조화 로거(프로덕션 console.log 억제), pre-commit 훅(Husky+lint-staged+ruff), API 에러 응답 표준화(`{"error":{"code","message","detail"}}`), 반복 티켓(Celery Beat cron 자동 생성), 상태 변경 이유 필수 입력(waiting/reopened 전환 시 422 강제), CSAT 트렌드 차트(주별/월별), 에이전트 평점 랭킹(🥇🥈🥉), 낮은 평점(1~2점) 자동 플래그+Telegram 알림
+- **v2.2 프로덕션 최적화**: gunicorn + UvicornWorker 멀티 프로세스(`WORKERS` 환경변수로 조정), nginx upstream keepalive(api 32/web 16), rate limiting(api 30r/s·login 10r/m), PostgreSQL shared_buffers 256MB+work_mem 16MB 튜닝, Redis maxmemory 512MB, 컨테이너별 resource limits, Flower Basic 인증 강제(`FLOWER_USER`/`FLOWER_PASSWORD`), prometheus:v2.55.1·grafana:11.4.0 버전 고정, 비루트 appuser(UID 1001), FastAPI pattern= 경고 제거
+- **v2.3 버그픽스**: 반복 티켓 카테고리·우선순위 한국어 표시 수정(영문 raw value → 레이블 매핑), SLA 대시보드 breach_count·tickets 불일치 수정(orphan SLA 레코드 제외 후 enriched 목록 기준 집계), Service Worker 아이콘·manifest Stale-While-Revalidate 전환(배포 후 아이콘 즉시 갱신), PWA manifest maskable purpose 제거(비호환 RGBA PNG 아이콘)
 
 ### 마이그레이션 이력
 
 | 버전 | 주요 변경 |
 |------|---------|
+| `0067` | `tickets.updated_at` 인덱스 추가 — 최근 수정 정렬 성능 개선 |
+| `0066` | `recurring_tickets` 유니크 제약 — 동일 프로젝트+제목 중복 방지 |
+| `0065` | 중복 인덱스 정리 — 불필요한 복합 인덱스 제거 (쓰기 성능 개선) |
+| `0064` | 성능 인덱스 추가 — `tickets(status, priority)`, `sla_records(ticket_id)` 등 |
+| `0063` | `user_notification_rules` 테이블 — 사용자별 알림 규칙 (이벤트·채널·조건) |
+| `0062` | `service_catalog_items.approval_required` 컬럼 — 서비스 카탈로그 승인 워크플로우 |
+| `0061` | `web_push_subscriptions` 테이블 — Web Push 브라우저 구독 정보 |
+| `0060` | `change_requests` 테이블 — ITIL 변경 관리 (RFC, CAB, 위험도, 롤백 계획) |
+| `0059` | `recurring_tickets` 테이블 — 반복 티켓 스케줄 (cron_expr, next_run_at) |
+| `0058` | `failed_notifications` 테이블 — 최대 재시도 초과 알림 전송 실패 추적 |
+| `0057` | DB 백업 자동화 Celery Beat 태스크 스케줄 컬럼 |
+| `0056` | 티켓 검색 인덱스 (`ticket_search_index`) — FTS 자동 갱신 |
 | `0055` | `automation_logs` 테이블 — 자동화 규칙 실행 이력 (트리거·매칭 여부·액션·오류) |
 | `0054` | `kb_revisions` 테이블 — KB 문서 버전 이력 자동 저장 |
 | `0053` | CSV 일괄 티켓 생성 지원 스키마 (`ticket_import_rows`) |
@@ -1687,6 +1753,18 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **티켓 병합** | 중복 티켓 병합 UI — 댓글 이전 + 소스 티켓 종료 자동 처리 |
 | **GitLab 양방향 동기화** | GitLab 이슈 직접 수정 시 ITSM 감사 로그 + 신청자 인앱 알림 발행 |
 | **협력사 PL 역할** | `pl` 역할 추가 — developer 권한 + 팀 내 티켓 병합·우선순위 조정 |
+| **온보딩 투어** | 첫 로그인 시 주요 기능 자동 안내, localStorage 완료 기록, 헤더에서 재시작 가능 |
+| **리포트 PDF 내보내기** | 리포트 페이지 "PDF 내보내기" 버튼 → 브라우저 인쇄 대화상자로 PDF 저장 |
+| **간트 차트 (`/gantt`)** | 티켓 간 blocks/relates_to 의존 관계 SVG 시각화 — 14일/30일/60일 기간 필터 |
+| **시간 추적** | 티켓 상세 > 시간 탭에서 작업 소요 시간 입력·조회·삭제, 총 합계 표시 |
+| **SLA 대시보드 (`/sla`)** | 위반·임박·정상 카운트 카드, SLA 경과율 프로그레스 바, 7일 트렌드 차트 (agent 이상) |
+| **대시보드 위젯 커스터마이징** | 홈 화면 ⚙️ 버튼으로 위젯 표시/숨김·순서 변경, 서버에 개인 설정 저장 |
+| **캘린더 뷰 (`/calendar`)** | 티켓 생성일·SLA 기한 기반 월간 캘린더, 날짜 클릭 시 티켓 목록 패널 |
+| **활성 세션 관리** | 프로필 페이지 하단에서 로그인 기기 목록 확인, 개별/전체 세션 종료 가능 |
+| **시간 추적 리포트** | `/reports` 시간 추적 탭 — 팀원별·날짜별 소요 시간 집계, 비율 막대 차트, 최근 50건 내역 |
+| **SLA 준수율 리포트** | `/reports` SLA 리포트 탭 — 4/12/26/52주 주별 트렌드 누적 막대 차트, 우선순위별 분석, PDF 인쇄 |
+| **멀티 프로젝트 통합 뷰** | `/multi-project` — 모든 GitLab 프로젝트 SLA·시간 현황 비교, 준수율 수평 바 차트 (agent 이상) |
+| **자동화 규칙 실행 이력** | `/admin/automation-rules` Logs 탭 — 최근 200건 실행 이력, 매칭만 보기 필터 |
 | **테스트중 상태** | `testing` 상태 추가 — 처리중 → 테스트중 → 처리완료 워크플로우 지원 |
 | **업무 부하 현황** | 담당자별 할당·해결율·SLA 충족률·평점 일람 페이지 (`/admin/workload`) |
 | **알림 채널 관리** | 이메일·Telegram 채널 상태 확인·전환 UI (`/admin/notification-channels`) |
@@ -1736,6 +1814,11 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 | 항목 | 수정 내용 |
 |------|---------|
+| SW 페이지 로드 지연 | `sw.js` navigation 요청 가로채기 → `if (request.mode === 'navigate') return` 조기 반환, CACHE_NAME zenith-v3 |
+| Flower 404 / 401 | `FLOWER_URL` prefix `/flower` 누락 · `FLOWER_UNAUTHENTICATED_API=true` docker-compose 미설정 → 수정 |
+| Flower 응답 타임아웃 | httpx base_url RFC 3986 절대 경로 버그 · `?refresh=1` blocking → URL 직접 연결 + 파라미터 제거 |
+| 시스템 모니터링 unknown | health 엔드포인트 `{status, checks:{db,redis}}` 중첩 구조 → 프론트 flatten 파싱 수정 |
+| `celery_broker` 상태 누락 | `/health` 엔드포인트에 Redis ping 기반 `celery_broker` 체크 추가 |
 | `problem_of` 링크 400 차단 | `templates.py` `allowed_types`에 `"problem_of"` 누락 → 추가, 문제 관리 정상 동작 |
 | 대시보드 위젯 JSONB 저장 안됨 | `dashboard.py` PUT에 `flag_modified(config, "widgets")` 누락 → 추가 |
 | 자동화 규칙 조건·액션 저장 안됨 | `automation.py` PATCH에 JSONB 필드별 `flag_modified()` 누락 → 추가 |

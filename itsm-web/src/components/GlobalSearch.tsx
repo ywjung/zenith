@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
 
 interface SearchResult {
@@ -12,9 +13,6 @@ interface SearchResult {
   category: string
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  open: '접수', in_progress: '처리중', waiting: '대기', resolved: '해결', closed: '완료',
-}
 const PRIORITY_COLORS: Record<string, string> = {
   critical: 'text-red-500 dark:text-red-400',
   high: 'text-orange-500 dark:text-orange-400',
@@ -39,6 +37,7 @@ function clearHistory() {
 }
 
 export default function GlobalSearch() {
+  const t = useTranslations()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [history, setHistory] = useState<string[]>([])
@@ -145,7 +144,7 @@ export default function GlobalSearch() {
   const showResults = open && query.length >= 2
 
   return (
-    <div ref={containerRef} className="relative hidden md:block">
+    <div ref={containerRef} className="relative hidden md:block" data-tour="global-search">
       {/* 입력창 — 헤더가 파란색이라 입력창도 파란색 계열 유지 */}
       <div className="relative">
         <input
@@ -156,7 +155,7 @@ export default function GlobalSearch() {
           onKeyDown={handleKeyDown}
           onFocus={() => setOpen(true)}
           data-global-search
-          placeholder="티켓 검색… (⌘K)"
+          placeholder={t('search.placeholder')}
           className="bg-blue-600 dark:bg-blue-900/60 text-white placeholder-blue-300 dark:placeholder-blue-400 text-sm px-3 py-1.5 pl-8 rounded-md w-52 focus:outline-none focus:ring-2 focus:ring-white/40 focus:w-72 transition-all border-0"
         />
         <svg className="absolute left-2 top-2 w-4 h-4 text-blue-300 dark:text-blue-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -178,12 +177,12 @@ export default function GlobalSearch() {
           {showHistory && (
             <>
               <div className="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">최근 검색</span>
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('search.recent')}</span>
                 <button
                   onClick={() => { clearHistory(); setHistory([]) }}
                   className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                 >
-                  전체 삭제
+                  {t('search.clear_all')}
                 </button>
               </div>
               {history.map((h, i) => (
@@ -233,15 +232,15 @@ export default function GlobalSearch() {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{r.title}</div>
                     <div className="flex gap-2 mt-0.5">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">{STATUS_LABELS[r.status] ?? r.status}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{((): string => { try { return t(`ticket.status.${r.status}`) } catch { return r.status } })()}</span>
                       <span className={`text-xs ${PRIORITY_COLORS[r.priority] ?? 'text-gray-500 dark:text-gray-400'}`}>{r.priority}</span>
                     </div>
                   </div>
                 </button>
               ))}
               <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 text-xs text-gray-400 dark:text-gray-500 flex justify-between">
-                <span>↑↓ 이동 · Enter 선택 · Esc 닫기</span>
-                <span>{results.length}개 결과</span>
+                <span>{t('search.hint')}</span>
+                <span>{t('search.results', { count: results.length })}</span>
               </div>
             </>
           )}
@@ -249,7 +248,7 @@ export default function GlobalSearch() {
           {/* 검색 오류 */}
           {showResults && searchError && !loading && (
             <div className="px-4 py-4 text-sm text-red-500 dark:text-red-400 text-center">
-              검색 중 오류가 발생했습니다. 다시 시도해 주세요.
+              {t('search.error')}
             </div>
           )}
 
@@ -257,7 +256,7 @@ export default function GlobalSearch() {
           {showResults && results.length === 0 && !loading && !searchError && (
             <div className="px-4 py-4 text-sm text-gray-500 dark:text-gray-400 text-center">
               <span className="text-2xl block mb-1">🔍</span>
-              &quot;{query}&quot;에 대한 결과가 없습니다.
+              {t('search.no_results', { query })}
             </div>
           )}
         </div>

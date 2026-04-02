@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { fetchKBArticles } from '@/lib/api'
 import type { KBArticle } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
@@ -20,6 +21,7 @@ function KBListContent() {
   const { serviceTypes, getEmoji, getLabel } = useServiceTypes()
   const searchParams = useSearchParams()
   const searchRef = useRef<HTMLInputElement>(null)
+  const t = useTranslations('kb')
 
   const [articles, setArticles] = useState<KBArticle[]>([])
   const [allArticles, setAllArticles] = useState<KBArticle[]>([])
@@ -35,22 +37,26 @@ function KBListContent() {
 
   useEffect(() => {
     setLoading(true)
-    const noFilter = !q && !category && !selectedTag
-    const pp = noFilter ? 100 : perPage
-    fetchKBArticles({ q: q || undefined, category: category || undefined, tags: selectedTag || undefined, page: noFilter ? 1 : page, per_page: pp })
+    fetchKBArticles({ q: q || undefined, category: category || undefined, tags: selectedTag || undefined, page, per_page: perPage })
       .then((data) => {
-        setArticles(noFilter ? data.articles.slice(0, perPage) : data.articles)
+        setArticles(data.articles)
         setTotal(data.total)
-        if (noFilter) setAllArticles(data.articles)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [q, category, selectedTag, page])
 
+  useEffect(() => {
+    if (q || category || selectedTag) return
+    fetchKBArticles({ per_page: 100 })
+      .then((data) => setAllArticles(data.articles))
+      .catch(() => {/* 태그 통계 실패 시 무시 */})
+  }, [q, category, selectedTag])
+
   const totalPages = Math.max(1, Math.ceil(total / perPage))
 
   const tagCounts: Record<string, number> = {}
-  for (const t of allArticles.flatMap((a) => a.tags ?? [])) tagCounts[t] = (tagCounts[t] ?? 0) + 1
+  for (const tag of allArticles.flatMap((a) => a.tags ?? [])) tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
   const popularTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 12)
 
   const hasFilter = !!(q || category || selectedTag)
@@ -61,10 +67,20 @@ function KBListContent() {
 
   return (
     <div className="w-full">
+      {/* 페이지 제목 */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          {t('hero_title')}
+        </h1>
+      </div>
+
       {/* Hero */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">📚 지식베이스</h1>
-        <p className="text-gray-500 dark:text-gray-400 mb-5 text-sm">IT 문제 해결 가이드와 팁을 검색하세요</p>
+      <div className="mb-8">
+        <p className="text-gray-500 dark:text-gray-400 mb-5 text-sm">{t('hero_desc')}</p>
         <form
           onSubmit={(e) => { e.preventDefault(); setQ(qInput); setCategory(''); setSelectedTag(''); setPage(1) }}
           className="flex gap-2 w-full"
@@ -74,7 +90,7 @@ function KBListContent() {
             <input
               ref={searchRef}
               type="text"
-              placeholder="무엇을 도와드릴까요? (예: VPN 연결, 비밀번호 재설정)"
+              placeholder={t('search_placeholder')}
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
               className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-xl pl-10 pr-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -84,7 +100,7 @@ function KBListContent() {
             type="submit"
             className="bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-blue-700 shadow-sm whitespace-nowrap"
           >
-            검색
+            {t('search_btn')}
           </button>
         </form>
       </div>
@@ -92,9 +108,9 @@ function KBListContent() {
       {/* Category cards */}
       {!hasFilter && (
         <div className="grid grid-cols-5 gap-3 mb-7">
-          {serviceTypes.filter(t => t.enabled).map((c) => {
-            const count = allArticles.filter((a) => a.category === c.label || a.category === c.value).length
-            const active = category === c.label || category === c.value
+          {serviceTypes.filter(st => st.enabled).map((c) => {
+            const count = allArticles.filter((a) => a.category === c.label || a.category === c.value || a.category === c.description).length
+            const active = category === c.label || category === c.value || category === c.description
             return (
               <button
                 key={c.value}
@@ -107,7 +123,7 @@ function KBListContent() {
               >
                 <div className="text-2xl mb-1">{c.emoji}</div>
                 <div className={`text-xs font-semibold ${active ? '' : 'text-gray-700 dark:text-gray-300'}`}>{c.label}</div>
-                <div className={`text-xs mt-0.5 ${active ? '' : 'text-gray-400 dark:text-gray-500'}`}>{count}개</div>
+                <div className={`text-xs mt-0.5 ${active ? '' : 'text-gray-400 dark:text-gray-500'}`}>{t('article_count', { count })}</div>
               </button>
             )
           })}
@@ -117,10 +133,10 @@ function KBListContent() {
       {/* Active filters */}
       {hasFilter && (
         <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="text-xs text-gray-500 dark:text-gray-400">필터:</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">{t('filter_label')}</span>
           {q && (
             <span className="inline-flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 rounded-full px-2.5 py-1">
-              검색: &ldquo;{q}&rdquo;
+              {t('filter_search')} &ldquo;{q}&rdquo;
               <button onClick={() => { setQ(''); setQInput(''); setPage(1) }} className="hover:text-red-500 ml-0.5">✕</button>
             </span>
           )}
@@ -136,8 +152,8 @@ function KBListContent() {
               <button onClick={() => { setSelectedTag(''); setPage(1) }} className="hover:text-red-500 ml-0.5">✕</button>
             </span>
           )}
-          <button onClick={clearAll} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 ml-1">초기화</button>
-          <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">{total}건</span>
+          <button onClick={clearAll} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 ml-1">{t('filter_reset')}</button>
+          <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">{t('result_count', { total })}</span>
         </div>
       )}
 
@@ -147,7 +163,7 @@ function KBListContent() {
           <div className="flex items-center justify-between mb-3">
             {!hasFilter && (
               <div className="text-sm text-gray-500 dark:text-gray-400">
-                전체 <span className="font-semibold text-gray-900 dark:text-gray-100">{total}</span>개 아티클
+                {t('total_articles', { total })}
               </div>
             )}
             {isAgent && (
@@ -155,7 +171,7 @@ function KBListContent() {
                 href="/kb/new"
                 className="ml-auto bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 font-medium"
               >
-                + 아티클 작성
+                {t('new_article')}
               </Link>
             )}
           </div>
@@ -185,10 +201,10 @@ function KBListContent() {
           ) : articles.length === 0 ? (
             <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500">
               <div className="text-4xl mb-3">📭</div>
-              <p>아티클이 없습니다.</p>
+              <p>{t('no_articles')}</p>
               {hasFilter && (
                 <button onClick={clearAll} className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                  필터 초기화
+                  {t('reset_filters')}
                 </button>
               )}
             </div>
@@ -215,13 +231,13 @@ function KBListContent() {
                             {a.title}
                           </span>
                           {!a.published && (
-                            <span className="flex-shrink-0 text-xs bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-700 px-1.5 py-0.5 rounded">초안</span>
+                            <span className="flex-shrink-0 text-xs bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-700 px-1.5 py-0.5 rounded">{t('draft_badge')}</span>
                           )}
                         </div>
                         <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500 mb-1.5">
                           {a.author_name && <span>{formatName(a.author_name)}</span>}
                           <span>👁 {a.view_count}</span>
-                          {mins && <span>📖 {mins}분</span>}
+                          {mins && <span>📖 {t('reading_time', { mins })}</span>}
                           <span className="ml-auto flex-shrink-0">{formatDate(a.updated_at, 'short')}</span>
                         </div>
                         {a.tags && a.tags.length > 0 && (
@@ -256,7 +272,7 @@ function KBListContent() {
                 disabled={page === 1}
                 className="px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40"
               >
-                ← 이전
+                {t('prev_page')}
               </button>
               <span className="text-sm text-gray-600 dark:text-gray-400">{page} / {totalPages}</span>
               <button
@@ -264,7 +280,7 @@ function KBListContent() {
                 disabled={page === totalPages}
                 className="px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40"
               >
-                다음 →
+                {t('next_page')}
               </button>
             </div>
           )}
@@ -274,7 +290,7 @@ function KBListContent() {
         {popularTags.length > 0 && (
           <div className="w-44 flex-shrink-0">
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">인기 태그</div>
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('popular_tags')}</div>
               <div className="flex flex-col gap-0.5">
                 {popularTags.map(([tag, count]) => (
                   <button

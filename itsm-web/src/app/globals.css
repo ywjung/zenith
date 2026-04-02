@@ -298,6 +298,10 @@
 
   /* 다크모드 재정의 */
   .dark body { background: #fff !important; color: #000 !important; }
+  .dark, .dark * { color-scheme: light !important; }
+  .dark .bg-gray-900, .dark .bg-gray-800, .dark .bg-gray-950 {
+    background-color: #fff !important;
+  }
 
   /* 티켓 상세 콘텐츠 전체 너비 */
   .print-full { width: 100% !important; max-width: 100% !important; }
@@ -310,4 +314,25 @@
 
   /* 버튼, 폼 요소 숨김 */
   button, select, input[type="text"], input[type="search"], textarea { display: none !important; }
+
+  /* ── 리포트 페이지 전용 ─────────────────────────────────────── */
+
+  /* A4 가로 방향 */
+  @page { margin: 1.5cm; size: A4 landscape; }
+
+  /* 차트/섹션 페이지 분리 방지 */
+  .print-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* 인쇄 전용 리포트 헤더 표시 */
+  .print-report-header { display: block !important; }
+
+  /* 탭 UI 숨기고 모든 탭 콘텐츠 강제 표시 */
+  .report-tab-nav { display: none !important; }
+  .report-tab-panel { display: block !important; }
+
+  /* 날짜 필터 패널 숨김 */
+  .report-filter-panel { display: none !important; }
 }

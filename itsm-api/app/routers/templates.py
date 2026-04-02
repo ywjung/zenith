@@ -240,6 +240,33 @@ def log_time(
     return _time_to_dict(entry)
 
 
+@time_router.delete("/{iid}/time/{entry_id}", status_code=204)
+def delete_time_entry(
+    iid: int,
+    entry_id: int,
+    project_id: str,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_developer),
+):
+    entry = db.query(TimeEntry).filter(
+        TimeEntry.id == entry_id,
+        TimeEntry.issue_iid == iid,
+        TimeEntry.project_id == project_id,
+    ).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="시간 기록을 찾을 수 없습니다.")
+
+    role = user.get("role", "user")
+    current_uid = str(user.get("sub", ""))
+    is_admin = role in ("admin", "agent")
+    is_owner = entry.agent_id == current_uid
+    if not is_admin and not is_owner:
+        raise HTTPException(status_code=403, detail="본인 기록 또는 관리자만 삭제할 수 있습니다.")
+
+    db.delete(entry)
+    db.commit()
+
+
 def _time_to_dict(e: TimeEntry) -> dict:
     return {
         "id": e.id,

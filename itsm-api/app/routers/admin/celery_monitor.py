@@ -1,6 +1,8 @@
 """Admin Celery 모니터링 엔드포인트 — Flower API 프록시."""
 import logging
 import os
+import time
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,28 +13,46 @@ logger = logging.getLogger(__name__)
 
 celery_monitor_router = APIRouter()
 
-FLOWER_URL = os.environ.get("FLOWER_URL", "http://itsm-flower-1:5555")
+FLOWER_URL = os.environ.get("FLOWER_URL", "http://itsm-flower-1:5555/flower")
+FLOWER_USER = os.environ.get("FLOWER_USER", "")
+FLOWER_PASSWORD = os.environ.get("FLOWER_PASSWORD", "")
+
+# Flower 장애 시 반환할 캐시 (최대 60초 유효)
+_flower_cache: dict[str, tuple[float, Any]] = {}
+_FLOWER_CACHE_TTL = 60
 
 
-def _flower_client() -> httpx.Client:
-    return httpx.Client(base_url=FLOWER_URL, timeout=5)
+def _get_flower(path: str, *, use_cache: bool = True) -> dict | list:
+    """Flower REST API를 호출하고 JSON을 반환한다.
+    Flower 장애 시 캐시된 값을 반환 (graceful degradation).
+    캐시도 없으면 503.
+    """
+    url = FLOWER_URL.rstrip("/") + "/" + path.lstrip("/")
+    cache_key = path
+    auth = (FLOWER_USER, FLOWER_PASSWORD) if FLOWER_USER and FLOWER_PASSWORD else None
 
-
-def _get_flower(path: str) -> dict | list:
-    """Flower REST API를 호출하고 JSON을 반환한다. 미연결 시 503."""
     try:
-        with _flower_client() as client:
-            resp = client.get(path)
+        with httpx.Client(timeout=5, auth=auth) as client:
+            resp = client.get(url)
             resp.raise_for_status()
-            return resp.json()
-    except httpx.ConnectError:
-        raise HTTPException(status_code=503, detail="Flower 서비스에 연결할 수 없습니다.")
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=503, detail="Flower 응답 시간 초과.")
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
-    except Exception as exc:
-        logger.warning("Flower API 호출 실패: %s", exc)
+            data = resp.json()
+            # 성공 시 캐시 갱신
+            if use_cache:
+                _flower_cache[cache_key] = (time.monotonic(), data)
+            return data
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError, Exception) as exc:
+        logger.warning("Flower API 호출 실패 (%s): %s", path, exc)
+        # 캐시 확인
+        if use_cache and cache_key in _flower_cache:
+            ts, cached = _flower_cache[cache_key]
+            if time.monotonic() - ts < _FLOWER_CACHE_TTL:
+                logger.info("Flower 캐시 반환 (age=%.0fs): %s", time.monotonic() - ts, path)
+                return cached
+        # 캐시도 만료/없음 — 503
+        if isinstance(exc, httpx.ConnectError):
+            raise HTTPException(status_code=503, detail="Flower 서비스에 연결할 수 없습니다.")
+        if isinstance(exc, httpx.TimeoutException):
+            raise HTTPException(status_code=503, detail="Flower 응답 시간 초과.")
         raise HTTPException(status_code=503, detail=f"Flower 오류: {exc}")
 
 
@@ -43,7 +63,7 @@ def _get_flower(path: str) -> dict | list:
 @celery_monitor_router.get("/celery/flower/stats")
 def get_flower_stats(_user: dict = Depends(require_admin)) -> dict:
     """Flower API에서 워커·큐·태스크 요약 통계를 반환한다."""
-    workers_raw = _get_flower("/api/workers?refresh=1")
+    workers_raw = _get_flower("/api/workers")
 
     workers = []
     total_active = 0
@@ -107,7 +127,7 @@ def get_flower_stats(_user: dict = Depends(require_admin)) -> dict:
 @celery_monitor_router.get("/celery/flower/workers")
 def get_flower_workers(_user: dict = Depends(require_admin)) -> list:
     """Flower API에서 워커별 상세 정보를 반환한다."""
-    workers_raw = _get_flower("/api/workers?refresh=1")
+    workers_raw = _get_flower("/api/workers")
     result = []
 
     if not isinstance(workers_raw, dict):

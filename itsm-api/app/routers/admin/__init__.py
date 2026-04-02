@@ -237,6 +237,7 @@ def list_audit_logs(
 
 
 @router.get("/audit/download")
+@limiter.limit("5/minute")
 def download_audit_logs(
     request: Request,
     resource_type: Optional[str] = None,
@@ -543,7 +544,7 @@ def get_service_type_usage(
 def list_service_types(
     db: Session = Depends(get_db),
 ):
-    """서비스 유형 목록 조회 (인증 불필요 — 로그인 전 티켓 등록 폼에서도 사용)."""
+    """서비스 유형 목록 조회 — 포털 티켓 등록 폼(로그인 전)에서 사용하므로 공개 유지."""
     types = db.query(ServiceType).order_by(ServiceType.sort_order, ServiceType.id).all()
     return [ServiceTypeResponse.model_validate(t).model_dump() for t in types]
 
@@ -828,10 +829,13 @@ def sync_all_labels(_user: dict = Depends(require_admin)):
 
 
 @router.get("/filter-options")
-def get_filter_options(db: Session = Depends(get_db)):
+def get_filter_options(
+    db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
     """티켓 목록 필터에 필요한 옵션(상태·우선순위·카테고리)을 동적으로 반환한다.
 
-    - 상태: 워크플로우에 정의된 STATUS_KO 기반 (인증 불필요 — 로그인 전 포털에서도 사용)
+    - 상태: 워크플로우에 정의된 STATUS_KO 기반
     - 우선순위: SLA 정책 테이블에서 조회 (없으면 기본값 사용)
     - 카테고리: service_types 테이블에서 조회
     """
@@ -910,8 +914,11 @@ _ROLE_LABEL_DEFAULTS: dict[str, str] = {
 
 
 @router.get("/role-labels")
-def get_role_labels(db: Session = Depends(get_db)):
-    """역할 표시명 반환 — 로그인 여부 무관(표시용 레이블이므로 보안 영향 없음)."""
+def get_role_labels(
+    db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """역할 표시명 반환."""
     rows = {
         r.key[len("role_label."):]: r.value
         for r in db.query(SystemSetting).filter(SystemSetting.key.like("role_label.%")).all()
@@ -1252,7 +1259,7 @@ def _field_to_dict(f: CustomFieldDef) -> dict:
 def list_custom_fields(
     include_disabled: bool = False,
     db: Session = Depends(get_db),
-    _user: dict = Depends(require_agent),
+    _user: dict = Depends(get_current_user),
 ):
     q = db.query(CustomFieldDef)
     if not include_disabled:
@@ -1518,6 +1525,134 @@ def get_celery_stats(_user: dict = Depends(require_admin)):
 
 
 # ---------------------------------------------------------------------------
+# Redis 캐시 통계
+# ---------------------------------------------------------------------------
+
+@router.get("/redis/stats")
+def get_redis_stats(_user: dict = Depends(require_admin)):
+    """Redis 캐시 통계 — 히트율, 메모리, 연결 수를 반환한다."""
+    from ...redis_client import get_redis
+    r = get_redis()
+    if not r:
+        raise HTTPException(status_code=503, detail="Redis 연결 불가")
+
+    try:
+        info = r.info()
+        keyspace = r.info("keyspace")
+
+        hits = info.get("keyspace_hits", 0)
+        misses = info.get("keyspace_misses", 0)
+        total = hits + misses
+        hit_rate = round(hits / total * 100, 2) if total > 0 else 0.0
+
+        used_memory = info.get("used_memory", 0)
+        max_memory = info.get("maxmemory", 0)
+        memory_usage_pct = round(used_memory / max_memory * 100, 1) if max_memory > 0 else None
+
+        db_keys: dict[str, int] = {}
+        for db_name, db_info in keyspace.items():
+            db_keys[db_name] = db_info.get("keys", 0) if isinstance(db_info, dict) else 0
+        total_keys = sum(db_keys.values())
+
+        itsm_cache_count = 0
+        cursor = 0
+        while True:
+            cursor, keys = r.scan(cursor, match="itsm:*", count=500)
+            itsm_cache_count += len(keys)
+            if cursor == 0:
+                break
+
+        return {
+            "hit_rate_pct": hit_rate,
+            "hits": hits,
+            "misses": misses,
+            "total_commands": total,
+            "used_memory_human": info.get("used_memory_human", "0"),
+            "used_memory_bytes": used_memory,
+            "max_memory_bytes": max_memory,
+            "memory_usage_pct": memory_usage_pct,
+            "total_keys": total_keys,
+            "itsm_cache_keys": itsm_cache_count,
+            "connected_clients": info.get("connected_clients", 0),
+            "uptime_seconds": info.get("uptime_in_seconds", 0),
+            "redis_version": info.get("redis_version", ""),
+            "evicted_keys": info.get("evicted_keys", 0),
+            "expired_keys": info.get("expired_keys", 0),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Redis 통계 수집 실패: {e}")
+
+
+@router.delete("/redis/cache", status_code=200)
+def flush_itsm_cache(_user: dict = Depends(require_admin)):
+    """ITSM 전용 캐시 키(itsm:*) 삭제."""
+    from ...redis_client import get_redis, scan_delete
+    r = get_redis()
+    if not r:
+        raise HTTPException(status_code=503, detail="Redis 연결 불가")
+    try:
+        scan_delete(r, "itsm:*")
+        return {"message": "ITSM 캐시가 초기화되었습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"캐시 초기화 실패: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 커서 기반 페이지네이션 — 감사 로그 (대용량 최적화)
+# ---------------------------------------------------------------------------
+
+@router.get("/audit/cursor")
+def list_audit_cursor(
+    cursor_id: int = Query(default=0, description="마지막으로 받은 항목의 ID (0이면 처음)"),
+    limit: int = Query(default=50, ge=1, le=200),
+    actor_username: Optional[str] = Query(default=None),
+    resource_type: Optional[str] = Query(default=None),
+    action: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_admin),
+):
+    """감사 로그 커서 기반 페이지네이션 (대용량 환경 최적화).
+
+    cursor_id=0 → 가장 최신부터, cursor_id=N → N보다 작은(오래된) 항목부터
+    """
+    q = db.query(AuditLog)
+    if cursor_id > 0:
+        q = q.filter(AuditLog.id < cursor_id)
+    if actor_username:
+        q = q.filter(AuditLog.actor_username == actor_username)
+    if resource_type:
+        q = q.filter(AuditLog.resource_type == resource_type)
+    if action:
+        q = q.filter(AuditLog.action == action)
+
+    items = q.order_by(AuditLog.id.desc()).limit(limit + 1).all()
+    has_more = len(items) > limit
+    if has_more:
+        items = items[:limit]
+
+    def _to_dict(log: AuditLog) -> dict:
+        return {
+            "id": log.id,
+            "actor_username": log.actor_username,
+            "actor_name": log.actor_name,
+            "actor_role": log.actor_role,
+            "action": log.action,
+            "resource_type": log.resource_type,
+            "resource_id": log.resource_id,
+            "old_value": log.old_value,
+            "new_value": log.new_value,
+            "ip_address": str(log.ip_address) if log.ip_address else None,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
+
+    return {
+        "items": [_to_dict(i) for i in items],
+        "next_cursor": items[-1].id if has_more and items else None,
+        "has_more": has_more,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Sub-module routers
 # ---------------------------------------------------------------------------
 from .announcements import announcements_router
@@ -1528,6 +1663,7 @@ from .email_templates import email_templates_router
 from .business_hours import business_hours_router
 from .celery_monitor import celery_monitor_router
 from .db_cleanup import db_cleanup_router
+from .failed_notifications import failed_notifications_router
 
 router.include_router(announcements_router)
 router.include_router(api_keys_router)
@@ -1537,3 +1673,4 @@ router.include_router(email_templates_router)
 router.include_router(db_cleanup_router)
 router.include_router(business_hours_router)
 router.include_router(celery_monitor_router)
+router.include_router(failed_notifications_router)

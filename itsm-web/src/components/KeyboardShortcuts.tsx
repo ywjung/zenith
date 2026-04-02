@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 
 export default function KeyboardShortcuts() {
   const router = useRouter()
+  const t = useTranslations()
   const [showHelp, setShowHelp] = useState(false)
   const [gMode, setGMode] = useState(false)
   const gModeRef = useRef(false)
@@ -69,31 +71,31 @@ export default function KeyboardShortcuts() {
 
   if (!showHelp) return gMode ? (
     <div className="fixed bottom-4 right-4 bg-gray-900 dark:bg-gray-700 text-white text-xs px-3 py-2 rounded-lg z-50 shadow-lg border border-gray-700 dark:border-gray-600">
-      <span className="opacity-70">g +</span> 단축키 입력 중…
+      <span className="opacity-70">g +</span> {t('shortcuts.g_mode')}
     </div>
   ) : null
 
   const shortcuts = [
-    { key: 'g → t', desc: '티켓 목록' },
-    { key: 'g → k', desc: '칸반 보드' },
-    { key: 'g → b', desc: '지식베이스' },
-    { key: 'g → r', desc: '리포트' },
-    { key: 'g → a', desc: '관리' },
-    { key: 'g → p', desc: '포털 (게스트)' },
-    { key: 'g → h', desc: '도움말' },
-    { key: 'n', desc: '새 티켓 등록' },
-    { key: 'r', desc: '현재 페이지 새로고침' },
-    { key: '/', desc: '검색창 포커스' },
-    { key: '⌘K / Ctrl+K', desc: '글로벌 검색' },
-    { key: '?', desc: '단축키 도움말' },
-    { key: 'Esc', desc: '닫기' },
+    { key: 'g → t', desc: t('shortcuts.ticket_list') },
+    { key: 'g → k', desc: t('shortcuts.kanban_board') },
+    { key: 'g → b', desc: t('shortcuts.kb') },
+    { key: 'g → r', desc: t('shortcuts.reports') },
+    { key: 'g → a', desc: t('shortcuts.admin') },
+    { key: 'g → p', desc: t('shortcuts.portal') },
+    { key: 'g → h', desc: t('shortcuts.help') },
+    { key: 'n', desc: t('shortcuts.new_ticket') },
+    { key: 'r', desc: t('shortcuts.refresh') },
+    { key: '/', desc: t('shortcuts.search_focus') },
+    { key: '⌘K / Ctrl+K', desc: t('shortcuts.global_search') },
+    { key: '?', desc: t('shortcuts.shortcut_help') },
+    { key: 'Esc', desc: t('shortcuts.close') },
   ]
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" onClick={() => setShowHelp(false)}>
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">키보드 단축키</h2>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">{t('shortcuts.title')}</h2>
           <button onClick={() => setShowHelp(false)} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-lg leading-none">✕</button>
         </div>
         <div className="p-4 space-y-1">
@@ -105,7 +107,7 @@ export default function KeyboardShortcuts() {
           ))}
         </div>
         <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">
-          입력창 포커스 중에는 단축키가 비활성화됩니다.
+          {t('shortcuts.hint')}
         </div>
       </div>
     </div>

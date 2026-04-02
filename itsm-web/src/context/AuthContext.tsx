@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { logger } from '@/lib/logger'
 
 interface User {
   sub: string
@@ -36,12 +37,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // 로그인/콜백 페이지에서는 /api/auth/me 호출 스킵 — 미인증 상태에서 401 콘솔 노이즈 방지
+    const AUTH_PATHS = ['/login', '/auth/callback']
+    if (AUTH_PATHS.some(p => window.location.pathname.startsWith(p))) {
+      setLoading(false)
+      return
+    }
     fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
       .then((res) => {
         if (res.ok) return res.json()
         // 401 = unauthenticated (expected); other errors = network/server issue
         if (res.status !== 401) {
-          console.warn('[Auth] /auth/me returned', res.status)
+          logger.warn('[Auth] /auth/me returned', res.status)
         }
         return null
       })

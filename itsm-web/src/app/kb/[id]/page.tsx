@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { fetchKBArticle, deleteKBArticle, publishKBArticle, fetchKBArticles, fetchKBRevisions, fetchKBRevisionDetail, restoreKBRevision } from '@/lib/api'
 import type { KBRevision } from '@/lib/api'
 import type { KBArticle } from '@/types'
@@ -11,12 +12,12 @@ import { useAuth } from '@/context/AuthContext'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
 import { formatName } from '@/lib/utils'
 
-const CAT_META: Record<string, { label: string; icon: string; color: string }> = {
-  hardware: { label: '하드웨어',  icon: '🖥️', color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300' },
-  software: { label: '소프트웨어', icon: '💻', color: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300' },
-  network:  { label: '네트워크',  icon: '🌐', color: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300' },
-  account:  { label: '계정/권한', icon: '👤', color: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300' },
-  other:    { label: '기타',      icon: '📋', color: 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300' },
+const CAT_META: Record<string, { icon: string; color: string }> = {
+  hardware: { icon: '🖥️', color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300' },
+  software: { icon: '💻', color: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300' },
+  network:  { icon: '🌐', color: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300' },
+  account:  { icon: '👤', color: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300' },
+  other:    { icon: '📋', color: 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300' },
 }
 
 type Heading = { level: number; text: string; id: string }
@@ -53,6 +54,8 @@ function ArticleContent() {
   const params = useParams()
   const router = useRouter()
   const { isAgent, isAdmin } = useAuth()
+  const t = useTranslations('kb')
+  const tc = useTranslations('ticket.category')
   const [article, setArticle] = useState<KBArticle | null>(null)
   const [related, setRelated] = useState<KBArticle[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,6 +67,13 @@ function ArticleContent() {
   const [previewLoading, setPreviewLoading] = useState(false)
 
   const idOrSlug = params?.id as string
+
+  const KNOWN_CATEGORIES = ['hardware', 'software', 'network', 'account', 'other',
+    '하드웨어', '소프트웨어', '네트워크', '계정', '기타']
+  const getCatLabel = (key: string) => {
+    if (!key || !KNOWN_CATEGORIES.includes(key)) return key
+    try { return tc(key as Parameters<typeof tc>[0]) } catch { return key }
+  }
 
   useEffect(() => {
     if (!idOrSlug) return
@@ -81,12 +91,12 @@ function ArticleContent() {
   }, [idOrSlug])
 
   const handleDelete = async () => {
-    if (!article || !confirm('이 아티클을 삭제하시겠습니까?')) return
+    if (!article || !confirm(t('delete_confirm'))) return
     try {
       await deleteKBArticle(article.id)
       router.push('/kb')
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+      alert(e instanceof Error ? e.message : t('delete_failed'))
     }
   }
 
@@ -112,7 +122,7 @@ function ArticleContent() {
   }
 
   const handleRestore = async (rev: KBRevision) => {
-    if (!article || !confirm(`버전 ${rev.revision_number}으로 복원하시겠습니까?`)) return
+    if (!article || !confirm(t('restore_confirm', { n: rev.revision_number }))) return
     setRestoringId(rev.id)
     try {
       await restoreKBRevision(article.id, rev.id)
@@ -121,7 +131,7 @@ function ArticleContent() {
       setRevisions([])
       setShowRevisions(false)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '복원에 실패했습니다.')
+      alert(e instanceof Error ? e.message : t('restore_failed'))
     } finally {
       setRestoringId(null)
     }
@@ -133,15 +143,16 @@ function ArticleContent() {
       const result = await publishKBArticle(article.id, !article.published)
       setArticle((a) => a ? { ...a, published: result.published } : a)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '변경에 실패했습니다.')
+      alert(e instanceof Error ? e.message : t('toggle_failed'))
     }
   }
 
-  if (loading) return <div className="text-center py-16 text-gray-400 dark:text-gray-500">불러오는 중...</div>
+  if (loading) return <div className="text-center py-16 text-gray-400 dark:text-gray-500">{t('loading')}</div>
   if (error) return <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg p-4">⚠️ {error}</div>
   if (!article) return null
 
-  const cat = article.category ? CAT_META[article.category] : null
+  const catMeta = article.category ? CAT_META[article.category] : null
+  const catLabel = article.category ? getCatLabel(article.category) : null
   const headings = extractHeadings(article.content ?? '')
   const mins = readingMinutes(article.content ?? '')
 
@@ -149,12 +160,12 @@ function ArticleContent() {
     <div className="w-full">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 mb-5 flex-wrap">
-        <Link href="/kb" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">지식베이스</Link>
-        {cat && (
+        <Link href="/kb" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">{t('breadcrumb')}</Link>
+        {catMeta && catLabel && (
           <>
             <span>›</span>
             <Link href={`/kb?category=${article.category}`} className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-              {cat.icon} {cat.label}
+              {catMeta.icon} {catLabel}
             </Link>
           </>
         )}
@@ -168,14 +179,14 @@ function ArticleContent() {
           {/* Article header */}
           <div className="p-6 border-b border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-2 mb-3">
-              {cat && (
-                <span className={`text-xs border px-2.5 py-0.5 rounded-full font-medium ${cat.color}`}>
-                  {cat.icon} {cat.label}
+              {catMeta && catLabel && (
+                <span className={`text-xs border px-2.5 py-0.5 rounded-full font-medium ${catMeta.color}`}>
+                  {catMeta.icon} {catLabel}
                 </span>
               )}
               {!article.published && (
                 <span className="text-xs bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-700 px-2.5 py-0.5 rounded-full">
-                  초안 (비공개)
+                  {t('draft_private')}
                 </span>
               )}
             </div>
@@ -193,8 +204,8 @@ function ArticleContent() {
                   </div>
                 )}
                 <span className="flex items-center gap-1">👁 {article.view_count}</span>
-                <span className="flex items-center gap-1">📖 {mins}분</span>
-                <span>{new Date(article.updated_at).toLocaleDateString('ko-KR')} 업데이트</span>
+                <span className="flex items-center gap-1">📖 {t('reading_time', { mins })}</span>
+                <span>{new Date(article.updated_at).toLocaleDateString()} {t('updated_label')}</span>
               </div>
 
               {isAgent && (
@@ -203,7 +214,7 @@ function ArticleContent() {
                     href={`/kb/${article.id}/edit`}
                     className="text-xs border border-gray-300 dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
-                    ✏️ 수정
+                    {t('edit_btn')}
                   </Link>
                   <button
                     onClick={handleTogglePublish}
@@ -213,20 +224,20 @@ function ArticleContent() {
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
-                    {article.published ? '비공개 전환' : '공개하기'}
+                    {article.published ? t('unpublish_btn') : t('publish_btn')}
                   </button>
                   <button
                     onClick={handleShowRevisions}
                     className="text-xs border border-gray-300 dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
-                    {showRevisions ? '이력 닫기' : '버전 이력'}
+                    {showRevisions ? t('history_close') : t('history_btn')}
                   </button>
                   {isAdmin && (
                     <button
                       onClick={handleDelete}
                       className="text-xs text-red-500 border border-red-200 dark:border-red-700 px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     >
-                      삭제
+                      {t('delete_btn')}
                     </button>
                   )}
                 </div>
@@ -260,7 +271,7 @@ function ArticleContent() {
           {/* Table of Contents */}
           {headings.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">목차</div>
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('toc')}</div>
               <nav className="space-y-0.5">
                 {headings.map((h, i) => (
                   <a
@@ -280,7 +291,7 @@ function ArticleContent() {
           {/* Related articles */}
           {related.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">관련 아티클</div>
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('related_articles')}</div>
               <div className="space-y-1">
                 {related.map((r) => (
                   <Link
@@ -298,16 +309,16 @@ function ArticleContent() {
           {/* Version history */}
           {showRevisions && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">버전 이력</div>
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('version_history')}</div>
               {revisions.length === 0 ? (
-                <p className="text-xs text-gray-400 dark:text-gray-500">이력 없음</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">{t('no_history')}</p>
               ) : (
                 <div className="space-y-1.5">
                   {revisions.map((rev) => (
                     <div key={rev.id} className="flex items-start justify-between gap-2 text-xs">
                       <div className="min-w-0">
                         <span className="font-medium text-gray-700 dark:text-gray-300">v{rev.revision_number}</span>
-                        <span className="ml-1.5 text-gray-400 dark:text-gray-500">{new Date(rev.created_at).toLocaleDateString('ko-KR')}</span>
+                        <span className="ml-1.5 text-gray-400 dark:text-gray-500">{new Date(rev.created_at).toLocaleDateString()}</span>
                         {rev.editor_name && <p className="text-gray-500 dark:text-gray-400 truncate">{rev.editor_name}</p>}
                         {rev.change_summary && <p className="text-gray-400 dark:text-gray-500 truncate italic">{rev.change_summary}</p>}
                       </div>
@@ -317,14 +328,14 @@ function ArticleContent() {
                           disabled={previewLoading}
                           className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:underline disabled:opacity-50"
                         >
-                          보기
+                          {t('view_btn')}
                         </button>
                         <button
                           onClick={() => handleRestore(rev)}
                           disabled={restoringId === rev.id}
                           className="text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
                         >
-                          {restoringId === rev.id ? '...' : '복원'}
+                          {restoringId === rev.id ? '...' : t('restore_btn')}
                         </button>
                       </div>
                     </div>
@@ -336,22 +347,22 @@ function ArticleContent() {
 
           {/* Article info */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
-            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">정보</div>
+            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">{t('info_section')}</div>
             <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-              <span>작성일</span>
-              <span>{new Date(article.created_at).toLocaleDateString('ko-KR')}</span>
+              <span>{t('created_date')}</span>
+              <span>{new Date(article.created_at).toLocaleDateString()}</span>
             </div>
             <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-              <span>최종 수정</span>
-              <span>{new Date(article.updated_at).toLocaleDateString('ko-KR')}</span>
+              <span>{t('last_modified')}</span>
+              <span>{new Date(article.updated_at).toLocaleDateString()}</span>
             </div>
             <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-              <span>조회</span>
-              <span>{article.view_count}회</span>
+              <span>{t('views')}</span>
+              <span>{t('views_count', { count: article.view_count })}</span>
             </div>
             <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-              <span>읽기 시간</span>
-              <span>약 {mins}분</span>
+              <span>{t('reading_time_label')}</span>
+              <span>{t('approx_minutes', { mins })}</span>
             </div>
           </div>
         </aside>
@@ -372,6 +383,7 @@ function RevisionPreviewModal({ rev, onClose, onRestore }: {
   onClose: () => void
   onRestore: (rev: KBRevision) => void
 }) {
+  const t = useTranslations('kb')
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
@@ -380,9 +392,9 @@ function RevisionPreviewModal({ rev, onClose, onRestore }: {
       >
         <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
           <div>
-            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">버전 v{rev.revision_number} 미리보기</h3>
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{t('preview_title', { n: rev.revision_number })}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {new Date(rev.created_at).toLocaleString('ko-KR')}
+              {new Date(rev.created_at).toLocaleString()}
               {rev.editor_name && ` · ${rev.editor_name}`}
             </p>
           </div>
@@ -391,7 +403,7 @@ function RevisionPreviewModal({ rev, onClose, onRestore }: {
               onClick={() => { onRestore(rev); onClose() }}
               className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700"
             >
-              이 버전으로 복원
+              {t('restore_this')}
             </button>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
           </div>

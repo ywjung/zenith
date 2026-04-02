@@ -6,13 +6,11 @@
  */
 
 import { useReportWebVitals } from 'next/web-vitals'
+import { logger } from '@/lib/logger'
 
 export function WebVitalsReporter() {
   useReportWebVitals((metric) => {
-    // 개발 환경에서는 콘솔 출력
-    if (process.env.NODE_ENV === 'development') {
-      console.debug('[Web Vitals]', metric.name, metric.value.toFixed(2))
-    }
+    logger.debug('[Web Vitals]', metric.name, metric.value.toFixed(2))
     // API 엔드포인트로 비동기 전송 (실패해도 UX 영향 없음)
     try {
       const body = JSON.stringify({

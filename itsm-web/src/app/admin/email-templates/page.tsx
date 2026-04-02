@@ -106,7 +106,12 @@ function EmailTemplatesContent() {
   return (
     <div className="w-full px-4 py-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">이메일 템플릿 관리</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          이메일 템플릿 관리
+        </h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           이벤트별 이메일 알림 내용을 커스터마이즈합니다. Jinja2 문법({`{{ 변수 }}`})을 지원합니다.
         </p>

@@ -18,8 +18,26 @@ interface CeleryStats {
   queues: Record<string, number>
 }
 
-const FLOWER_URL = process.env.NEXT_PUBLIC_FLOWER_URL || '/flower'
-const GRAFANA_URL = process.env.NEXT_PUBLIC_GRAFANA_URL || '/grafana'
+interface RedisStats {
+  hit_rate_pct: number
+  hits: number
+  misses: number
+  total_commands: number
+  used_memory_human: string
+  used_memory_bytes: number
+  max_memory_bytes: number
+  memory_usage_pct: number | null
+  total_keys: number
+  itsm_cache_keys: number
+  connected_clients: number
+  uptime_seconds: number
+  redis_version: string
+  evicted_keys: number
+  expired_keys: number
+}
+
+const FLOWER_URL = process.env.NEXT_PUBLIC_FLOWER_URL || '/flower/'
+const GRAFANA_URL = process.env.NEXT_PUBLIC_GRAFANA_URL || '/grafana/'
 
 function StatusDot({ status }: { status: string }) {
   const ok = status === 'ok' || status === 'healthy' || status === 'connected'
@@ -34,18 +52,43 @@ function StatusDot({ status }: { status: string }) {
 export default function MonitoringPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [celery, setCelery] = useState<CeleryStats | null>(null)
+  const [redis, setRedis] = useState<RedisStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  const [flushingCache, setFlushingCache] = useState(false)
+
+  async function flushCache() {
+    if (!confirm('ITSM 캐시를 초기화하시겠습니까? 일시적으로 응답이 느려질 수 있습니다.')) return
+    setFlushingCache(true)
+    try {
+      await fetch(`${API_BASE}/admin/redis/cache`, { method: 'DELETE', credentials: 'include' })
+      await refresh()
+    } finally {
+      setFlushingCache(false)
+    }
+  }
 
   async function refresh() {
     setLoading(true)
     try {
-      const [h, c] = await Promise.allSettled([
+      const [h, c, rd] = await Promise.allSettled([
         fetch(`${API_BASE}/health`, { credentials: 'include' }).then(r => r.json()),
         fetch(`${API_BASE}/admin/celery/stats`, { credentials: 'include' }).then(r => r.ok ? r.json() : null),
+        fetch(`${API_BASE}/admin/redis/stats`, { credentials: 'include' }).then(r => r.ok ? r.json() : null),
       ])
-      if (h.status === 'fulfilled') setHealth(h.value)
+      if (h.status === 'fulfilled') {
+        const raw = h.value
+        // API returns { status, checks: { db, redis, ... } } — flatten for UI
+        setHealth({
+          status: raw.status,
+          db: raw.checks?.db ?? raw.db ?? 'unknown',
+          redis: raw.checks?.redis ?? raw.redis ?? 'unknown',
+          celery_broker: raw.checks?.celery_broker ?? raw.celery_broker ?? 'unknown',
+          version: raw.version,
+        })
+      }
       if (c.status === 'fulfilled') setCelery(c.value)
+      if (rd.status === 'fulfilled') setRedis(rd.value)
       setLastRefresh(new Date())
     } finally {
       setLoading(false)
@@ -55,10 +98,15 @@ export default function MonitoringPage() {
   useEffect(() => { refresh() }, [])
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">시스템 모니터링</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            시스템 모니터링
+          </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
             API 서버 · Celery · Redis 상태와 외부 모니터링 도구 링크를 제공합니다.
           </p>
@@ -134,6 +182,84 @@ export default function MonitoringPage() {
         </div>
       )}
 
+      {/* Redis 캐시 통계 */}
+      {redis && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">🔴 Redis 캐시 현황</h2>
+            <button
+              onClick={flushCache}
+              disabled={flushingCache}
+              className="text-xs bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-700 dark:text-red-400 px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 transition-colors"
+            >
+              {flushingCache ? '초기화 중…' : '🗑️ ITSM 캐시 초기화'}
+            </button>
+          </div>
+
+          {/* 히트율 게이지 */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-500 dark:text-gray-400">캐시 히트율</span>
+              <span className={`text-sm font-bold ${redis.hit_rate_pct >= 80 ? 'text-green-600 dark:text-green-400' : redis.hit_rate_pct >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+                {redis.hit_rate_pct}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+              <div
+                className={`h-2.5 rounded-full transition-all ${redis.hit_rate_pct >= 80 ? 'bg-green-500' : redis.hit_rate_pct >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                style={{ width: `${Math.min(redis.hit_rate_pct, 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-1">
+              <span>히트: {redis.hits.toLocaleString()}</span>
+              <span>미스: {redis.misses.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* 메모리 게이지 */}
+          {redis.memory_usage_pct !== null && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-gray-500 dark:text-gray-400">메모리 사용률</span>
+                <span className={`text-sm font-bold ${redis.memory_usage_pct >= 85 ? 'text-red-600 dark:text-red-400' : redis.memory_usage_pct >= 70 ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'}`}>
+                  {redis.memory_usage_pct}%
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                <div
+                  className={`h-2.5 rounded-full transition-all ${redis.memory_usage_pct >= 85 ? 'bg-red-500' : redis.memory_usage_pct >= 70 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                  style={{ width: `${Math.min(redis.memory_usage_pct, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 주요 지표 그리드 */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: '메모리 사용', value: redis.used_memory_human },
+              { label: '전체 키', value: redis.total_keys.toLocaleString() + '개' },
+              { label: 'ITSM 캐시 키', value: redis.itsm_cache_keys.toLocaleString() + '개' },
+              { label: '연결 수', value: redis.connected_clients + '개' },
+              { label: '만료된 키', value: redis.expired_keys.toLocaleString() },
+              { label: '강제 삭제 키', value: redis.evicted_keys.toLocaleString() },
+              { label: 'Redis 버전', value: redis.redis_version },
+              { label: '가동 시간', value: (() => {
+                const s = redis.uptime_seconds
+                if (s < 3600) return `${Math.floor(s/60)}분`
+                if (s < 86400) return `${Math.floor(s/3600)}시간`
+                return `${Math.floor(s/86400)}일`
+              })() },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">{value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 외부 도구 */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">🔗 외부 모니터링 도구</h2>
@@ -157,7 +283,7 @@ export default function MonitoringPage() {
               name: 'Prometheus',
               desc: '원시 메트릭 · 알림 규칙 현황',
               icon: '🔥',
-              url: '/prometheus',
+              url: '/prometheus/',
               color: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40',
             },
           ].map(tool => (

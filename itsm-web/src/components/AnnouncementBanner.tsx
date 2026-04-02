@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { useAuth } from '@/context/AuthContext'
 
 interface Announcement {
   id: number
@@ -17,15 +18,18 @@ const TYPE_STYLES: Record<string, string> = {
 const TYPE_ICONS: Record<string, string> = { info: 'ℹ️', warning: '⚠️', critical: '🚨' }
 
 export default function AnnouncementBanner() {
+  const { user, loading } = useAuth()
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [dismissed, setDismissed] = useState<Set<number>>(new Set())
 
   useEffect(() => {
+    // 미인증 상태에서는 호출하지 않음 (로그인 페이지 등)
+    if (loading || !user) return
     fetch(`${API_BASE}/notifications/announcements`, { credentials: 'include', cache: 'no-store' })
       .then(r => r.ok ? r.json() : [])
       .then(data => setAnnouncements(Array.isArray(data) ? data : []))
       .catch(() => {})
-  }, [])
+  }, [user, loading])
 
   const visible = announcements.filter(a => !dismissed.has(a.id))
   if (visible.length === 0) return null
