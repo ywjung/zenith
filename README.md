@@ -31,6 +31,18 @@ GitLab CE 기반 IT 서비스 관리(ITSM) 플랫폼.
 |-----------|---------|
 | ![관리](docs/screenshots/08-admin.png) | ![포털](docs/screenshots/02-portal.png) |
 
+| SLA 대시보드 | 변경 관리 |
+|-----------|---------|
+| ![SLA](docs/screenshots/09-sla.png) | ![변경관리](docs/screenshots/10-changes.png) |
+
+| 문제 관리 | 간트 차트 |
+|---------|---------|
+| ![문제관리](docs/screenshots/11-problems.png) | ![간트](docs/screenshots/12-gantt.png) |
+
+| 캘린더 뷰 | 멀티프로젝트 |
+|---------|---------|
+| ![캘린더](docs/screenshots/13-calendar.png) | ![멀티프로젝트](docs/screenshots/14-multi-project.png) |
+
 ---
 
 ## 목차
@@ -707,6 +719,18 @@ docker compose exec itsm-api alembic upgrade head
 - **문제 관리 패널**: 유형이 "problem"인 티켓에서 관련 인시던트를 `problem_of` 링크로 연결 · 통합 추적
 - IT 개발자 이상 권한. 유형 변경 즉시 사이드바 패널 동적 전환
 
+### 변경 관리 (`/changes`)
+- ITIL RFC(변경 요청) 전용 워크플로우: 초안(draft) → 검토(review) → CAB 승인(approved) → 구현(implementing) → 완료(done) → 닫힘(closed)
+- 변경 유형(표준/일반/긴급), 위험도(낮음/보통/높음/긴급), 예상 영향·롤백 계획 기록
+- 변경 요청 목록·상세·신규 등록 (`/changes`, `/changes/new`, `/changes/:id`)
+- agent 이상 접근 가능
+
+### 문제 관리 (`/problems`)
+- 반복 인시던트의 근본 원인 분석 및 추적
+- 문제와 관련 인시던트 티켓 연결·상태 통합 관리
+- 근본 원인·해결 방안 구조화 기록
+- agent 이상 접근 가능
+
 ### 서비스 카탈로그 (Service Catalog)
 - 관리자가 `/admin/service-catalog`에서 IT 서비스 항목 정의 (이름·아이콘·설명·카테고리·추가 입력 필드)
 - 고객 포털(`/portal`)에 카드 형태로 노출 — 항목 선택 시 제목 자동 입력 + 서비스별 전용 필드 표시
@@ -751,10 +775,14 @@ docker compose exec itsm-api alembic upgrade head
 - 감사 로그 (행위자 서버사이드 검색, Immutable PostgreSQL 트리거)
 - GitLab 라벨 동기화, 자동 배정 규칙
 - **업무 부하 현황** (`/admin/workload`): 담당자별 티켓 수·해결율·SLA 충족률·평균 평점 일람
-- **알림 채널 관리**: 이메일·Telegram 활성화 상태 확인 및 전환
+- **알림 채널 관리** (`/admin/notification-channels`): 이메일·Telegram·Web Push 활성화 상태 확인 및 전환
+- **Web Push 알림** (`/admin/notification-channels`): 브라우저 푸시 구독 관리, VAPID 키 기반 발송
 - **IP 접근 제한 설정 가이드**: 관리 API를 특정 CIDR 대역으로 제한하는 방법 안내
 - **업무 시간 설정**: 영업일·업무 시간 기반 SLA 계산 설정
 - **이메일 수신 모니터링**: IMAP 활성화 상태·서버·계정 확인 + 수동 즉시 실행 (`/admin/email-ingest`)
+- **반복 티켓** (`/admin/recurring-tickets`): Celery Beat cron 스케줄로 정기 티켓 자동 생성 — 프리셋 또는 커스텀 cron 표현식, 즉시 실행 버튼, 활성/비활성 토글
+- **실패 알림 추적** (`/admin/failed-notifications`): 재시도 초과로 전송 실패한 알림 목록 조회 및 수동 재발송
+- **사용자 알림 규칙** (`/admin/notification-channels`): 이벤트·채널·조건별 개인화 알림 규칙 설정
 
 ---
 
