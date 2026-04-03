@@ -848,6 +848,24 @@ class RecurringTicket(Base):
     )
 
 
+class AISettings(Base):
+    """AI 기능 설정 — 단일 행(id=1) 사용."""
+    __tablename__ = "ai_settings"
+
+    id = Column(Integer, primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    provider = Column(String(20), nullable=False, default="openai")   # openai | ollama
+    openai_api_key = Column(Text, nullable=True)
+    openai_model = Column(String(100), nullable=False, default="gpt-4o-mini")
+    ollama_base_url = Column(String(200), nullable=False, default="http://ollama:11434")
+    ollama_model = Column(String(100), nullable=False, default="llama3.2")
+    feature_classify = Column(Boolean, nullable=False, default=True)   # 티켓 생성 시 자동 분류
+    feature_summarize = Column(Boolean, nullable=False, default=True)  # 스레드 요약
+    feature_kb_suggest = Column(Boolean, nullable=False, default=True) # KB 문서 추천
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+
 class UserNotificationRule(Base):
     """사용자 정의 알림 규칙 — 조건에 맞는 티켓 이벤트 시 선택한 채널로 알림."""
     __tablename__ = "user_notification_rules"

@@ -30,3 +30,4 @@ clamd>=1.0.2
 croniter>=2.0.0
 pywebpush>=2.0.0
 anthropic>=0.40.0
+openai>=1.50.0

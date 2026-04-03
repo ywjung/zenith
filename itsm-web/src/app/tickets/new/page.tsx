@@ -7,6 +7,7 @@ import {
   createTicket, fetchProjects, fetchProjectMembers, fetchMilestones,
   uploadFile, fetchTemplates, fetchKBArticles,
   fetchCustomFieldDefs, setTicketCustomFields,
+  aiSuggestTicket, fetchAIStatus, type AIClassifyResult,
 } from '@/lib/api'
 import type { GitLabProject, ProjectMember, Milestone, TicketTemplate, KBArticle, CustomFieldDef } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
@@ -97,6 +98,12 @@ function NewTicketContent() {
   const [error, setError] = useState<string | null>(null)
   const [customFieldDefs, setCustomFieldDefs] = useState<CustomFieldDef[]>([])
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({})
+
+  // ── AI 자동 분류 ─────────────────────────────────────────
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [aiSuggestion, setAiSuggestion] = useState<AIClassifyResult | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const aiTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── 임시저장 ───────────────────────────────────────────────
   const DRAFT_KEY = 'ticket_new_draft'
@@ -212,6 +219,9 @@ function NewTicketContent() {
     fetchTemplates()
       .then((list) => setTemplates(list.filter((t) => t.enabled)))
       .catch(() => {})
+    fetchAIStatus()
+      .then(s => setAiEnabled(s.features.classify))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -245,6 +255,35 @@ function NewTicketContent() {
     }, 300)
     return () => { if (kbTimer.current) clearTimeout(kbTimer.current) }
   }, [form.title, form.category, form.description])
+
+  // AI 자동 분류 — 제목 5자 이상, 800ms 디바운스
+  useEffect(() => {
+    if (!aiEnabled) return
+    if (aiTimer.current) clearTimeout(aiTimer.current)
+    if (form.title.length < 5) { setAiSuggestion(null); return }
+    aiTimer.current = setTimeout(async () => {
+      setAiLoading(true)
+      try {
+        const result = await aiSuggestTicket(form.title, form.description)
+        if (result.category || result.priority) setAiSuggestion(result)
+      } catch {
+        // AI 제안 실패 시 무시 (사용성 영향 없음)
+      } finally {
+        setAiLoading(false)
+      }
+    }, 800)
+    return () => { if (aiTimer.current) clearTimeout(aiTimer.current) }
+  }, [form.title, form.description, aiEnabled])
+
+  function applyAiSuggestion() {
+    if (!aiSuggestion) return
+    setForm(prev => ({
+      ...prev,
+      ...(aiSuggestion.category ? { category: aiSuggestion.category } : {}),
+      ...(aiSuggestion.priority ? { priority: aiSuggestion.priority } : {}),
+    }))
+    setAiSuggestion(null)
+  }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -629,6 +668,49 @@ function NewTicketContent() {
               )}
             </div>
           </div>
+
+          {/* AI 분류 제안 배너 */}
+          {aiEnabled && (aiLoading || aiSuggestion) && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 flex items-start gap-3">
+              <span className="text-xl mt-0.5">🤖</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                  AI 분류 제안
+                  {aiLoading && <span className="ml-2 text-xs font-normal text-blue-600 dark:text-blue-400 animate-pulse">분석 중...</span>}
+                </p>
+                {aiSuggestion && (
+                  <div className="mt-1 space-y-0.5">
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      카테고리: <strong>{aiSuggestion.category ?? '-'}</strong>
+                      {' · '}우선순위: <strong>{aiSuggestion.priority ?? '-'}</strong>
+                      {' · '}확신도: {Math.round((aiSuggestion.confidence ?? 0) * 100)}%
+                    </p>
+                    {aiSuggestion.reasoning && (
+                      <p className="text-xs text-blue-600 dark:text-blue-400">{aiSuggestion.reasoning}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              {aiSuggestion && (
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={applyAiSuggestion}
+                    className="px-3 py-1 text-xs font-semibold rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                  >
+                    적용
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiSuggestion(null)}
+                    className="px-3 py-1 text-xs rounded-md border border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/30 transition-colors"
+                  >
+                    무시
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ③ 긴급도 */}
           <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-5">

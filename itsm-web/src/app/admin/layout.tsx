@@ -61,6 +61,14 @@ const MENU_GROUPS: MenuGroup[] = [
     ],
   },
   {
+    group: 'AI 설정',
+    icon: '🤖',
+    adminOnly: true,
+    items: [
+      { href: '/admin/ai-settings', label: 'AI 설정', icon: '🤖', desc: 'OpenAI·Ollama 자동 분류·요약·KB 추천' },
+    ],
+  },
+  {
     group: '운영 & 모니터링',
     icon: '📊',
     adminOnly: true,

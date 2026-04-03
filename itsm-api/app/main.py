@@ -39,6 +39,7 @@ from .routers.changes import router as changes_router
 from .routers.push import router as push_router
 from .routers.problems import router as problems_router
 from .routers.notification_rules import router as notification_rules_router
+from .routers.admin.ai_settings import router as ai_settings_router
 from . import gitlab_client
 from . import sla as sla_module
 from .routers.reports import take_snapshot
@@ -768,6 +769,7 @@ _v1.include_router(changes_router)
 _v1.include_router(push_router)
 _v1.include_router(problems_router)
 _v1.include_router(notification_rules_router)
+_v1.include_router(ai_settings_router)
 
 # MinIO 오브젝트 스토리지 프록시 (인증 필요)
 from fastapi import Depends as _Depends

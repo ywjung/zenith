@@ -1415,17 +1415,17 @@ def ai_summarize_ticket(
     iid: int,
     project_id: Optional[str] = Query(default=None),
     _user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Claude API로 티켓 댓글 스레드를 요약합니다. ANTHROPIC_API_KEY 미설정 시 404."""
+    """AI로 티켓 댓글 스레드를 요약합니다. AI 설정 미활성화 시 404."""
+    from ...models import AISettings
+    from ... import ai_service
+
+    ai_row = db.query(AISettings).filter(AISettings.id == 1).first()
+    if not ai_row or not ai_row.enabled or not ai_row.feature_summarize:
+        raise HTTPException(status_code=404, detail="AI 요약이 비활성화되어 있습니다. 관리자 > AI 설정에서 활성화하세요.")
+
     settings = get_settings()
-    if not settings.ANTHROPIC_API_KEY:
-        raise HTTPException(status_code=404, detail="AI 요약이 비활성화되어 있습니다. ANTHROPIC_API_KEY를 설정하세요.")
-
-    try:
-        import anthropic as _anthropic
-    except ImportError:
-        raise HTTPException(status_code=503, detail="anthropic 패키지가 설치되지 않았습니다.")
-
     pid = project_id or settings.GITLAB_PROJECT_ID
     try:
         issue = gitlab_client.get_issue(iid, project_id=pid)
@@ -1433,42 +1433,18 @@ def ai_summarize_ticket(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"GitLab 데이터 조회 실패: {e}")
 
-    # 시스템 노트 제외, 최대 30개 댓글
     comments = [
         n for n in (notes_raw or [])
         if not n.get("system", False) and n.get("body", "").strip()
-    ][-30:]
-
-    comments_text = "\n".join([
-        f"[{c.get('author', {}).get('name', '?')}] {c.get('body', '').strip()[:500]}"
-        for c in comments
-    ]) or "(댓글 없음)"
-
-    prompt = f"""다음은 IT 서비스 데스크 티켓과 댓글 스레드입니다. 한국어로 간결하게 분석해 주세요.
-
-제목: {issue.get('title', '')}
-설명: {(issue.get('description') or '')[:800]}
-
-댓글 스레드:
-{comments_text}
-
-다음 형식으로 JSON만 반환하세요 (다른 텍스트 없이):
-{{
-  "summary": "티켓의 현재 상황을 2-3문장으로 요약",
-  "key_points": ["핵심 포인트 1", "핵심 포인트 2", "핵심 포인트 3"],
-  "suggested_action": "현재 상태에서 권장하는 다음 조치"
-}}"""
+    ]
 
     try:
-        client = _anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
+        result = ai_service.summarize_ticket(
+            ai_row,
+            title=issue.get("title", ""),
+            description=issue.get("description") or "",
+            comments=comments,
         )
-        raw = message.content[0].text.strip()
-        import json as _json
-        result = _json.loads(raw)
     except Exception as e:
         logger.error("AI summary failed for ticket #%s: %s", iid, e)
         raise HTTPException(status_code=500, detail="AI 요약 생성 중 오류가 발생했습니다.")
@@ -1480,3 +1456,59 @@ def ai_summarize_ticket(
         "suggested_action": result.get("suggested_action", ""),
         "comment_count": len(comments),
     }
+
+
+@crud_router.post("/{iid}/ai-classify")
+def ai_classify_ticket(
+    iid: int,
+    project_id: Optional[str] = Query(default=None),
+    _user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """AI로 기존 티켓 카테고리·우선순위를 재분류합니다."""
+    from ...models import AISettings
+    from ... import ai_service
+
+    ai_row = db.query(AISettings).filter(AISettings.id == 1).first()
+    if not ai_row or not ai_row.enabled or not ai_row.feature_classify:
+        raise HTTPException(status_code=404, detail="AI 분류가 비활성화되어 있습니다.")
+
+    settings = get_settings()
+    pid = project_id or settings.GITLAB_PROJECT_ID
+    try:
+        issue = gitlab_client.get_issue(iid, project_id=pid)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"GitLab 데이터 조회 실패: {e}")
+
+    result = ai_service.classify_ticket(
+        ai_row,
+        title=issue.get("title", ""),
+        description=issue.get("description") or "",
+    )
+    return {"iid": iid, **result}
+
+
+@crud_router.post("/ai-suggest")
+def ai_suggest_ticket(
+    body: dict,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """
+    티켓 작성 중 카테고리·우선순위 실시간 제안.
+    Body: {title, description}
+    """
+    from ...models import AISettings
+    from ... import ai_service
+
+    ai_row = db.query(AISettings).filter(AISettings.id == 1).first()
+    if not ai_row or not ai_row.enabled or not ai_row.feature_classify:
+        raise HTTPException(status_code=404, detail="AI 분류가 비활성화되어 있습니다.")
+
+    title = (body.get("title") or "").strip()
+    description = (body.get("description") or "").strip()
+    if len(title) < 3:
+        raise HTTPException(status_code=422, detail="제목을 3자 이상 입력하세요.")
+
+    result = ai_service.classify_ticket(ai_row, title=title, description=description)
+    return result

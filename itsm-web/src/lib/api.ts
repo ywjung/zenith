@@ -401,6 +401,64 @@ export function fetchTicketAISummary(iid: number, projectId?: string): Promise<A
   return request<AISummaryResult>(`/tickets/${iid}/ai-summary${qs}`, { method: 'POST' })
 }
 
+export interface AIClassifyResult {
+  category: string | null
+  priority: string | null
+  confidence: number
+  reasoning: string
+}
+
+export function aiSuggestTicket(title: string, description: string): Promise<AIClassifyResult> {
+  return request<AIClassifyResult>('/tickets/ai-suggest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, description }),
+  })
+}
+
+export function aiReclassifyTicket(iid: number, projectId?: string): Promise<AIClassifyResult & { iid: number }> {
+  const qs = projectId ? `?project_id=${projectId}` : ''
+  return request<AIClassifyResult & { iid: number }>(`/tickets/${iid}/ai-classify${qs}`, { method: 'POST' })
+}
+
+export interface AISettingsData {
+  enabled: boolean
+  provider: string
+  openai_api_key_set: boolean
+  openai_model: string
+  ollama_base_url: string
+  ollama_model: string
+  feature_classify: boolean
+  feature_summarize: boolean
+  feature_kb_suggest: boolean
+}
+
+export interface AIStatusResult {
+  enabled: boolean
+  provider: string | null
+  features: { classify: boolean; summarize: boolean; kb_suggest: boolean }
+}
+
+export function fetchAISettings(): Promise<AISettingsData> {
+  return request<AISettingsData>('/admin/ai-settings')
+}
+
+export function updateAISettings(data: Partial<AISettingsData> & { openai_api_key?: string }): Promise<AISettingsData> {
+  return request<AISettingsData>('/admin/ai-settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+}
+
+export function testAIConnection(): Promise<{ ok: boolean; provider: string; sample_result: AIClassifyResult }> {
+  return request('/admin/ai-settings/test', { method: 'POST' })
+}
+
+export function fetchAIStatus(): Promise<AIStatusResult> {
+  return request<AIStatusResult>('/admin/ai-settings/status')
+}
+
 export function bulkUpdateTickets(data: {
   iids: number[]
   project_id: string
