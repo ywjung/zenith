@@ -451,8 +451,18 @@ export function updateAISettings(data: Partial<AISettingsData> & { openai_api_ke
   })
 }
 
-export function testAIConnection(): Promise<{ ok: boolean; provider: string; sample_result: AIClassifyResult }> {
-  return request('/admin/ai-settings/test', { method: 'POST' })
+export function testAIConnection(params?: {
+  provider: string
+  openai_api_key?: string
+  openai_model: string
+  ollama_base_url: string
+  ollama_model: string
+}): Promise<{ ok: boolean; provider: string; sample_result: AIClassifyResult }> {
+  return request('/admin/ai-settings/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params ?? {}),
+  })
 }
 
 export function fetchAIStatus(): Promise<AIStatusResult> {

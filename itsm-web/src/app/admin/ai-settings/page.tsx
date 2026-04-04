@@ -92,7 +92,16 @@ export default function AISettingsPage() {
     setTesting(true)
     setTestResult(null)
     try {
-      const res = await testAIConnection()
+      const params: Parameters<typeof testAIConnection>[0] = {
+        provider: form.provider,
+        openai_model: form.openai_model,
+        ollama_base_url: form.ollama_base_url,
+        ollama_model: form.ollama_model,
+      }
+      if (form.openai_api_key.trim()) {
+        params.openai_api_key = form.openai_api_key.trim()
+      }
+      const res = await testAIConnection(params)
       setTestResult({
         ok: true,
         msg: `연결 성공! (${res.provider}) 샘플 분류: ${res.sample_result.category} / ${res.sample_result.priority} (확신도: ${Math.round((res.sample_result.confidence ?? 0) * 100)}%)`,
@@ -411,7 +420,7 @@ export default function AISettingsPage() {
         </button>
         <button
           onClick={handleTest}
-          disabled={testing || !form.enabled}
+          disabled={testing}
           className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 text-sm font-medium transition-colors"
         >
           {testing ? '테스트 중...' : '연결 테스트'}

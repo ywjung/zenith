@@ -115,15 +115,40 @@ def update_ai_settings(
 
 @router.post("/test")
 def test_ai_connection(
+    body: dict = None,
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    """현재 설정으로 AI 연결 테스트."""
-    row = _get_or_create(db)
-    if not row.enabled:
-        raise HTTPException(status_code=400, detail="AI 기능이 비활성화 상태입니다.")
-
+    """
+    AI 연결 테스트.
+    body로 설정값을 직접 전달하면 그 값으로 테스트 (저장 전에도 가능).
+    body가 없으면 DB에 저장된 설정으로 테스트.
+    """
     from ... import ai_service
+
+    body = body or {}
+
+    # body에 provider가 있으면 폼 값으로 임시 객체 생성, 없으면 DB 조회
+    if body.get("provider"):
+        class _TempSettings:
+            pass
+        row = _TempSettings()
+        row.provider = body.get("provider", "openai")
+        row.openai_model = body.get("openai_model", "gpt-4o-mini")
+        row.ollama_base_url = body.get("ollama_base_url", "http://ollama:11434")
+        row.ollama_model = body.get("ollama_model", "llama3.2")
+        # API 키: 폼에서 새로 입력한 값 우선, 없으면 DB 저장값 사용
+        new_key = (body.get("openai_api_key") or "").strip()
+        if new_key:
+            row.openai_api_key = new_key
+        else:
+            db_row = db.query(AISettings).filter(AISettings.id == 1).first()
+            row.openai_api_key = db_row.openai_api_key if db_row else None
+    else:
+        row = _get_or_create(db)
+        if not row.enabled:
+            raise HTTPException(status_code=400, detail="AI 기능이 비활성화 상태입니다. 먼저 저장하세요.")
+
     try:
         result = ai_service.classify_ticket(
             row,
