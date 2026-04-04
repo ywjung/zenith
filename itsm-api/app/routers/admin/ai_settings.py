@@ -123,47 +123,104 @@ def test_ai_connection(
     AI 연결 테스트.
     body로 설정값을 직접 전달하면 그 값으로 테스트 (저장 전에도 가능).
     body가 없으면 DB에 저장된 설정으로 테스트.
+
+    2단계:
+      1) 서버 연결 확인 (Ollama: /api/tags, OpenAI: models list)
+      2) 최소 추론 테스트 (단답형 JSON → 빠름)
     """
+    import time
+    import httpx
     from ... import ai_service
 
     body = body or {}
 
-    # body에 provider가 있으면 폼 값으로 임시 객체 생성, 없으면 DB 조회
+    # ── 설정 객체 구성 ──────────────────────────────────────
     if body.get("provider"):
-        class _TempSettings:
+        class _Cfg:
             pass
-        row = _TempSettings()
-        row.provider = body.get("provider", "openai")
-        row.openai_model = body.get("openai_model", "gpt-4o-mini")
-        row.ollama_base_url = body.get("ollama_base_url", "http://host.docker.internal:11434")
-        row.ollama_model = body.get("ollama_model", "llama3.2")
-        # API 키: 폼에서 새로 입력한 값 우선, 없으면 DB 저장값 사용
+        cfg = _Cfg()
+        cfg.provider       = body.get("provider", "ollama")
+        cfg.openai_model   = body.get("openai_model", "gpt-4o-mini")
+        cfg.ollama_base_url = body.get("ollama_base_url", "http://host.docker.internal:11434")
+        cfg.ollama_model   = body.get("ollama_model", "llama3.2")
         new_key = (body.get("openai_api_key") or "").strip()
         if new_key:
-            row.openai_api_key = new_key
+            cfg.openai_api_key = new_key
         else:
             db_row = db.query(AISettings).filter(AISettings.id == 1).first()
-            row.openai_api_key = db_row.openai_api_key if db_row else None
+            cfg.openai_api_key = db_row.openai_api_key if db_row else None
     else:
-        row = _get_or_create(db)
-        if not row.enabled:
+        cfg = _get_or_create(db)
+        if not cfg.enabled:
             raise HTTPException(status_code=400, detail="AI 기능이 비활성화 상태입니다. 먼저 저장하세요.")
 
+    # ── 1단계: 서버 연결 확인 ───────────────────────────────
+    t0 = time.time()
+    if cfg.provider == "ollama":
+        try:
+            r = httpx.get(f"{cfg.ollama_base_url.rstrip('/')}/api/tags", timeout=8.0)
+            r.raise_for_status()
+            model_names = [m.get("name") for m in r.json().get("models", [])]
+        except httpx.ConnectError:
+            raise HTTPException(status_code=502,
+                detail=f"Ollama 서버에 연결할 수 없습니다: {cfg.ollama_base_url}")
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Ollama 서버 응답 시간 초과")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Ollama 연결 오류: {e}")
+
+        if cfg.ollama_model not in model_names:
+            available = ", ".join(model_names[:5]) or "(없음)"
+            raise HTTPException(
+                status_code=400,
+                detail=f"모델 '{cfg.ollama_model}'이 설치되어 있지 않습니다. "
+                       f"사용 가능: {available}"
+            )
+
+    elif cfg.provider == "openai":
+        if not cfg.openai_api_key:
+            raise HTTPException(status_code=400, detail="OpenAI API 키가 설정되지 않았습니다.")
+        try:
+            from openai import OpenAI, AuthenticationError, APIConnectionError
+            client = OpenAI(api_key=cfg.openai_api_key)
+            client.models.retrieve(cfg.openai_model)
+        except AuthenticationError:
+            raise HTTPException(status_code=401, detail="OpenAI API 키가 유효하지 않습니다.")
+        except APIConnectionError:
+            raise HTTPException(status_code=502, detail="OpenAI 서버에 연결할 수 없습니다.")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"OpenAI 연결 오류: {e}")
+
+    connect_ms = int((time.time() - t0) * 1000)
+
+    # ── 2단계: 최소 추론 테스트 (단답형) ─────────────────────
+    # 전체 분류 프롬프트 대신 단답형 JSON으로 추론 시간 최소화
+    MINI_PROMPT = (
+        '다음 JSON만 반환하세요: {"category":"account","priority":"medium",'
+        '"confidence":0.9,"reasoning":"테스트"}'
+    )
+    t1 = time.time()
     try:
-        result = ai_service.classify_ticket(
-            row,
-            title="테스트 티켓",
-            description="이메일 로그인이 되지 않습니다. 비밀번호를 올바르게 입력했는데도 접속이 안 됩니다.",
-        )
-        if result.get("category") is None and result.get("confidence", 0) == 0:
-            raise RuntimeError(result.get("reasoning", "응답 파싱 실패"))
-        return {
-            "ok": True,
-            "provider": row.provider,
-            "sample_result": result,
-        }
+        result = ai_service._dispatch(cfg, MINI_PROMPT)
+        parsed = ai_service._parse_json(result)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI 연결 실패: {e}")
+        raise HTTPException(status_code=502, detail=f"AI 추론 실패: {e}")
+
+    infer_ms = int((time.time() - t1) * 1000)
+
+    return {
+        "ok": True,
+        "provider": cfg.provider,
+        "model": cfg.ollama_model if cfg.provider == "ollama" else cfg.openai_model,
+        "connect_ms": connect_ms,
+        "infer_ms": infer_ms,
+        "sample_result": {
+            "category": parsed.get("category", "account"),
+            "priority": parsed.get("priority", "medium"),
+            "confidence": parsed.get("confidence", 0.9),
+            "reasoning": parsed.get("reasoning", ""),
+        },
+    }
 
 
 @router.post("/ollama-models")

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   fetchAISettings, updateAISettings, testAIConnection, fetchOllamaModels,
   type AISettingsData, type OllamaModel,
@@ -88,9 +88,14 @@ export default function AISettingsPage() {
     }
   }
 
+  const [testElapsed, setTestElapsed] = useState(0)
+  const testTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
+    setTestElapsed(0)
+    testTimerRef.current = setInterval(() => setTestElapsed(s => s + 1), 1000)
     try {
       const params: Parameters<typeof testAIConnection>[0] = {
         provider: form.provider,
@@ -101,15 +106,19 @@ export default function AISettingsPage() {
       if (form.openai_api_key.trim()) {
         params.openai_api_key = form.openai_api_key.trim()
       }
-      const res = await testAIConnection(params)
+      type TestRes = { ok: boolean; provider: string; model?: string; connect_ms?: number; infer_ms?: number; sample_result: { category: string; priority: string; confidence: number; reasoning: string } }
+      const res = await testAIConnection(params) as TestRes
+      const model = res.model ?? (form.provider === 'ollama' ? form.ollama_model : form.openai_model)
+      const inferSec = res.infer_ms != null ? `${(res.infer_ms / 1000).toFixed(1)}s` : ''
       setTestResult({
         ok: true,
-        msg: `연결 성공! (${res.provider}) 샘플 분류: ${res.sample_result.category} / ${res.sample_result.priority} (확신도: ${Math.round((res.sample_result.confidence ?? 0) * 100)}%)`,
+        msg: `연결 성공! 모델: ${model} · 추론: ${inferSec} · 분류: ${res.sample_result.category}/${res.sample_result.priority}`,
       })
     } catch (e: unknown) {
       setTestResult({ ok: false, msg: e instanceof Error ? e.message : '연결 실패' })
     } finally {
       setTesting(false)
+      if (testTimerRef.current) { clearInterval(testTimerRef.current); testTimerRef.current = null }
     }
   }
 
@@ -421,9 +430,10 @@ export default function AISettingsPage() {
         <button
           onClick={handleTest}
           disabled={testing}
+          title="저장 전에도 현재 폼 설정으로 테스트 가능"
           className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 text-sm font-medium transition-colors"
         >
-          {testing ? '테스트 중...' : '연결 테스트'}
+          {testing ? `테스트 중... ${testElapsed}s` : '연결 테스트'}
         </button>
       </div>
 
