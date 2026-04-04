@@ -862,6 +862,15 @@ class AISettings(Base):
     feature_classify = Column(Boolean, nullable=False, default=True)   # 티켓 생성 시 자동 분류
     feature_summarize = Column(Boolean, nullable=False, default=True)  # 스레드 요약
     feature_kb_suggest = Column(Boolean, nullable=False, default=True) # KB 문서 추천
+    # OpenAI OAuth 2.0 (api_key | oauth)
+    openai_auth_method = Column(String(20), nullable=False, default="api_key")
+    openai_oauth_client_id = Column(Text, nullable=True)
+    openai_oauth_client_secret = Column(Text, nullable=True)
+    openai_oauth_auth_url = Column(Text, nullable=True)       # 인증 엔드포인트 URL
+    openai_oauth_token_url = Column(Text, nullable=True)      # 토큰 교환 URL
+    openai_oauth_scope = Column(String(500), nullable=True)   # 요청 scope
+    openai_oauth_access_token = Column(Text, nullable=True)   # 저장된 access token
+    openai_oauth_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
 

@@ -1,14 +1,19 @@
 """
 Admin — AI 설정 관리
-GET  /admin/ai-settings         현재 설정 조회 (API 키는 마스킹)
-PUT  /admin/ai-settings         설정 저장
-POST /admin/ai-settings/test    연결 테스트
-GET  /admin/ai-settings/status  현재 활성 상태 (프론트 헤더 배지용)
+GET  /admin/ai-settings                      현재 설정 조회 (API 키는 마스킹)
+PUT  /admin/ai-settings                      설정 저장
+POST /admin/ai-settings/test                 연결 테스트
+GET  /admin/ai-settings/status               현재 활성 상태 (프론트 헤더 배지용)
+GET  /admin/ai-settings/openai-oauth/url     OAuth 인증 URL 생성
+GET  /admin/ai-settings/openai-oauth/callback OAuth 콜백 처리 (토큰 교환 → 저장)
+DELETE /admin/ai-settings/openai-oauth       OAuth 연결 해제
 """
 import logging
+import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -34,18 +39,31 @@ class AISettingsIn(BaseModel):
     feature_classify: bool = True
     feature_summarize: bool = True
     feature_kb_suggest: bool = True
+    # OAuth 설정
+    openai_auth_method: str = "api_key"          # api_key | oauth
+    openai_oauth_client_id: Optional[str] = None
+    openai_oauth_client_secret: Optional[str] = None  # None = 변경 없음
+    openai_oauth_auth_url: Optional[str] = None
+    openai_oauth_token_url: Optional[str] = None
+    openai_oauth_scope: Optional[str] = None
 
 
 class AISettingsOut(BaseModel):
     enabled: bool
     provider: str
-    openai_api_key_set: bool     # API 키 설정 여부만 노출 (값 비노출)
+    openai_api_key_set: bool          # API 키 설정 여부만 노출
     openai_model: str
     ollama_base_url: str
     ollama_model: str
     feature_classify: bool
     feature_summarize: bool
     feature_kb_suggest: bool
+    openai_auth_method: str
+    openai_oauth_client_id: Optional[str]
+    openai_oauth_auth_url: Optional[str]
+    openai_oauth_token_url: Optional[str]
+    openai_oauth_scope: Optional[str]
+    openai_oauth_connected: bool      # access token 보유 여부
 
 
 def _get_or_create(db: Session) -> AISettings:
@@ -69,6 +87,12 @@ def _to_out(row: AISettings) -> dict:
         "feature_classify": row.feature_classify,
         "feature_summarize": row.feature_summarize,
         "feature_kb_suggest": row.feature_kb_suggest,
+        "openai_auth_method": row.openai_auth_method or "api_key",
+        "openai_oauth_client_id": row.openai_oauth_client_id,
+        "openai_oauth_auth_url": row.openai_oauth_auth_url,
+        "openai_oauth_token_url": row.openai_oauth_token_url,
+        "openai_oauth_scope": row.openai_oauth_scope,
+        "openai_oauth_connected": bool(row.openai_oauth_access_token),
     }
 
 
@@ -107,9 +131,22 @@ def update_ai_settings(
     if body.openai_api_key is not None:
         row.openai_api_key = body.openai_api_key or None
 
+    # OAuth 설정
+    row.openai_auth_method = body.openai_auth_method
+    if body.openai_oauth_client_id is not None:
+        row.openai_oauth_client_id = body.openai_oauth_client_id or None
+    if body.openai_oauth_client_secret is not None:
+        row.openai_oauth_client_secret = body.openai_oauth_client_secret or None
+    if body.openai_oauth_auth_url is not None:
+        row.openai_oauth_auth_url = body.openai_oauth_auth_url or None
+    if body.openai_oauth_token_url is not None:
+        row.openai_oauth_token_url = body.openai_oauth_token_url or None
+    if body.openai_oauth_scope is not None:
+        row.openai_oauth_scope = body.openai_oauth_scope or None
+
     db.commit()
     db.refresh(row)
-    logger.info("AI 설정 업데이트: enabled=%s provider=%s", row.enabled, row.provider)
+    logger.info("AI 설정 업데이트: enabled=%s provider=%s auth=%s", row.enabled, row.provider, row.openai_auth_method)
     return _to_out(row)
 
 
@@ -262,6 +299,203 @@ def list_ollama_models(
             }
             for m in models
         ],
+    }
+
+
+# ──────────────────────────────────────────────────────────────
+# OpenAI OAuth 2.0 Authorization Code Flow
+# ──────────────────────────────────────────────────────────────
+_OAUTH_STATE_PREFIX = "openai_oauth_state:"
+_OAUTH_STATE_TTL = 600  # 10분
+
+
+def _redis():
+    try:
+        from ...redis_client import get_redis
+        return get_redis()
+    except Exception:
+        return None
+
+
+@router.get("/openai-oauth/url")
+def openai_oauth_url(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """
+    OAuth 인증 URL 생성 — 프론트가 이 URL로 리다이렉트하면 OpenAI 인증 페이지로 이동.
+    """
+    row = _get_or_create(db)
+    if not row.openai_oauth_client_id:
+        raise HTTPException(status_code=400, detail="OAuth Client ID가 설정되지 않았습니다.")
+    if not row.openai_oauth_auth_url:
+        raise HTTPException(status_code=400, detail="OAuth 인증 URL이 설정되지 않았습니다.")
+
+    state = secrets.token_urlsafe(32)
+    r = _redis()
+    if r:
+        r.setex(f"{_OAUTH_STATE_PREFIX}{state}", _OAUTH_STATE_TTL, "valid")
+
+    # redirect_uri: 백엔드 콜백 엔드포인트
+    base = str(request.base_url).rstrip("/")
+    redirect_uri = f"{base}/admin/ai-settings/openai-oauth/callback"
+
+    scope = row.openai_oauth_scope or "openid"
+    from urllib.parse import urlencode
+    params = urlencode({
+        "response_type": "code",
+        "client_id": row.openai_oauth_client_id,
+        "redirect_uri": redirect_uri,
+        "scope": scope,
+        "state": state,
+    })
+    auth_url = f"{row.openai_oauth_auth_url.rstrip('?')}?{params}"
+    return {"auth_url": auth_url, "redirect_uri": redirect_uri}
+
+
+@router.get("/openai-oauth/callback")
+def openai_oauth_callback(
+    request: Request,
+    code: str = Query(...),
+    state: str = Query(...),
+    error: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    OAuth 콜백 — 인증 코드를 access token으로 교환 후 DB 저장.
+    성공 시 /admin/ai-settings?oauth=success 로 리다이렉트.
+    오류 시 /admin/ai-settings?oauth=error&msg=... 로 리다이렉트.
+    """
+    import httpx
+    from datetime import datetime, timezone, timedelta
+
+    settings_page = "/admin/ai-settings"
+
+    if error:
+        return RedirectResponse(f"{settings_page}?oauth=error&msg={error}")
+
+    # state 검증
+    r = _redis()
+    if r:
+        key = f"{_OAUTH_STATE_PREFIX}{state}"
+        if not r.exists(key):
+            return RedirectResponse(f"{settings_page}?oauth=error&msg=invalid_state")
+        r.delete(key)
+
+    row = _get_or_create(db)
+    if not row.openai_oauth_token_url:
+        return RedirectResponse(f"{settings_page}?oauth=error&msg=token_url_not_set")
+
+    base = str(request.base_url).rstrip("/")
+    redirect_uri = f"{base}/admin/ai-settings/openai-oauth/callback"
+
+    try:
+        resp = httpx.post(
+            row.openai_oauth_token_url,
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": row.openai_oauth_client_id,
+                "client_secret": row.openai_oauth_client_secret,
+            },
+            timeout=15.0,
+        )
+        resp.raise_for_status()
+        token_data = resp.json()
+    except Exception as e:
+        logger.error("OpenAI OAuth token exchange failed: %s", e)
+        return RedirectResponse(f"{settings_page}?oauth=error&msg=token_exchange_failed")
+
+    access_token = token_data.get("access_token")
+    if not access_token:
+        return RedirectResponse(f"{settings_page}?oauth=error&msg=no_access_token")
+
+    expires_in = token_data.get("expires_in")
+    expires_at = None
+    if expires_in:
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+
+    row.openai_oauth_access_token = access_token
+    row.openai_oauth_token_expires_at = expires_at
+    # OAuth 토큰을 API 호출에 바로 쓸 수 있도록 openai_api_key에도 저장
+    row.openai_api_key = access_token
+    db.commit()
+    logger.info("OpenAI OAuth token saved (expires_at=%s)", expires_at)
+    return RedirectResponse(f"{settings_page}?oauth=success")
+
+
+@router.delete("/openai-oauth")
+def disconnect_openai_oauth(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """OAuth 연결 해제 — 저장된 access token 삭제."""
+    row = _get_or_create(db)
+    row.openai_oauth_access_token = None
+    row.openai_oauth_token_expires_at = None
+    row.openai_api_key = None
+    row.openai_auth_method = "api_key"
+    db.commit()
+    return {"ok": True, "message": "OpenAI OAuth 연결이 해제되었습니다."}
+
+
+@router.post("/openai-oauth/token")
+def openai_oauth_client_credentials(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """
+    Client Credentials 방식 — 클라이언트 ID/Secret으로 직접 토큰 발급.
+    (사용자 리다이렉트 없이 서버-to-서버 인증)
+    """
+    import httpx
+    from datetime import datetime, timezone, timedelta
+
+    row = _get_or_create(db)
+    if not row.openai_oauth_client_id or not row.openai_oauth_client_secret:
+        raise HTTPException(status_code=400, detail="OAuth Client ID와 Secret이 필요합니다.")
+    if not row.openai_oauth_token_url:
+        raise HTTPException(status_code=400, detail="OAuth 토큰 URL이 설정되지 않았습니다.")
+
+    try:
+        resp = httpx.post(
+            row.openai_oauth_token_url,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": row.openai_oauth_client_id,
+                "client_secret": row.openai_oauth_client_secret,
+                "scope": row.openai_oauth_scope or "",
+            },
+            timeout=15.0,
+        )
+        resp.raise_for_status()
+        token_data = resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"토큰 발급 실패: {e.response.text[:200]}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"OAuth 연결 오류: {e}")
+
+    access_token = token_data.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=502, detail="access_token이 응답에 없습니다.")
+
+    expires_in = token_data.get("expires_in")
+    expires_at = None
+    if expires_in:
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+
+    row.openai_oauth_access_token = access_token
+    row.openai_oauth_token_expires_at = expires_at
+    row.openai_api_key = access_token
+    db.commit()
+    logger.info("OpenAI OAuth client_credentials token saved (expires_at=%s)", expires_at)
+    return {
+        "ok": True,
+        "token_type": token_data.get("token_type", "Bearer"),
+        "expires_in": expires_in,
+        "scope": token_data.get("scope", ""),
     }
 
 

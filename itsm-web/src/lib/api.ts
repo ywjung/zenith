@@ -435,6 +435,12 @@ export interface AISettingsData {
   feature_classify: boolean
   feature_summarize: boolean
   feature_kb_suggest: boolean
+  openai_auth_method: string          // 'api_key' | 'oauth'
+  openai_oauth_client_id: string | null
+  openai_oauth_auth_url: string | null
+  openai_oauth_token_url: string | null
+  openai_oauth_scope: string | null
+  openai_oauth_connected: boolean     // access token 보유 여부
 }
 
 export interface AIStatusResult {
@@ -447,12 +453,27 @@ export function fetchAISettings(): Promise<AISettingsData> {
   return request<AISettingsData>('/admin/ai-settings')
 }
 
-export function updateAISettings(data: Partial<AISettingsData> & { openai_api_key?: string }): Promise<AISettingsData> {
+export function updateAISettings(data: Partial<AISettingsData> & {
+  openai_api_key?: string
+  openai_oauth_client_secret?: string
+}): Promise<AISettingsData> {
   return request<AISettingsData>('/admin/ai-settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })
+}
+
+export function fetchOpenAIOAuthUrl(): Promise<{ auth_url: string; redirect_uri: string }> {
+  return request('/admin/ai-settings/openai-oauth/url')
+}
+
+export function fetchOpenAIOAuthClientCredentials(): Promise<{ ok: boolean; expires_in?: number; scope?: string }> {
+  return request('/admin/ai-settings/openai-oauth/token', { method: 'POST' })
+}
+
+export function disconnectOpenAIOAuth(): Promise<{ ok: boolean }> {
+  return request('/admin/ai-settings/openai-oauth', { method: 'DELETE' })
 }
 
 export function testAIConnection(params?: {
