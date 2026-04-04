@@ -20,6 +20,8 @@ function buildQuery(params?: Record<string, string | number | undefined | null>)
 
 /** API 요청 기본 타임아웃 (ms). 파일 업로드 등 장시간 작업은 직접 AbortController 사용. */
 const REQUEST_TIMEOUT_MS = 30_000
+/** AI 요청 타임아웃 — 대형 로컬 모델(35B+)은 응답에 60s 이상 소요될 수 있음 */
+const AI_TIMEOUT_MS = 120_000
 
 /** main.py 통합 에러 포맷 {error:{code,message,detail}} 및 FastAPI 기본 {detail} 모두 처리 */
 async function parseErrorMessage(res: Response): Promise<string> {
@@ -33,9 +35,10 @@ async function parseErrorMessage(res: Response): Promise<string> {
   return (err.detail as string) || `HTTP ${res.status}`
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
+  const timeoutMs = init?.timeoutMs ?? REQUEST_TIMEOUT_MS
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   let res: Response
   try {
@@ -48,7 +51,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     })
   } catch (err) {
     if ((err as Error).name === 'AbortError') {
-      throw new Error(`요청 시간이 초과되었습니다 (${REQUEST_TIMEOUT_MS / 1000}s)`)
+      throw new Error(`요청 시간이 초과되었습니다 (${timeoutMs / 1000}s)`)
     }
     throw err
   } finally {
@@ -398,7 +401,7 @@ export interface AISummaryResult {
 
 export function fetchTicketAISummary(iid: number, projectId?: string): Promise<AISummaryResult> {
   const qs = projectId ? `?project_id=${projectId}` : ''
-  return request<AISummaryResult>(`/tickets/${iid}/ai-summary${qs}`, { method: 'POST' })
+  return request<AISummaryResult>(`/tickets/${iid}/ai-summary${qs}`, { method: 'POST', timeoutMs: AI_TIMEOUT_MS })
 }
 
 export interface AIClassifyResult {
@@ -413,12 +416,13 @@ export function aiSuggestTicket(title: string, description: string): Promise<AIC
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, description }),
+    timeoutMs: AI_TIMEOUT_MS,
   })
 }
 
 export function aiReclassifyTicket(iid: number, projectId?: string): Promise<AIClassifyResult & { iid: number }> {
   const qs = projectId ? `?project_id=${projectId}` : ''
-  return request<AIClassifyResult & { iid: number }>(`/tickets/${iid}/ai-classify${qs}`, { method: 'POST' })
+  return request<AIClassifyResult & { iid: number }>(`/tickets/${iid}/ai-classify${qs}`, { method: 'POST', timeoutMs: AI_TIMEOUT_MS })
 }
 
 export interface AISettingsData {
@@ -462,6 +466,7 @@ export function testAIConnection(params?: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params ?? {}),
+    timeoutMs: AI_TIMEOUT_MS,
   })
 }
 

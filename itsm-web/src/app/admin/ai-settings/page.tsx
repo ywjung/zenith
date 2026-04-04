@@ -16,10 +16,10 @@ export default function AISettingsPage() {
   const [settings, setSettings] = useState<AISettingsData | null>(null)
   const [form, setForm] = useState({
     enabled: false,
-    provider: 'openai',
+    provider: 'ollama',
     openai_api_key: '',        // '' = 변경 없음
     openai_model: 'gpt-4o-mini',
-    ollama_base_url: 'http://ollama:11434',
+    ollama_base_url: 'http://host.docker.internal:11434',
     ollama_model: 'llama3.2',
     feature_classify: true,
     feature_summarize: true,

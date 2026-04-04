@@ -26,10 +26,10 @@ router = APIRouter(prefix="/admin/ai-settings", tags=["admin-ai"])
 # ──────────────────────────────────────────────────────────────
 class AISettingsIn(BaseModel):
     enabled: bool = False
-    provider: str = "openai"          # openai | ollama
+    provider: str = "ollama"          # openai | ollama
     openai_api_key: Optional[str] = None   # None = 변경 없음, "" = 삭제
     openai_model: str = "gpt-4o-mini"
-    ollama_base_url: str = "http://ollama:11434"
+    ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_model: str = "llama3.2"
     feature_classify: bool = True
     feature_summarize: bool = True
@@ -135,7 +135,7 @@ def test_ai_connection(
         row = _TempSettings()
         row.provider = body.get("provider", "openai")
         row.openai_model = body.get("openai_model", "gpt-4o-mini")
-        row.ollama_base_url = body.get("ollama_base_url", "http://ollama:11434")
+        row.ollama_base_url = body.get("ollama_base_url", "http://host.docker.internal:11434")
         row.ollama_model = body.get("ollama_model", "llama3.2")
         # API 키: 폼에서 새로 입력한 값 우선, 없으면 DB 저장값 사용
         new_key = (body.get("openai_api_key") or "").strip()

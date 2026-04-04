@@ -99,11 +99,31 @@ def _call_ollama(base_url: str, model: str, prompt: str) -> str:
     resp = httpx.post(
         f"{base_url.rstrip('/')}/api/generate",
         json={"model": model, "prompt": prompt, "stream": False, "format": "json"},
-        timeout=90.0,
+        timeout=120.0,
     )
     resp.raise_for_status()
     data = resp.json()
-    return data.get("response", "")
+    raw = data.get("response", "")
+    # qwen3 등 thinking 모델은 <think>...</think> 블록을 앞에 붙이는 경우가 있음
+    # format=json 옵션 사용 시에는 일반적으로 발생하지 않지만 방어적으로 처리
+    raw = _strip_think_tags(raw)
+    return raw
+
+
+def _strip_think_tags(text: str) -> str:
+    """<think>...</think> 및 /think 태그 제거 후 첫 번째 JSON 블록 추출."""
+    import re
+    # <think>...</think> 제거
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    # /think 태그만 있는 경우 제거
+    text = re.sub(r"</?\s*think\s*>", "", text, flags=re.IGNORECASE)
+    text = text.strip()
+    # 중괄호 기준으로 첫 번째 JSON 객체 추출
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1:
+        return text[start : end + 1]
+    return text
 
 
 def _call_anthropic(api_key: str, prompt: str) -> str:

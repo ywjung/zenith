@@ -854,10 +854,10 @@ class AISettings(Base):
 
     id = Column(Integer, primary_key=True)
     enabled = Column(Boolean, nullable=False, default=False)
-    provider = Column(String(20), nullable=False, default="openai")   # openai | ollama
+    provider = Column(String(20), nullable=False, default="ollama")   # openai | ollama
     openai_api_key = Column(Text, nullable=True)
     openai_model = Column(String(100), nullable=False, default="gpt-4o-mini")
-    ollama_base_url = Column(String(200), nullable=False, default="http://ollama:11434")
+    ollama_base_url = Column(String(200), nullable=False, default="http://host.docker.internal:11434")
     ollama_model = Column(String(100), nullable=False, default="llama3.2")
     feature_classify = Column(Boolean, nullable=False, default=True)   # 티켓 생성 시 자동 분류
     feature_summarize = Column(Boolean, nullable=False, default=True)  # 스레드 요약
