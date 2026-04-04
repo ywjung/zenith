@@ -58,24 +58,25 @@ export default function AISettingsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleSave = async () => {
+  const doSave = async (overrides?: Partial<typeof form>) => {
+    const merged = { ...form, ...overrides }
     setSaving(true)
     setError(null)
     setSaved(false)
     try {
       const payload: Parameters<typeof updateAISettings>[0] = {
-        enabled: form.enabled,
-        provider: form.provider,
-        openai_model: form.openai_model,
-        ollama_base_url: form.ollama_base_url,
-        ollama_model: form.ollama_model,
-        feature_classify: form.feature_classify,
-        feature_summarize: form.feature_summarize,
-        feature_kb_suggest: form.feature_kb_suggest,
+        enabled: merged.enabled,
+        provider: merged.provider,
+        openai_model: merged.openai_model,
+        ollama_base_url: merged.ollama_base_url,
+        ollama_model: merged.ollama_model,
+        feature_classify: merged.feature_classify,
+        feature_summarize: merged.feature_summarize,
+        feature_kb_suggest: merged.feature_kb_suggest,
       }
       // API 키 입력값이 있을 때만 전송
-      if (form.openai_api_key.trim()) {
-        payload.openai_api_key = form.openai_api_key.trim()
+      if (merged.openai_api_key.trim()) {
+        payload.openai_api_key = merged.openai_api_key.trim()
       }
       const updated = await updateAISettings(payload)
       setSettings(updated)
@@ -87,6 +88,8 @@ export default function AISettingsPage() {
       setSaving(false)
     }
   }
+
+  const handleSave = () => doSave()
 
   const [testElapsed, setTestElapsed] = useState(0)
   const testTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -158,6 +161,14 @@ export default function AISettingsPage() {
             OpenAI 또는 Ollama를 사용해 티켓 자동 분류·요약·KB 추천 기능을 제공합니다.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
+        >
+          {saving ? '저장 중...' : saved ? '✅ 저장됨' : '저장'}
+        </button>
       </div>
 
       {/* 메인 토글 */}
@@ -170,8 +181,14 @@ export default function AISettingsPage() {
             </p>
           </div>
           <button
-            onClick={() => set('enabled', !form.enabled)}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${
+            type="button"
+            disabled={saving}
+            onClick={() => {
+              const next = !form.enabled
+              setForm(f => ({ ...f, enabled: next }))
+              doSave({ enabled: next })
+            }}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none disabled:opacity-60 ${
               form.enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
             }`}
           >
