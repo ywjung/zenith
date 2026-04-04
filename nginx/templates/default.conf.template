@@ -225,6 +225,42 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
+  # 티켓 AI 엔드포인트 — 대형 로컬 모델(35B+) 요약/분류 추론 대기를 위해 타임아웃 연장
+  location ~ ^/api/tickets/[0-9]+/ai-(summary|classify) {
+    limit_req zone=api_general burst=5 nodelay;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass $api_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout    180s;
+    proxy_send_timeout    180s;
+    proxy_connect_timeout  10s;
+    client_max_body_size 1m;
+  }
+
+  # ai-suggest (실시간 분류 제안) — POST /api/tickets/ai-suggest
+  location = /api/tickets/ai-suggest {
+    limit_req zone=api_general burst=5 nodelay;
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass $api_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout    180s;
+    proxy_send_timeout    180s;
+    proxy_connect_timeout  10s;
+    client_max_body_size 1m;
+  }
+
   # 관리자 API — 5 req/s 제한 (대규모 bulk 작업 방지)
   # AI 엔드포인트 — 대형 로컬 모델(35B+) 응답 대기를 위해 타임아웃 연장
   location ~ ^/api/admin/ai-settings/(test|ollama-models) {
