@@ -141,6 +141,48 @@ def test_ai_connection(
         raise HTTPException(status_code=502, detail=f"AI 연결 실패: {e}")
 
 
+@router.post("/ollama-models")
+def list_ollama_models(
+    body: dict,
+    _admin=Depends(require_admin),
+):
+    """
+    주어진 Ollama 서버 URL에서 설치된 모델 목록을 조회합니다.
+    Body: {base_url: "http://..."}
+    """
+    import httpx
+
+    base_url = (body.get("base_url") or "").rstrip("/")
+    if not base_url:
+        raise HTTPException(status_code=422, detail="base_url을 입력하세요.")
+
+    try:
+        resp = httpx.get(f"{base_url}/api/tags", timeout=10.0)
+        resp.raise_for_status()
+        data = resp.json()
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail=f"Ollama 서버에 연결할 수 없습니다: {base_url}")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Ollama 서버 응답 시간 초과 (10s)")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Ollama 연결 오류: {e}")
+
+    models = data.get("models", [])
+    return {
+        "base_url": base_url,
+        "models": [
+            {
+                "name": m.get("name", ""),
+                "size_gb": round(m.get("size", 0) / 1e9, 1),
+                "modified_at": m.get("modified_at", ""),
+                "family": (m.get("details") or {}).get("family", ""),
+                "parameter_size": (m.get("details") or {}).get("parameter_size", ""),
+            }
+            for m in models
+        ],
+    }
+
+
 @router.get("/status")
 def get_ai_status(db: Session = Depends(get_db)):
     """인증 불필요 — 프론트에서 AI 기능 활성 여부 확인용."""

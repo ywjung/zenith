@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import {
-  fetchAISettings, updateAISettings, testAIConnection,
-  type AISettingsData,
+  fetchAISettings, updateAISettings, testAIConnection, fetchOllamaModels,
+  type AISettingsData, type OllamaModel,
 } from '@/lib/api'
 
 const OPENAI_MODELS = [
@@ -31,6 +31,12 @@ export default function AISettingsPage() {
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Ollama 모델 목록 조회
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([])
+  const [ollamaFetching, setOllamaFetching] = useState(false)
+  const [ollamaFetchError, setOllamaFetchError] = useState<string | null>(null)
+  const [ollamaFetched, setOllamaFetched] = useState(false)
 
   useEffect(() => {
     fetchAISettings()
@@ -99,6 +105,26 @@ export default function AISettingsPage() {
   }
 
   const set = (key: string, value: unknown) => setForm(f => ({ ...f, [key]: value }))
+
+  const handleFetchOllamaModels = async () => {
+    if (!form.ollama_base_url.trim()) return
+    setOllamaFetching(true)
+    setOllamaFetchError(null)
+    setOllamaFetched(false)
+    try {
+      const res = await fetchOllamaModels(form.ollama_base_url.trim())
+      setOllamaModels(res.models)
+      setOllamaFetched(true)
+      if (res.models.length > 0 && !res.models.find(m => m.name === form.ollama_model)) {
+        set('ollama_model', res.models[0].name)
+      }
+    } catch (e: unknown) {
+      setOllamaFetchError(e instanceof Error ? e.message : 'Ollama 서버에 연결할 수 없습니다.')
+      setOllamaModels([])
+    } finally {
+      setOllamaFetching(false)
+    }
+  }
 
   if (loading) return <div className="p-8 text-gray-500">로딩 중...</div>
 
@@ -210,34 +236,103 @@ export default function AISettingsPage() {
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
           <p className="font-semibold text-gray-900 dark:text-white">Ollama 설정</p>
 
+          {/* URL 입력 + 모델 목록 조회 버튼 */}
           <div className="space-y-1">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Ollama 서버 URL</label>
-            <input
-              type="text"
-              placeholder="http://ollama:11434"
-              value={form.ollama_base_url}
-              onChange={e => set('ollama_base_url', e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="http://docker.host.internal:11434"
+                value={form.ollama_base_url}
+                onChange={e => {
+                  set('ollama_base_url', e.target.value)
+                  setOllamaFetched(false)
+                  setOllamaModels([])
+                  setOllamaFetchError(null)
+                }}
+                className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={handleFetchOllamaModels}
+                disabled={ollamaFetching || !form.ollama_base_url.trim()}
+                className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors whitespace-nowrap"
+              >
+                {ollamaFetching ? '조회 중...' : '모델 목록'}
+              </button>
+            </div>
             <p className="text-xs text-gray-400">
-              Docker로 실행 중이면 <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://ollama:11434</code>
+              Docker 내부: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://ollama:11434</code>
+              {' '}· 호스트 머신: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://docker.host.internal:11434</code>
             </p>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">모델 이름</label>
-            <input
-              type="text"
-              placeholder="llama3.2"
-              value={form.ollama_model}
-              onChange={e => set('ollama_model', e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-xs text-gray-400">
-              예: llama3.2, mistral, qwen2.5 —{' '}
-              <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">ollama pull llama3.2</code>로 다운로드
-            </p>
-          </div>
+          {/* 조회 오류 */}
+          {ollamaFetchError && (
+            <div className="rounded-lg px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-xs text-red-600 dark:text-red-400">
+              ❌ {ollamaFetchError}
+            </div>
+          )}
+
+          {/* 모델 선택 — 목록 조회 성공 시 */}
+          {ollamaFetched && ollamaModels.length > 0 && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                모델 선택
+                <span className="ml-2 text-xs font-normal text-green-600 dark:text-green-400">
+                  ✓ {ollamaModels.length}개 모델 발견
+                </span>
+              </label>
+              <div className="space-y-1.5 max-h-52 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 p-1">
+                {ollamaModels.map(m => (
+                  <button
+                    key={m.name}
+                    type="button"
+                    onClick={() => set('ollama_model', m.name)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left text-sm transition-colors ${
+                      form.ollama_model === m.name
+                        ? 'bg-blue-600 text-white'
+                        : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200'
+                    }`}
+                  >
+                    <span className="font-mono font-medium">{m.name}</span>
+                    <span className={`text-xs ml-2 shrink-0 ${form.ollama_model === m.name ? 'text-blue-100' : 'text-gray-400'}`}>
+                      {m.parameter_size && `${m.parameter_size} · `}{m.size_gb}GB
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 목록 조회 성공했지만 모델 없음 */}
+          {ollamaFetched && ollamaModels.length === 0 && (
+            <div className="rounded-lg px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-xs text-amber-700 dark:text-amber-300">
+              ⚠️ 서버에 설치된 모델이 없습니다.{' '}
+              <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">ollama pull llama3.2</code> 명령으로 모델을 먼저 설치하세요.
+            </div>
+          )}
+
+          {/* 목록 조회 전 — 직접 입력 폴백 */}
+          {!ollamaFetched && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                모델 이름
+                <span className="ml-2 text-xs font-normal text-gray-400">목록 조회 후 선택하거나 직접 입력</span>
+              </label>
+              <input
+                type="text"
+                placeholder="llama3.2"
+                value={form.ollama_model}
+                onChange={e => set('ollama_model', e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-400">
+                예: llama3.2, mistral, qwen2.5 —{' '}
+                <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">ollama pull llama3.2</code>로 다운로드
+              </p>
+            </div>
+          )}
         </div>
       )}
 

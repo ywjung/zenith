@@ -459,6 +459,22 @@ export function fetchAIStatus(): Promise<AIStatusResult> {
   return request<AIStatusResult>('/admin/ai-settings/status')
 }
 
+export interface OllamaModel {
+  name: string
+  size_gb: number
+  modified_at: string
+  family: string
+  parameter_size: string
+}
+
+export function fetchOllamaModels(baseUrl: string): Promise<{ base_url: string; models: OllamaModel[] }> {
+  return request('/admin/ai-settings/ollama-models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_url: baseUrl }),
+  })
+}
+
 export function bulkUpdateTickets(data: {
   iids: number[]
   project_id: string
