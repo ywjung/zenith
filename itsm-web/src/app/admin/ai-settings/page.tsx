@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   fetchAISettings, updateAISettings, testAIConnection, fetchOllamaModels,
-  fetchOpenAIOAuthUrl, fetchOpenAIOAuthClientCredentials, disconnectOpenAIOAuth,
+  fetchOpenAIOAuthClientCredentials, disconnectOpenAIOAuth,
   type AISettingsData, type OllamaModel,
 } from '@/lib/api'
 
@@ -184,18 +184,59 @@ export default function AISettingsPage() {
     }
   }
 
-  // Authorization Code Flow: 브라우저를 OAuth 인증 페이지로 이동
+  // Authorization Code Flow: 팝업 창에서 OAuth 로그인 후 postMessage로 결과 수신
   const handleOAuthConnect = async () => {
     setOauthWorking(true)
     setOauthMsg(null)
     try {
       await doSave()  // OAuth 설정 먼저 저장
-      const { auth_url } = await fetchOpenAIOAuthUrl()
-      window.location.href = auth_url
-    } catch (e: unknown) {
-      setOauthMsg({ ok: false, msg: e instanceof Error ? e.message : 'OAuth URL 생성 실패' })
+    } catch {
+      setOauthMsg({ ok: false, msg: '설정 저장 실패' })
       setOauthWorking(false)
+      return
     }
+
+    const redirectUri = `${window.location.origin}/api/admin/ai-settings/openai-oauth/callback`
+    const startUrl = `/api/admin/ai-settings/openai-oauth/start?redirect_uri=${encodeURIComponent(redirectUri)}`
+
+    const popup = window.open(startUrl, 'oauth_popup', 'width=520,height=680,scrollbars=yes,resizable=yes')
+    if (!popup) {
+      setOauthMsg({ ok: false, msg: '팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.' })
+      setOauthWorking(false)
+      return
+    }
+
+    const handleMessage = async (event: MessageEvent) => {
+      // 같은 origin에서 온 메시지만 처리
+      if (event.origin !== window.location.origin) return
+      if (event.data?.event === 'oauth_success') {
+        cleanup()
+        setOauthMsg({ ok: true, msg: 'OpenAI OAuth 연결이 완료되었습니다.' })
+        const updated = await fetchAISettings()
+        setSettings(updated)
+        setOauthWorking(false)
+      } else if (event.data?.event === 'oauth_error') {
+        cleanup()
+        setOauthMsg({ ok: false, msg: `OAuth 연결 실패: ${event.data.msg}` })
+        setOauthWorking(false)
+      }
+    }
+
+    let closedTimer: ReturnType<typeof setInterval>
+    const cleanup = () => {
+      window.removeEventListener('message', handleMessage)
+      clearInterval(closedTimer)
+    }
+
+    window.addEventListener('message', handleMessage)
+
+    // 팝업을 중간에 닫으면 working 상태 해제
+    closedTimer = setInterval(() => {
+      if (popup.closed) {
+        cleanup()
+        setOauthWorking(false)
+      }
+    }, 800)
   }
 
   // Client Credentials Flow: 서버-to-서버 자동 토큰 발급
@@ -462,9 +503,9 @@ export default function AISettingsPage() {
                   onClick={handleOAuthConnect}
                   disabled={oauthWorking || !form.openai_oauth_client_id || !form.openai_oauth_auth_url}
                   className="flex-1 py-2 rounded-lg border border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-40 text-blue-600 dark:text-blue-400 text-xs font-semibold transition-colors"
-                  title="Authorization Code Flow — 브라우저에서 OpenAI 인증 페이지로 이동"
+                  title="Authorization Code Flow — 팝업 창에서 로그인 후 자동 완료"
                 >
-                  {oauthWorking ? '처리 중...' : '🌐 OAuth 인증 페이지로 이동'}
+                  {oauthWorking ? '처리 중...' : '🌐 브라우저 로그인으로 연결'}
                 </button>
               </div>
 
@@ -480,7 +521,7 @@ export default function AISettingsPage() {
 
               <p className="text-xs text-gray-400 border-t border-gray-200 dark:border-gray-600 pt-2">
                 <strong>Client Credentials</strong>: 서버-to-서버 자동 인증 (Azure OpenAI, 엔터프라이즈용)<br/>
-                <strong>Authorization Code</strong>: 사용자가 OpenAI 계정으로 직접 인증
+                <strong>브라우저 로그인</strong>: 팝업 창에서 계정 로그인 → 완료 시 자동 닫힘
               </p>
             </div>
           )}

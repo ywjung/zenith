@@ -1,19 +1,20 @@
 """
 Admin — AI 설정 관리
-GET  /admin/ai-settings                      현재 설정 조회 (API 키는 마스킹)
-PUT  /admin/ai-settings                      설정 저장
-POST /admin/ai-settings/test                 연결 테스트
-GET  /admin/ai-settings/status               현재 활성 상태 (프론트 헤더 배지용)
-GET  /admin/ai-settings/openai-oauth/url     OAuth 인증 URL 생성
-GET  /admin/ai-settings/openai-oauth/callback OAuth 콜백 처리 (토큰 교환 → 저장)
-DELETE /admin/ai-settings/openai-oauth       OAuth 연결 해제
+GET  /admin/ai-settings                         현재 설정 조회 (API 키는 마스킹)
+PUT  /admin/ai-settings                         설정 저장
+POST /admin/ai-settings/test                    연결 테스트
+GET  /admin/ai-settings/status                  현재 활성 상태 (프론트 헤더 배지용)
+GET  /admin/ai-settings/openai-oauth/start      팝업에서 OAuth 인증 페이지로 즉시 리다이렉트
+GET  /admin/ai-settings/openai-oauth/callback   OAuth 콜백 처리 (토큰 교환 → 저장 → 팝업 결과 전달)
+DELETE /admin/ai-settings/openai-oauth          OAuth 연결 해제
+POST /admin/ai-settings/openai-oauth/token      Client Credentials 방식 토큰 발급
 """
 import logging
 import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -317,32 +318,91 @@ def _redis():
         return None
 
 
-@router.get("/openai-oauth/url")
-def openai_oauth_url(
+def _popup_html(ok: bool, msg: str) -> HTMLResponse:
+    """
+    팝업 창에서 부모 창으로 결과를 전달하고 닫히는 HTML 페이지.
+    window.opener가 없으면 (팝업이 아닌 경우) 일반 리다이렉트로 fallback.
+    """
+    event = "oauth_success" if ok else "oauth_error"
+    fallback = f"/admin/ai-settings?oauth={'success' if ok else 'error'}&msg={msg}"
+    status_text = "인증 완료" if ok else f"인증 실패: {msg}"
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>OAuth 인증</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; display:flex; align-items:center; justify-content:center;
+         height:100vh; margin:0; background:#f9fafb; }}
+  .box {{ text-align:center; padding:2rem; background:white; border-radius:1rem;
+          box-shadow:0 4px 24px rgba(0,0,0,.08); max-width:320px; }}
+  .icon {{ font-size:3rem; }}
+  p {{ color:#374151; margin:.5rem 0 0; }}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="icon">{'✅' if ok else '❌'}</div>
+  <p>{status_text}</p>
+  <p style="font-size:.8rem;color:#9ca3af;margin-top:.5rem;">이 창은 자동으로 닫힙니다…</p>
+</div>
+<script>
+  (function() {{
+    var sent = false;
+    function done() {{
+      if (sent) return;
+      sent = true;
+      if (window.opener && !window.opener.closed) {{
+        window.opener.postMessage({{event: "{event}", msg: "{msg}"}}, window.location.origin);
+        setTimeout(function() {{ window.close(); }}, 800);
+      }} else {{
+        window.location.href = "{fallback}";
+      }}
+    }}
+    if (document.readyState === "loading") {{
+      document.addEventListener("DOMContentLoaded", done);
+    }} else {{
+      done();
+    }}
+  }})();
+</script>
+</body>
+</html>""", status_code=200)
+
+
+@router.get("/openai-oauth/start")
+def openai_oauth_start(
     request: Request,
+    redirect_uri: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
     """
-    OAuth 인증 URL 생성 — 프론트가 이 URL로 리다이렉트하면 OpenAI 인증 페이지로 이동.
+    팝업 창에서 직접 열리는 엔드포인트.
+    OAuth 설정을 검증하고 즉시 인증 제공자 로그인 페이지로 리다이렉트.
+    redirect_uri: 프론트에서 전달한 공개 콜백 URL (없으면 request.base_url 기반으로 자동 구성)
     """
+    from urllib.parse import urlencode
+
     row = _get_or_create(db)
     if not row.openai_oauth_client_id:
-        raise HTTPException(status_code=400, detail="OAuth Client ID가 설정되지 않았습니다.")
+        return _popup_html(False, "client_id_not_set")
     if not row.openai_oauth_auth_url:
-        raise HTTPException(status_code=400, detail="OAuth 인증 URL이 설정되지 않았습니다.")
+        return _popup_html(False, "auth_url_not_set")
 
     state = secrets.token_urlsafe(32)
     r = _redis()
+
+    # redirect_uri 결정: 프론트 전달 값 우선, 없으면 요청 base_url + X-Forwarded 헤더 활용
+    if not redirect_uri:
+        forwarded_proto = request.headers.get("x-forwarded-proto", "http")
+        forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host", "localhost")
+        redirect_uri = f"{forwarded_proto}://{forwarded_host}/api/admin/ai-settings/openai-oauth/callback"
+
     if r:
         r.setex(f"{_OAUTH_STATE_PREFIX}{state}", _OAUTH_STATE_TTL, "valid")
-
-    # redirect_uri: 백엔드 콜백 엔드포인트
-    base = str(request.base_url).rstrip("/")
-    redirect_uri = f"{base}/admin/ai-settings/openai-oauth/callback"
+        # redirect_uri를 state와 함께 저장 (콜백에서 token exchange 시 재사용)
+        r.setex(f"{_OAUTH_STATE_PREFIX}ruri:{state}", _OAUTH_STATE_TTL, redirect_uri)
 
     scope = row.openai_oauth_scope or "openid"
-    from urllib.parse import urlencode
     params = urlencode({
         "response_type": "code",
         "client_id": row.openai_oauth_client_id,
@@ -350,45 +410,54 @@ def openai_oauth_url(
         "scope": scope,
         "state": state,
     })
-    auth_url = f"{row.openai_oauth_auth_url.rstrip('?')}?{params}"
-    return {"auth_url": auth_url, "redirect_uri": redirect_uri}
+    auth_url = f"{row.openai_oauth_auth_url.rstrip('?')}&{params}" if "?" in row.openai_oauth_auth_url else f"{row.openai_oauth_auth_url}?{params}"
+    logger.info("OpenAI OAuth start → redirect to auth provider (redirect_uri=%s)", redirect_uri)
+    return RedirectResponse(auth_url, status_code=302)
 
 
 @router.get("/openai-oauth/callback")
 def openai_oauth_callback(
     request: Request,
-    code: str = Query(...),
+    code: Optional[str] = Query(default=None),
     state: str = Query(...),
     error: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """
     OAuth 콜백 — 인증 코드를 access token으로 교환 후 DB 저장.
-    성공 시 /admin/ai-settings?oauth=success 로 리다이렉트.
-    오류 시 /admin/ai-settings?oauth=error&msg=... 로 리다이렉트.
+    결과를 팝업 postMessage로 부모 창에 전달한 뒤 창을 닫음.
+    팝업이 아닌 경우 /admin/ai-settings 로 리다이렉트 (fallback).
     """
     import httpx
     from datetime import datetime, timezone, timedelta
 
-    settings_page = "/admin/ai-settings"
-
     if error:
-        return RedirectResponse(f"{settings_page}?oauth=error&msg={error}")
+        return _popup_html(False, error)
 
-    # state 검증
+    if not code:
+        return _popup_html(False, "no_code")
+
+    # state 검증 & redirect_uri 복원
     r = _redis()
+    redirect_uri = None
     if r:
         key = f"{_OAUTH_STATE_PREFIX}{state}"
         if not r.exists(key):
-            return RedirectResponse(f"{settings_page}?oauth=error&msg=invalid_state")
+            return _popup_html(False, "invalid_state")
         r.delete(key)
+        ruri_raw = r.get(f"{_OAUTH_STATE_PREFIX}ruri:{state}")
+        r.delete(f"{_OAUTH_STATE_PREFIX}ruri:{state}")
+        if ruri_raw:
+            redirect_uri = ruri_raw.decode() if isinstance(ruri_raw, bytes) else ruri_raw
+
+    if not redirect_uri:
+        forwarded_proto = request.headers.get("x-forwarded-proto", "http")
+        forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host", "localhost")
+        redirect_uri = f"{forwarded_proto}://{forwarded_host}/api/admin/ai-settings/openai-oauth/callback"
 
     row = _get_or_create(db)
     if not row.openai_oauth_token_url:
-        return RedirectResponse(f"{settings_page}?oauth=error&msg=token_url_not_set")
-
-    base = str(request.base_url).rstrip("/")
-    redirect_uri = f"{base}/admin/ai-settings/openai-oauth/callback"
+        return _popup_html(False, "token_url_not_set")
 
     try:
         resp = httpx.post(
@@ -406,11 +475,11 @@ def openai_oauth_callback(
         token_data = resp.json()
     except Exception as e:
         logger.error("OpenAI OAuth token exchange failed: %s", e)
-        return RedirectResponse(f"{settings_page}?oauth=error&msg=token_exchange_failed")
+        return _popup_html(False, "token_exchange_failed")
 
     access_token = token_data.get("access_token")
     if not access_token:
-        return RedirectResponse(f"{settings_page}?oauth=error&msg=no_access_token")
+        return _popup_html(False, "no_access_token")
 
     expires_in = token_data.get("expires_in")
     expires_at = None
@@ -419,11 +488,10 @@ def openai_oauth_callback(
 
     row.openai_oauth_access_token = access_token
     row.openai_oauth_token_expires_at = expires_at
-    # OAuth 토큰을 API 호출에 바로 쓸 수 있도록 openai_api_key에도 저장
     row.openai_api_key = access_token
     db.commit()
     logger.info("OpenAI OAuth token saved (expires_at=%s)", expires_at)
-    return RedirectResponse(f"{settings_page}?oauth=success")
+    return _popup_html(True, "connected")
 
 
 @router.delete("/openai-oauth")
