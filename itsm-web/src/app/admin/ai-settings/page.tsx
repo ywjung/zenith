@@ -242,7 +242,7 @@ export default function AISettingsPage() {
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="http://docker.host.internal:11434"
+                placeholder="http://host.docker.internal:11434"
                 value={form.ollama_base_url}
                 onChange={e => {
                   set('ollama_base_url', e.target.value)
@@ -263,7 +263,7 @@ export default function AISettingsPage() {
             </div>
             <p className="text-xs text-gray-400">
               Docker 내부: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://ollama:11434</code>
-              {' '}· 호스트 머신: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://docker.host.internal:11434</code>
+              {' '}· 호스트 머신: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://host.docker.internal:11434</code>
             </p>
           </div>
 
