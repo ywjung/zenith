@@ -729,7 +729,7 @@ class WebPushSubscription(Base):
     __tablename__ = "web_push_subscriptions"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(100), nullable=False, index=True)
+    username = Column(String(100), nullable=False)
     endpoint = Column(Text, nullable=False, unique=True)
     p256dh = Column(Text, nullable=False)   # keys.p256dh
     auth = Column(Text, nullable=False)     # keys.auth

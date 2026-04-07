@@ -18,7 +18,6 @@ from .helpers import (
     _get_issue_requester,
     _is_issue_assigned_to_user,
     _scan_with_clamav,
-    _stats_executor,
     _strip_image_metadata,
     _validate_magic_bytes,
     user_limiter,
