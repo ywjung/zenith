@@ -34,7 +34,7 @@
     "@tiptap/extension-table-header": "^2.11.7",
     "@tiptap/extension-table-row": "^2.11.7",
     "@tiptap/react": "^2.11.7",
-    "@tiptap/starter-kit": "^2.11.7",
+    "@tiptap/starter-kit": "^3.22.2",
     "@tiptap/suggestion": "^2.27.2",
     "@types/dompurify": "^3.0.5",
     "dompurify": "^3.3.3",
