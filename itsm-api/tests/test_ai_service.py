@@ -216,8 +216,9 @@ def test_maybe_refresh_token_expired_refreshes():
     }
 
     mock_db = MagicMock()
-    with patch("app.ai_service.httpx.post", return_value=mock_resp), \
-         patch("app.ai_service.SessionLocal", return_value=mock_db):
+    import httpx
+    with patch.object(httpx, "post", return_value=mock_resp), \
+         patch("app.database.SessionLocal", return_value=mock_db):
         _maybe_refresh_oauth_token(row)
 
     assert row.openai_api_key == "new-access-token"
@@ -240,8 +241,9 @@ def test_maybe_refresh_codex_oauth_uses_hardcoded_url():
     mock_resp.json.return_value = {"access_token": "new-token", "expires_in": 3600}
 
     mock_db = MagicMock()
-    with patch("app.ai_service.httpx.post", return_value=mock_resp) as mock_post, \
-         patch("app.ai_service.SessionLocal", return_value=mock_db):
+    import httpx
+    with patch.object(httpx, "post", return_value=mock_resp) as mock_post, \
+         patch("app.database.SessionLocal", return_value=mock_db):
         _maybe_refresh_oauth_token(row)
 
     # Should call the hardcoded Codex OAuth URL
@@ -259,7 +261,8 @@ def test_maybe_refresh_failure_logs_warning():
         openai_oauth_client_id="client-123",
     )
 
-    with patch("app.ai_service.httpx.post", side_effect=Exception("network error")):
+    import httpx
+    with patch.object(httpx, "post", side_effect=Exception("network error")):
         # Should not raise
         _maybe_refresh_oauth_token(row)
 
