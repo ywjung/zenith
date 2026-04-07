@@ -137,13 +137,17 @@ def get_ticket_stats(
             # ── DB 기반 빠른 경로: user/developer 통계를 TicketSearchIndex에서 계산 ──
             from ...models import TicketSearchIndex as _TSI
             from ...database import get_db as _get_db_func
+            from sqlalchemy import cast, literal
+            from sqlalchemy.dialects.postgresql import JSONB as _JSONB
+            def _jc(col, val):
+                return col.op("@>")(cast(literal(val), _JSONB))
             _db = next(_get_db_func())
             try:
                 _base = _db.query(_TSI)
                 pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
                 _base = _base.filter(_TSI.project_id == pid)
                 # problem 티켓 제외
-                _base = _base.filter(~_TSI.labels_json.op("@>")('"problem"'))
+                _base = _base.filter(~_jc(_TSI.labels_json, '["problem"]'))
 
                 if role == "user":
                     _base = _base.filter(_TSI.author_username == _user.get("username", ""))
@@ -162,10 +166,10 @@ def get_ticket_stats(
                     elif state_val == "closed":
                         q = q.filter(_TSI.state == "closed")
                     if label:
-                        q = q.filter(_TSI.labels_json.op("@>")(f'["{label}"]'))
+                        q = q.filter(_jc(_TSI.labels_json, f'["{label}"]'))
                     if not_labels:
                         for nl in not_labels:
-                            q = q.filter(~_TSI.labels_json.op("@>")(f'["{nl}"]'))
+                            q = q.filter(~_jc(_TSI.labels_json, f'["{nl}"]'))
                     return q.count()
 
                 _result = {
@@ -189,12 +193,16 @@ def get_ticket_stats(
         # ── agent/admin DB 빠른 경로 — TicketSearchIndex에서 SQL COUNT
         from ...models import TicketSearchIndex as _TSI
         from ...database import get_db as _get_db_func
+        from sqlalchemy import cast, literal
+        from sqlalchemy.dialects.postgresql import JSONB as _JSONB
+        def _jc2(col, val):
+            return col.op("@>")(cast(literal(val), _JSONB))
         _db = next(_get_db_func())
         try:
             _base = _db.query(_TSI)
             pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
             _base = _base.filter(_TSI.project_id == pid)
-            _base = _base.filter(~_TSI.labels_json.op("@>")('"problem"'))
+            _base = _base.filter(~_jc2(_TSI.labels_json, '["problem"]'))
 
             _all_statuses = [
                 "status::approved", "status::in_progress", "status::waiting",
@@ -208,10 +216,10 @@ def get_ticket_stats(
                 elif state_val == "closed":
                     q = q.filter(_TSI.state == "closed")
                 if label:
-                    q = q.filter(_TSI.labels_json.op("@>")(f'["{label}"]'))
+                    q = q.filter(_jc2(_TSI.labels_json, f'["{label}"]'))
                 if not_labels:
                     for nl in not_labels:
-                        q = q.filter(~_TSI.labels_json.op("@>")(f'["{nl}"]'))
+                        q = q.filter(~_jc2(_TSI.labels_json, f'["{nl}"]'))
                 return q.count()
 
             _result = {

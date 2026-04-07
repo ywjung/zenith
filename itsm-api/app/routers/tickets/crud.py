@@ -157,6 +157,10 @@ def list_tickets(
         _use_db_fast_path = (role == "user" or bool(created_by_username)) and not sla
         if _use_db_fast_path:
             from ...models import TicketSearchIndex as _TSI
+            from sqlalchemy import cast, literal
+            from sqlalchemy.dialects.postgresql import JSONB as _JSONB
+            def _jsonb_contains(col, val):
+                return col.op("@>")(cast(literal(val), _JSONB))
             q = db.query(_TSI)
 
             # 작성자 필터
@@ -170,12 +174,12 @@ def list_tickets(
             elif gl_state == "closed":
                 q = q.filter(_TSI.state == "closed")
             if status_label:
-                q = q.filter(_TSI.labels_json.op("@>")(f'["{status_label}"]'))
+                q = q.filter(_jsonb_contains(_TSI.labels_json, f'["{status_label}"]'))
             if not_labels:
                 for nl in not_labels.split(","):
                     nl = nl.strip()
                     if nl:
-                        q = q.filter(~_TSI.labels_json.op("@>")(f'["{nl}"]'))
+                        q = q.filter(~_jsonb_contains(_TSI.labels_json, f'["{nl}"]'))
 
             # 프로젝트 필터
             pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
@@ -186,7 +190,7 @@ def list_tickets(
                 for lb in labels.split(","):
                     lb = lb.strip()
                     if lb:
-                        q = q.filter(_TSI.labels_json.op("@>")(f'["{lb}"]'))
+                        q = q.filter(_jsonb_contains(_TSI.labels_json, f'["{lb}"]'))
 
             # 검색
             if search:
@@ -316,6 +320,10 @@ def list_tickets(
 
         # ── agent/admin DB 빠른 경로 — TicketSearchIndex에서 iid 조회 후 페이지분만 GitLab 상세 호출
         from ...models import TicketSearchIndex as _TSI
+        from sqlalchemy import cast, literal
+        from sqlalchemy.dialects.postgresql import JSONB as _JSONB
+        def _jc(col, val):
+            return col.op("@>")(cast(literal(val), _JSONB))
         q = db.query(_TSI)
         pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
         q = q.filter(_TSI.project_id == pid)
@@ -331,12 +339,12 @@ def list_tickets(
             for lb in labels.split(","):
                 lb = lb.strip()
                 if lb:
-                    q = q.filter(_TSI.labels_json.op("@>")(f'["{lb}"]'))
+                    q = q.filter(_jc(_TSI.labels_json, f'["{lb}"]'))
         if not_labels:
             for nl in not_labels.split(","):
                 nl = nl.strip()
                 if nl:
-                    q = q.filter(~_TSI.labels_json.op("@>")(f'["{nl}"]'))
+                    q = q.filter(~_jc(_TSI.labels_json, f'["{nl}"]'))
 
         # 검색
         if search:
