@@ -84,41 +84,28 @@ INSERT INTO holiday_years (year, created_at)
     VALUES (EXTRACT(YEAR FROM NOW())::int, NOW())
 ON CONFLICT DO NOTHING;
 
--- ── 서비스 카탈로그 기본 항목 ────────────────────────────────────────────────
-INSERT INTO service_catalog_items (name, description, category, icon, fields_schema, is_active, "order", created_by, created_at, updated_at) VALUES
-    (
-        'PC/노트북 교체 신청',
-        'PC, 노트북 등 개인 업무용 단말기 교체를 신청합니다.',
-        '하드웨어',
-        '💻',
-        '[{"name":"device_type","label":"장비 유형","type":"select","options":["PC","노트북","모니터","기타"],"required":true},{"name":"reason","label":"교체 사유","type":"text","required":true}]',
-        true, 10, 'system', NOW(), NOW()
-    ),
-    (
-        '소프트웨어 설치 요청',
-        '업무에 필요한 소프트웨어 설치를 요청합니다.',
-        '소프트웨어',
-        '📦',
-        '[{"name":"software_name","label":"소프트웨어명","type":"text","required":true},{"name":"version","label":"버전","type":"text","required":false},{"name":"license_type","label":"라이선스 유형","type":"select","options":["사내 라이선스","개인 구매","오픈소스"],"required":true}]',
-        true, 20, 'system', NOW(), NOW()
-    ),
-    (
-        '계정/권한 신청',
-        '시스템 계정 생성 또는 권한 변경을 요청합니다.',
-        '계정',
-        '👤',
-        '[{"name":"system_name","label":"대상 시스템","type":"text","required":true},{"name":"request_type","label":"요청 유형","type":"select","options":["계정 생성","권한 추가","권한 회수","계정 잠금 해제"],"required":true}]',
-        true, 30, 'system', NOW(), NOW()
-    ),
-    (
-        '네트워크 접근 요청',
-        '특정 네트워크 또는 포트 접근 권한을 요청합니다.',
-        '네트워크',
-        '🌐',
-        '[{"name":"target_host","label":"대상 호스트/IP","type":"text","required":true},{"name":"port","label":"포트","type":"text","required":false},{"name":"reason","label":"요청 사유","type":"text","required":true}]',
-        true, 40, 'system', NOW(), NOW()
-    )
-ON CONFLICT DO NOTHING;
+-- ── 서비스 카탈로그 기본 항목 (이미 있으면 건너뜀) ───────────────────────────
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM service_catalog_items LIMIT 1) THEN
+    INSERT INTO service_catalog_items (name, description, category, icon, fields_schema, is_active, "order", created_by, created_at, updated_at) VALUES
+      ('PC/노트북 교체 신청', 'PC, 노트북 등 개인 업무용 단말기 교체를 신청합니다.', '하드웨어', '💻',
+       '[{"name":"device_type","label":"장비 유형","type":"select","options":["PC","노트북","모니터","기타"],"required":true},{"name":"reason","label":"교체 사유","type":"text","required":true}]',
+       true, 10, 'system', NOW(), NOW()),
+      ('소프트웨어 설치 요청', '업무에 필요한 소프트웨어 설치를 요청합니다.', '소프트웨어', '📦',
+       '[{"name":"software_name","label":"소프트웨어명","type":"text","required":true},{"name":"version","label":"버전","type":"text","required":false},{"name":"license_type","label":"라이선스 유형","type":"select","options":["사내 라이선스","개인 구매","오픈소스"],"required":true}]',
+       true, 20, 'system', NOW(), NOW()),
+      ('계정/권한 신청', '시스템 계정 생성 또는 권한 변경을 요청합니다.', '계정', '👤',
+       '[{"name":"system_name","label":"대상 시스템","type":"text","required":true},{"name":"request_type","label":"요청 유형","type":"select","options":["계정 생성","권한 추가","권한 회수","계정 잠금 해제"],"required":true}]',
+       true, 30, 'system', NOW(), NOW()),
+      ('네트워크 접근 요청', '특정 네트워크 또는 포트 접근 권한을 요청합니다.', '네트워크', '🌐',
+       '[{"name":"target_host","label":"대상 호스트/IP","type":"text","required":true},{"name":"port","label":"포트","type":"text","required":false},{"name":"reason","label":"요청 사유","type":"text","required":true}]',
+       true, 40, 'system', NOW(), NOW());
+    RAISE NOTICE '서비스 카탈로그 4건 삽입';
+  ELSE
+    RAISE NOTICE '서비스 카탈로그 이미 존재 — 건너뜀';
+  END IF;
+END $$;
 
 -- ── SLA 정책 (우선순위별 응답·해결 목표 시간) ──────────────────────────────
 INSERT INTO sla_policies (priority, response_hours, resolve_hours) VALUES
