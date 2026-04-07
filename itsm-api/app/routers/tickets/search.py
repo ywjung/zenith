@@ -187,36 +187,48 @@ def get_ticket_stats(
             finally:
                 _db.close()
 
-        def _count(state, labels=None, not_labels=None):
-            _, total = gitlab_client.get_issues(
-                state=state, labels=labels, not_labels=not_labels,
-                per_page=1, page=1, project_id=project_id,
-            )
-            return total
+        # ── agent/admin DB 빠른 경로 — TicketSearchIndex에서 SQL COUNT
+        from ...models import TicketSearchIndex as _TSI
+        from ...database import get_db as _get_db_func
+        _db = next(_get_db_func())
+        try:
+            _base = _db.query(_TSI)
+            pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
+            _base = _base.filter(_TSI.project_id == pid)
+            _base = _base.filter(~_TSI.labels_json.op("@>")('"problem"'))
 
-        _all_sl = "status::approved,status::in_progress,status::waiting,status::resolved,status::testing,status::ready_for_release,status::released"
-        f_all               = _stats_executor.submit(_count, "all")
-        f_open              = _stats_executor.submit(_count, "opened", None, _all_sl)
-        f_approved          = _stats_executor.submit(_count, "opened", "status::approved")
-        f_in_progress       = _stats_executor.submit(_count, "opened", "status::in_progress")
-        f_waiting           = _stats_executor.submit(_count, "opened", "status::waiting")
-        f_resolved          = _stats_executor.submit(_count, "opened", "status::resolved")
-        f_testing           = _stats_executor.submit(_count, "opened", "status::testing")
-        f_ready_for_release = _stats_executor.submit(_count, "opened", "status::ready_for_release")
-        f_released          = _stats_executor.submit(_count, "opened", "status::released")
-        f_closed            = _stats_executor.submit(_count, "closed")
-        _result = {
-            "all":              f_all.result(),
-            "open":             f_open.result(),
-            "approved":         f_approved.result(),
-            "in_progress":      f_in_progress.result(),
-            "waiting":          f_waiting.result(),
-            "resolved":         f_resolved.result(),
-            "testing":          f_testing.result(),
-            "ready_for_release":f_ready_for_release.result(),
-            "released":         f_released.result(),
-            "closed":           f_closed.result(),
-        }
+            _all_statuses = [
+                "status::approved", "status::in_progress", "status::waiting",
+                "status::resolved", "status::testing", "status::ready_for_release", "status::released",
+            ]
+
+            def _db_count(state_val, label=None, not_labels=None):
+                q = _base
+                if state_val == "opened":
+                    q = q.filter(_TSI.state == "opened")
+                elif state_val == "closed":
+                    q = q.filter(_TSI.state == "closed")
+                if label:
+                    q = q.filter(_TSI.labels_json.op("@>")(f'["{label}"]'))
+                if not_labels:
+                    for nl in not_labels:
+                        q = q.filter(~_TSI.labels_json.op("@>")(f'["{nl}"]'))
+                return q.count()
+
+            _result = {
+                "all":              _db_count("all"),
+                "open":             _db_count("opened", not_labels=_all_statuses),
+                "approved":         _db_count("opened", label="status::approved"),
+                "in_progress":      _db_count("opened", label="status::in_progress"),
+                "waiting":          _db_count("opened", label="status::waiting"),
+                "resolved":         _db_count("opened", label="status::resolved"),
+                "testing":          _db_count("opened", label="status::testing"),
+                "ready_for_release":_db_count("opened", label="status::ready_for_release"),
+                "released":         _db_count("opened", label="status::released"),
+                "closed":           _db_count("closed"),
+            }
+        finally:
+            _db.close()
 
         try:
             from ...models import SLARecord

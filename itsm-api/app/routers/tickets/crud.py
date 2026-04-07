@@ -314,13 +314,61 @@ def list_tickets(
                 _r.setex(_list_cache_key, 180, _json.dumps(_result))
             return _result
 
-        issues, total = gitlab_client.get_issues(
-            state=gl_state, labels=labels, not_labels=not_labels,
-            search=search, project_id=project_id, page=page, per_page=per_page,
-            order_by=sort_by, sort=order,
-            created_after=created_after, created_before=created_before,
-        )
-        tickets_page = [_issue_to_response(i, mask_pii=(role == "user")) for i in issues]
+        # ── agent/admin DB 빠른 경로 — TicketSearchIndex에서 iid 조회 후 페이지분만 GitLab 상세 호출
+        from ...models import TicketSearchIndex as _TSI
+        q = db.query(_TSI)
+        pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
+        q = q.filter(_TSI.project_id == pid)
+
+        # 상태 필터
+        if gl_state == "opened":
+            q = q.filter(_TSI.state == "opened")
+        elif gl_state == "closed":
+            q = q.filter(_TSI.state == "closed")
+
+        # 라벨 필터 (status, category, priority)
+        if labels:
+            for lb in labels.split(","):
+                lb = lb.strip()
+                if lb:
+                    q = q.filter(_TSI.labels_json.op("@>")(f'["{lb}"]'))
+        if not_labels:
+            for nl in not_labels.split(","):
+                nl = nl.strip()
+                if nl:
+                    q = q.filter(~_TSI.labels_json.op("@>")(f'["{nl}"]'))
+
+        # 검색
+        if search:
+            q = q.filter(
+                _TSI.title.ilike(f"%{search}%") | _TSI.description_text.ilike(f"%{search}%")
+            )
+
+        # 날짜 필터
+        if created_after:
+            q = q.filter(_TSI.created_at >= created_after)
+        if created_before:
+            q = q.filter(_TSI.created_at <= created_before)
+
+        # 정렬
+        sort_col = getattr(_TSI, sort_by, _TSI.created_at)
+        q = q.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
+
+        total = q.count()
+        page_rows = q.offset((page - 1) * per_page).limit(per_page).all()
+
+        if page_rows:
+            page_issues = []
+            for row in page_rows:
+                try:
+                    issue = gitlab_client.get_issue(row.iid, project_id=row.project_id)
+                    page_issues.append(issue)
+                except Exception:
+                    pass
+            tickets_page = [_issue_to_response(i, mask_pii=False) for i in page_issues]
+        else:
+            tickets_page = []
+
         _attach_sla_deadlines(tickets_page, db)
         _result = {
             "tickets": tickets_page,
