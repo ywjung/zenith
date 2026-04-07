@@ -26,8 +26,11 @@ INSERT INTO system_settings (key, value, updated_by, updated_at) VALUES
     ('enable_kb_public',     'false',        'system', NOW())
 ON CONFLICT (key) DO NOTHING;
 
--- ── 빠른 답변(Quick Reply) 기본 템플릿 ─────────────────────────────────────
-INSERT INTO quick_replies (name, content, category, created_by, created_at) VALUES
+-- ── 빠른 답변(Quick Reply) 기본 템플릿 (이미 있으면 건너뜀) ─────────────────
+DO $qr$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM quick_replies LIMIT 1) THEN
+    INSERT INTO quick_replies (name, content, category, created_by, created_at) VALUES
     (
         '접수 확인',
         '안녕하세요. 티켓이 정상적으로 접수되었습니다. 담당자가 배정되면 별도로 안내드리겠습니다. 감사합니다.',
@@ -76,8 +79,12 @@ INSERT INTO quick_replies (name, content, category, created_by, created_at) VALU
         '일반',
         'system',
         NOW()
-    )
-ON CONFLICT DO NOTHING;
+    );
+    RAISE NOTICE '빠른 답변 7건 삽입';
+  ELSE
+    RAISE NOTICE '빠른 답변 이미 존재 — 건너뜀';
+  END IF;
+END $qr$;
 
 -- ── 현재 연도 공휴일 관리 탭 활성화 ─────────────────────────────────────────
 INSERT INTO holiday_years (year, created_at)
@@ -124,8 +131,12 @@ INSERT INTO service_types (value, label, description, emoji, enabled) VALUES
     ('5', '기타',       'other',    '📋', true)
 ON CONFLICT DO NOTHING;
 
--- ── 티켓 템플릿 (자주 사용하는 양식) ────────────────────────────────────────
-INSERT INTO ticket_templates (name, category, description, created_by, created_at) VALUES
+-- ── 티켓 템플릿 (이미 있으면 건너뜀) ─────────────────────────────────────────
+-- ticket_templates에 unique 제약이 없으므로 DO 블록으로 중복 방지
+DO $tmpl$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM ticket_templates LIMIT 1) THEN
+    INSERT INTO ticket_templates (name, category, description, created_by, created_at) VALUES
     ('PC 고장 / 부품 교체 요청', 'hardware',
      E'## 증상 설명\n(어떤 증상이 발생했는지 구체적으로 작성해 주세요)\n\n## 장비 정보\n- 장비명/모델:\n- 자산 태그 번호:\n- 위치(층수/좌석):\n\n## 발생 시각\n- 최초 발생일시:\n\n## 현재까지 시도한 조치\n(재부팅, 케이블 재연결 등 직접 시도한 내용)\n\n## 업무 영향도\n- 해당 장비 없이 업무 가능 여부: [ ] 가능  [ ] 불가능',
      'system', NOW()),
@@ -152,8 +163,12 @@ INSERT INTO ticket_templates (name, category, description, created_by, created_a
      'system', NOW()),
     ('인프라 변경 요청', 'other',
      E'## 변경 요약\n(한 줄로 변경 내용을 요약)\n\n## 변경 유형\n- [ ] 긴급 변경\n- [ ] 표준 변경\n- [ ] 일반 변경\n\n## 변경 상세 내용\n(변경 대상 시스템, 변경 내용, 변경 이유)\n\n## 변경 위험도\n- [ ] 낮음  [ ] 보통  [ ] 높음  [ ] 매우 높음\n\n## 작업 예정 일시\n- 시작:\n- 종료:\n\n## 영향 범위 및 다운타임\n\n## 롤백 계획\n(변경 실패 시 원복 방법)\n\n## 테스트 계획',
-     'system', NOW())
-ON CONFLICT DO NOTHING;
+     'system', NOW());
+    RAISE NOTICE '티켓 템플릿 9건 삽입';
+  ELSE
+    RAISE NOTICE '티켓 템플릿 이미 존재 — 건너뜀';
+  END IF;
+END $tmpl$;
 
 -- ── 완료 메시지 ───────────────────────────────────────────────────────────────
 DO $$
