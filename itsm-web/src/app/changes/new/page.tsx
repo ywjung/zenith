@@ -96,7 +96,7 @@ function NewChangeContent() {
         rollback_plan: form.rollback_plan || undefined,
         scheduled_start_at: form.scheduled_start_at || undefined,
         scheduled_end_at: form.scheduled_end_at || undefined,
-        related_ticket_iid: form.related_ticket_iid ? parseInt(form.related_ticket_iid) : undefined,
+        related_ticket_iid: form.related_ticket_iid && !isNaN(Number(form.related_ticket_iid)) ? Number(form.related_ticket_iid) : undefined,
         project_id: projectId,
       })
       if (!asDraft) {

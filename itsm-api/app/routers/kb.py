@@ -177,8 +177,6 @@ def list_articles(
             query = query.filter(KBArticle.tags.contains(tag_list))
 
     # count + all 이중 쿼리 → 윈도우 함수로 단일 쿼리
-    from sqlalchemy import over as _over
-    from sqlalchemy.orm import load_only as _load_only
     count_col = sa_func.count().over().label("_total")
     def _exec(q):
         return (

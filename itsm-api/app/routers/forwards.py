@@ -261,7 +261,7 @@ def create_forward(
     # Build forwarded issue content
     title = f"[공용 #{iid}] {issue['title']}"
     desc_lines = [
-        f"> **공용 ITSM 포털에서 전달된 이슈입니다.**",
+        "> **공용 ITSM 포털에서 전달된 이슈입니다.**",
         f"> 원본 티켓: #{iid} — {issue['title']}",
         f"> 원본 URL: {issue.get('web_url', '')}",
         "",

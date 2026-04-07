@@ -23,7 +23,7 @@ def require_role(min_role: str):
     min_level = ROLE_LEVELS.get(min_role, 0)
 
     def dependency(user: dict = Depends(get_current_user)) -> dict:
-        role = user.get("role", "user")
+        role = (user.get("role") or "user").lower()
         if ROLE_LEVELS.get(role, 0) < min_level:
             raise HTTPException(status_code=403, detail="권한이 부족합니다.")
         return user

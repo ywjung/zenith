@@ -530,7 +530,7 @@ def get_agent_performance(
         sla_q = sla_q.filter(SLARecord.created_at >= from_dt)
     if to_dt:
         sla_q = sla_q.filter(SLARecord.created_at <= to_dt)
-    sla_records = sla_q.all()
+    sla_records = sla_q.limit(50000).all()
 
     sla_iid_map = {r.gitlab_issue_iid: r for r in sla_records}
     for issue in all_issues:
@@ -551,7 +551,7 @@ def get_agent_performance(
         rating_q = rating_q.filter(Rating.created_at >= from_dt)
     if to_dt:
         rating_q = rating_q.filter(Rating.created_at <= to_dt)
-    ratings = rating_q.all()
+    ratings = rating_q.limit(50000).all()
     rating_map: dict[int, list[int]] = {}
     for r in ratings:
         rating_map.setdefault(r.gitlab_issue_iid, []).append(r.score)
@@ -878,7 +878,7 @@ def get_sla_dashboard(
     if project_id:
         base_q = base_q.filter(SLARecord.project_id == project_id)
 
-    active_records: list[SLARecord] = base_q.all()
+    active_records: list[SLARecord] = base_q.limit(10000).all()
 
     breach_list = []
     warning_list = []
@@ -1102,7 +1102,6 @@ def get_time_tracking_report(
     user: dict = Depends(require_agent),
 ):
     """팀원별·티켓별 시간 기록 집계."""
-    from sqlalchemy import func as sqlfunc
     q = db.query(TimeEntry)
     if project_id:
         q = q.filter(TimeEntry.project_id == project_id)
@@ -1209,23 +1208,40 @@ def get_multi_project_stats(
     except Exception:
         pass
 
+    # SQL 집계로 N+1 제거 — 프로젝트별 SLA 통계를 한 번의 쿼리로 조회
+    from sqlalchemy import func, case
+    sla_agg = (
+        db.query(
+            SLARecord.project_id,
+            func.count().label("total"),
+            func.sum(case((SLARecord.breached == True, 1), else_=0)).label("breached"),  # noqa: E712
+            func.sum(case((SLARecord.resolved_at == None, 1), else_=0) * case((SLARecord.breached == False, 1), else_=0)).label("active"),  # noqa: E711,E712
+        )
+        .group_by(SLARecord.project_id)
+        .all()
+    )
+    sla_map = {r.project_id: {"total": r.total, "breached": int(r.breached or 0), "active": int(r.active or 0)} for r in sla_agg}
+
+    time_agg = (
+        db.query(TimeEntry.project_id, func.coalesce(func.sum(TimeEntry.minutes), 0).label("total_min"))
+        .group_by(TimeEntry.project_id)
+        .all()
+    )
+    time_map = {r.project_id: int(r.total_min) for r in time_agg}
+
     result = []
     for pid in project_ids:
-        sla_records = db.query(SLARecord).filter(SLARecord.project_id == pid).all()
-        total = len(sla_records)
-        breached = sum(1 for r in sla_records if r.breached)
-        active = sum(1 for r in sla_records if r.resolved_at is None and not r.breached)
-        time_entries = db.query(TimeEntry).filter(TimeEntry.project_id == pid).all()
-        total_minutes = sum(e.minutes for e in time_entries)
-
+        s = sla_map.get(pid, {"total": 0, "breached": 0, "active": 0})
+        total = s["total"]
+        breached = s["breached"]
         result.append({
             "project_id": pid,
             "project_name": project_names.get(pid, pid),
             "total_sla_records": total,
             "sla_breached": breached,
-            "sla_active": active,
+            "sla_active": s["active"],
             "sla_compliance_rate": round((total - breached) / total * 100, 1) if total else None,
-            "total_time_hours": round(total_minutes / 60, 1),
+            "total_time_hours": round(time_map.get(pid, 0) / 60, 1),
         })
 
     result.sort(key=lambda x: -x["total_sla_records"])

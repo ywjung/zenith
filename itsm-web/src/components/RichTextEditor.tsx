@@ -220,8 +220,12 @@ export default function RichTextEditor({
       const linkMatch = markdown.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
       if (linkMatch) {
         const [, text, href] = linkMatch
+        // javascript: URL 차단 + HTML 이스케이프 (XSS 방지)
+        if (/^\s*javascript:/i.test(href)) return
+        const safeText = text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+        const safeHref = href.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
         editor.chain().focus().insertContent(
-          `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`
+          `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeText}</a>`
         ).run()
         return
       }

@@ -6,7 +6,6 @@ import ssl
 import json
 import urllib.request
 import urllib.parse
-from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional

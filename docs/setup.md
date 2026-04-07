@@ -1,6 +1,6 @@
 # ZENITH ITSM 설치 가이드
 
-> 최종 업데이트: 2026-04-03 · v2.3
+> 최종 업데이트: 2026-04-07 · v2.4
 
 ---
 
@@ -86,7 +86,7 @@ chmod +x scripts/setup.sh
 | 4 | GitLab 단독 기동 → 초기화 완료 대기 (최대 5분) |
 | 5 | GitLab OAuth Application 등록 안내 → 입력값으로 `.env` 자동 업데이트 |
 | 6 | 전체 서비스 이미지 빌드 및 기동 |
-| 7 | Alembic 마이그레이션 실행 (0001~0067) |
+| 7 | Alembic 마이그레이션 실행 (0001~0072) |
 | 8 | 초기 데이터 시드 (업무시간·시스템설정·빠른답변·서비스카탈로그) |
 | 9 | 헬스체크 검증 후 접속 정보 출력 |
 
@@ -385,7 +385,7 @@ PC 교체 요청 / 소프트웨어 설치 / 계정 신청 / 네트워크 연결
 
 관리: `Admin → 서비스 카탈로그`
 
-### Alembic 마이그레이션 요약 (v2.3 기준: 0001~0067)
+### Alembic 마이그레이션 요약 (v2.4 기준: 0001~0072)
 
 | 범위 | 주요 내용 |
 |------|---------|
@@ -398,9 +398,11 @@ PC 교체 요청 / 소프트웨어 설치 / 계정 신청 / 네트워크 연결
 | 0061 | `web_push_subscriptions` — 브라우저 Web Push 구독 |
 | 0062 | `service_catalog_items.approval_required` — 카탈로그 승인 플래그 |
 | 0063 | `user_notification_rules` — 사용자별 알림 규칙 |
-| 0064~0065 | 성능 인덱스 추가 및 중복 인덱스 제거 |
-| 0066 | `recurring_tickets` 유니크 제약 |
-| 0067 | `tickets.updated_at` 인덱스 |
+| 0064~0067 | 성능 인덱스 추가, 중복 인덱스 제거, `tickets.updated_at` 인덱스 |
+| 0068 | `ai_settings` — AI 설정 (OpenAI/Ollama/Anthropic) |
+| 0069~0070 | OpenAI OAuth 토큰 저장, Codex OAuth 필드 |
+| 0071 | `sla_records` 복합 인덱스 — SLA 대시보드 성능 최적화 |
+| 0072 | `ticket_search_index.author_username` + `automation_logs` 복합 인덱스 |
 
 ---
 
@@ -570,7 +572,7 @@ pg_dump -U itsm itsm > backup.sql
 
 # 2. 신 서버에서 데이터 복원 후 마이그레이션
 psql -U itsm itsm < backup.sql
-docker compose exec itsm-api alembic upgrade head   # 0001~0067
+docker compose exec itsm-api alembic upgrade head   # 0001~0072
 
 # 3. 서비스 기동 순서
 docker compose up -d itsm-postgres itsm-redis clamav minio

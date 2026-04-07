@@ -6,7 +6,6 @@ import ipaddress
 import logging
 import socket
 import urllib.parse
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

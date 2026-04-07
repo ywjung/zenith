@@ -8,9 +8,9 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from ...auth import get_current_user
@@ -496,7 +496,6 @@ def get_service_type_usage(
     import json as _json
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from ... import gitlab_client as _gc
-    from ...config import get_settings as _gs
 
     _CACHE_KEY = "itsm:admin:service_type_usage"
     _CACHE_TTL = 300  # 5분
@@ -1061,7 +1060,6 @@ def get_workload(
 ):
     """사용자별 담당 티켓 수·처리 건수·평균 처리 시간·SLA 달성률·평점을 집계한다."""
     from datetime import date as _date, datetime as _datetime, time as _dt_time
-    from concurrent.futures import ThreadPoolExecutor
     from ... import gitlab_client as _gl
 
     # 날짜 파싱
@@ -1346,7 +1344,6 @@ def get_email_ingest_status(_user: dict = Depends(require_admin)):
 
     recent: list[dict] = []
     try:
-        from celery.result import AsyncResult
         from ...celery_app import celery_app
         # Celery flower 없이 backend에서 최근 태스크 결과 조회
         backend = celery_app.backend
@@ -1357,7 +1354,6 @@ def get_email_ingest_status(_user: dict = Depends(require_admin)):
             redis_client = celery_app.backend.client
             keys = redis_client.keys("celery-task-meta-*")
             import json as _json
-            from datetime import timezone as _tz
             for key in sorted(keys, reverse=True)[:20]:
                 raw = redis_client.get(key)
                 if not raw:

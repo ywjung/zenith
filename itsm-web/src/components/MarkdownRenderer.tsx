@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import FilePreview from './FilePreview'
-import DOMPurify from 'isomorphic-dompurify'
+import DOMPurify from 'dompurify'
 
 // M-6: 허용된 URL 스킴 — http, https, mailto, / (상대경로), # (앵커)만 허용
 const ALLOWED_URL_PATTERN = /^(https?:|mailto:|\/|#)/i

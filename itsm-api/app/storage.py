@@ -56,7 +56,7 @@ def upload_file(content: bytes, filename: str, content_type: str) -> Optional[di
     if client is None:
         return None
 
-    ext = filename.rsplit(".", 1)[-1] if "." in filename else ""
+    filename.rsplit(".", 1)[-1] if "." in filename else ""
     object_name = f"attachments/{uuid.uuid4().hex}/{filename}"
 
     try:

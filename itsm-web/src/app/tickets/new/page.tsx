@@ -10,8 +10,9 @@ import {
   aiSuggestTicket, fetchAIStatus, type AIClassifyResult,
 } from '@/lib/api'
 import type { GitLabProject, ProjectMember, Milestone, TicketTemplate, KBArticle, CustomFieldDef } from '@/types'
+import dynamic from 'next/dynamic'
 import RequireAuth from '@/components/RequireAuth'
-import RichTextEditor from '@/components/RichTextEditor'
+const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false })
 import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
 import { formatName, formatFileSize, getFileIcon } from '@/lib/utils'

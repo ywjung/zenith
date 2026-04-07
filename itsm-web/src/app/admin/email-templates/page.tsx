@@ -235,10 +235,10 @@ function EmailTemplatesContent() {
                   </div>
                   <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
                     <div className="bg-gray-100 dark:bg-gray-700 px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-b dark:border-gray-600">HTML 렌더링</div>
-                    {/* sandbox iframe — XSS 방지: script 실행 차단 */}
+                    {/* sandbox iframe — XSS 방지: script 실행 및 same-origin 접근 모두 차단 */}
                     <iframe
                       srcDoc={preview.html_body}
-                      sandbox="allow-same-origin"
+                      sandbox=""
                       className="w-full min-h-[200px] border-0"
                       title="이메일 미리보기"
                       onLoad={(e) => {

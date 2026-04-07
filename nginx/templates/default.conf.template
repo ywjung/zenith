@@ -192,6 +192,8 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Connection "";
+    proxy_socket_keepalive on;
   }
 
   # ---------------------------------------------------------------------------
@@ -476,5 +478,28 @@ server {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
+  }
+}
+
+# ---------------------------------------------------------------------------
+# OpenAI Codex OAuth — loopback redirect 전용 리스너
+# auth.openai.com 이 허용하는 redirect_uri: http://localhost:1455/auth/callback
+# 포트 1455는 OpenAI 측에 고정 등록된 값 (변경 불가)
+# ---------------------------------------------------------------------------
+server {
+  listen 1455;
+  server_name localhost;
+
+  location = /auth/callback {
+    set $api_backend "http://itsm-api:8000";
+    rewrite ^ /admin/ai-settings/openai-oauth/callback break;
+    proxy_pass $api_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+    proxy_connect_timeout 10s;
   }
 }

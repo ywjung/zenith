@@ -327,7 +327,7 @@ def create_issue(
     if milestone_id:
         payload["milestone_id"] = milestone_id
     headers = _get_headers(gitlab_token)
-    s = get_settings()
+    get_settings()
     base_url = _base(project_id)
     try:
         with _http_ctx() as client:
@@ -580,6 +580,7 @@ def update_issue(
     title: Optional[str] = None,
     description: Optional[str] = None,
     milestone_id: Optional[int] = None,
+    gitlab_token: Optional[str] = None,
 ) -> dict:
     payload: dict = {}
     if title:
@@ -605,7 +606,7 @@ def update_issue(
     with _http_ctx() as client:
         resp = client.put(
             f"{_base(project_id)}/issues/{iid}",
-            headers=_headers(),
+            headers=_get_headers(gitlab_token),
             json=payload,
         )
         resp.raise_for_status()
@@ -1072,7 +1073,7 @@ def cleanup_duplicate_project_labels(project_id: Optional[str] = None) -> dict:
         return {"skipped": True, "reason": "group not configured"}
 
     group_headers = {"PRIVATE-TOKEN": group_token, "Content-Type": "application/json"}
-    svc_headers = _headers()
+    _headers()
 
     with _http_ctx() as client:
         # 1. 그룹 라벨 이름 목록 수집

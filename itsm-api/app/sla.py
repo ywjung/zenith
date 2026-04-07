@@ -307,6 +307,14 @@ def check_and_send_warnings(db: Session, warning_minutes: int = 60) -> list[SLAR
         .all()
     )
 
+    # N+1 방지: staff 목록을 루프 밖에서 한 번만 조회
+    from .models import UserRole
+    from .notifications import create_db_notification
+    try:
+        staff = db.query(UserRole).filter(UserRole.role.in_(["admin", "agent"])).all()
+    except Exception:
+        staff = []
+
     for record in at_risk:
         deadline_utc = _ensure_utc(record.sla_deadline)
         now_utc = datetime.now(timezone.utc)
@@ -328,9 +336,6 @@ def check_and_send_warnings(db: Session, warning_minutes: int = 60) -> list[SLAR
 
         # In-app notification for all agents/admins
         try:
-            from .models import UserRole
-            from .notifications import create_db_notification
-            staff = db.query(UserRole).filter(UserRole.role.in_(["admin", "agent"])).all()
             for member in staff:
                 create_db_notification(
                     db,
@@ -387,6 +392,14 @@ def check_and_send_warnings_30min(db: Session) -> list[SLARecord]:
         .all()
     )
 
+    # N+1 방지: staff 목록을 루프 밖에서 한 번만 조회
+    from .models import UserRole
+    from .notifications import create_db_notification
+    try:
+        staff_30 = db.query(UserRole).filter(UserRole.role.in_(["admin", "agent"])).all()
+    except Exception:
+        staff_30 = []
+
     for record in at_risk:
         deadline_utc = _ensure_utc(record.sla_deadline)
         now_utc = datetime.now(timezone.utc)
@@ -406,10 +419,7 @@ def check_and_send_warnings_30min(db: Session) -> list[SLARecord]:
             logger.warning("Failed to send 30min SLA warning for ticket #%s: %s", record.gitlab_issue_iid, e)
 
         try:
-            from .models import UserRole
-            from .notifications import create_db_notification
-            staff = db.query(UserRole).filter(UserRole.role.in_(["admin", "agent"])).all()
-            for member in staff:
+            for member in staff_30:
                 create_db_notification(
                     db,
                     recipient_id=str(member.gitlab_user_id),
@@ -443,7 +453,6 @@ def check_and_escalate(db: Session) -> list[dict]:
     EscalationRecord로 중복 실행을 방지한다.
     """
     from .models import EscalationPolicy, EscalationRecord
-    from .notifications import create_db_notification
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     executed = []
@@ -557,7 +566,6 @@ def check_and_escalate(db: Session) -> list[dict]:
 def _execute_escalation(db, policy, record: SLARecord, now: datetime) -> None:
     """에스컬레이션 액션 실제 수행."""
     from .notifications import create_db_notification
-    from .models import UserRole
     import html
 
     iid = record.gitlab_issue_iid

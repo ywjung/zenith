@@ -36,7 +36,8 @@ def setup_telemetry(app) -> None:
     resource = Resource(attributes={SERVICE_NAME: settings.OTEL_SERVICE_NAME})
     provider = TracerProvider(resource=resource)
 
-    exporter = OTLPSpanExporter(endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True)
+    otel_insecure = settings.ENVIRONMENT != "production"
+    exporter = OTLPSpanExporter(endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT, insecure=otel_insecure)
     provider.add_span_processor(BatchSpanProcessor(exporter))
 
     trace.set_tracer_provider(provider)

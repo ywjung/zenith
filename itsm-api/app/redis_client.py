@@ -16,7 +16,7 @@ import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import redis as _redis_t
+    pass
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 
-from ...auth import get_current_user
 from ...database import get_db
 from ... import gitlab_client
 from ...rbac import require_pl, require_agent
@@ -286,7 +285,7 @@ async def import_tickets_csv(
                 except Exception as ae:
                     logger.warning("CSV import row %d: assignee lookup failed for '%s': %s", idx, assignee_username, ae)
 
-            issue = gitlab_client.create_issue(
+            gitlab_client.create_issue(
                 title=title,
                 description=description,
                 labels=labels,

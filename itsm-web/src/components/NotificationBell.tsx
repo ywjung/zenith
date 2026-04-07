@@ -62,7 +62,7 @@ export default function NotificationBell() {
         if (signal.aborted) return
         reconnectAttemptsRef.current++
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30000)
-        reconnectRef.current = setTimeout(() => connectSSE(signal), delay)
+        reconnectRef.current = setTimeout(() => { if (!signal.aborted) connectSSE(signal) }, delay)
       }
     } catch {
       // SSE not supported or error

@@ -2,7 +2,6 @@
 import concurrent.futures
 import hashlib as _hashlib
 import logging
-import re as _re_shared
 from html.parser import HTMLParser as _HTMLParser
 from typing import Optional
 
@@ -34,7 +33,7 @@ def _apply_automation_actions(
     """evaluate_automation_rules()가 반환한 액션 목록을 GitLab에 실제로 적용한다."""
     if not actions:
         return
-    pid = project_id or get_settings().GITLAB_PROJECT_ID
+    project_id or get_settings().GITLAB_PROJECT_ID
     add_labels: list[str] = []
     remove_labels: list[str] = []
     assignee_id: Optional[int] = None

@@ -172,7 +172,8 @@ const SECURITY_FEATURES: { emoji: string; title: string; desc: string; isNew?: b
   { emoji: '🌐', title: 'IP 허용목록 (IP Allowlist)',              desc: '관리자가 허용된 IP/CIDR 대역만 API 접근을 허용하도록 설정합니다. 설정이 없으면 전체 허용. /ip-allowlist/my-ip 엔드포인트는 인증된 사용자만 현재 접속 IP를 확인할 수 있습니다.', isNew: true },
   { emoji: '🔐', title: '승인 워크플로우 보안 강화',               desc: 'project_id 화이트리스트 검증으로 유효한 GitLab 프로젝트만 승인 요청 생성이 가능합니다. IP 허용목록 미들웨어에 JWT 블랙리스트 검증을 추가하여 로그아웃된 토큰은 IP 검사에서도 차단됩니다.', isNew: true },
   { emoji: '🛰️', title: 'X-Forwarded-For 신뢰 프록시 검증',       desc: 'Sudo 모드 토큰 발급·검증 시 X-Forwarded-For 헤더를 무조건 신뢰하지 않습니다. TRUSTED_PROXIES 환경변수에 등록된 프록시 또는 사설 IP 대역에서 온 요청만 XFF를 신뢰하며, 그 외는 실제 연결 IP를 사용합니다. IP 스푸핑을 통한 Sudo 권한 우회를 방지합니다.', isNew: true },
-  { emoji: '🧹', title: 'DOMPurify HTML 새니타이저',               desc: '티켓 상세 화면의 HTML 렌더링에 isomorphic-dompurify를 적용합니다. 커스텀 정규식 체인 대신 업계 표준 DOMPurify로 <script>, 이벤트 핸들러(onclick 등), <details ontoggle> 등 모든 XSS 벡터를 차단합니다. ALLOWED_TAGS/ALLOWED_ATTR 화이트리스트 방식으로 허용된 태그만 통과합니다.', isNew: true },
+  { emoji: '🧹', title: 'DOMPurify HTML 새니타이저',               desc: '티켓 상세 화면의 HTML 렌더링에 DOMPurify를 적용합니다. 커스텀 정규식 체인 대신 업계 표준 DOMPurify로 <script>, 이벤트 핸들러(onclick 등), <details ontoggle> 등 모든 XSS 벡터를 차단합니다. ALLOWED_TAGS/ALLOWED_ATTR 화이트리스트 방식으로 허용된 태그만 통과합니다.', isNew: true },
+  { emoji: '🤖', title: 'AI 티켓 분류·요약 (OpenAI / Ollama)',    desc: '관리자 > AI 설정에서 OpenAI API 키 또는 Ollama 로컬 LLM을 설정하면 AI 기능이 활성화됩니다.\n\n▸ 자동 분류\n티켓 작성 시 제목·설명을 분석하여 카테고리(하드웨어/소프트웨어/네트워크/계정/기타)와 우선순위(긴급/높음/보통/낮음)를 자동 제안합니다.\n\n▸ 스레드 요약\n티켓 상세 화면에서 "AI 요약" 버튼을 클릭하면 전체 댓글 스레드를 요약합니다. 긴 대화를 빠르게 파악할 수 있습니다.\n\n▸ KB 문서 추천\n티켓 내용과 관련된 지식베이스 문서를 자동 추천하여 자가 해결을 유도합니다.\n\n▸ 제공자\nOpenAI(GPT-4o Mini/GPT-4o/GPT-4 Turbo) 또는 Ollama(Llama 3.2, Mistral 등 로컬 모델)을 선택할 수 있습니다. Ollama 사용 시 인터넷 연결 없이 사내망에서 운영 가능합니다.', isNew: true },
   { emoji: '🔏', title: 'SECRET_KEY 약한 기본값 차단',             desc: 'JWT 서명 키(SECRET_KEY)에 "change_me_to_random_32char_string" 등 공개 레포에 노출된 기본값이 설정된 채로 서버가 시작되지 않습니다. 최소 32자 이상의 강력한 랜덤 키를 요구하며, 미달 시 서버 시작 실패로 설정 오류를 즉시 감지할 수 있습니다.', isNew: true },
   { emoji: '🚨', title: '파괴적 관리 작업 Sudo 재인증',            desc: '서비스 유형 삭제, 에스컬레이션 정책 삭제, 아웃바운드 웹훅 삭제, API 키 취소 등 되돌리기 어려운 관리 작업에 verify_sudo_token을 추가 적용합니다. 관리자 계정이 탈취되더라도 Sudo 재인증 없이는 파괴적 작업을 수행할 수 없습니다.', isNew: true },
   { emoji: '📊', title: 'CSV 수식 인젝션(Formula Injection) 방어', desc: "티켓 목록 CSV 다운로드 시 =, +, -, @ 등으로 시작하는 필드 값 앞에 작은따옴표(')를 자동 삽입합니다. Excel·Google Sheets에서 파일을 열었을 때 셀 수식이 실행되는 CSV Injection 공격을 방어합니다.", isNew: true },
@@ -500,7 +501,7 @@ const COMPARISON_SECTIONS: { category: string; rows: { feature: string; itsm: st
       { feature: 'ClamAV 바이러스 스캔 (상시)',            itsm: '✅', zammad: '❌', glpi: '⚠️', jira: '❌', sn: '✅', isNew: true },
       { feature: 'PostgreSQL 자동 백업',                   itsm: '✅', zammad: '⚠️', glpi: '⚠️', jira: '✅', sn: '✅' },
       { feature: 'GitLab CI/CD 파이프라인',                itsm: '✅', zammad: '⚠️', glpi: '❌', jira: '✅', sn: '✅' },
-      { feature: 'Alembic 마이그레이션 (59단계)',          itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '✅', isNew: true },
+      { feature: 'Alembic 마이그레이션 (72단계)',          itsm: '✅', zammad: '✅', glpi: '✅', jira: '✅', sn: '✅', isNew: true },
       { feature: '웹 푸시 알림 (VAPID)',                   itsm: '✅', zammad: '❌', glpi: '❌', jira: '❌', sn: '⚠️', isNew: true },
       { feature: '반복 티켓 스케줄 (Celery + croniter)',   itsm: '✅', zammad: '❌', glpi: '⚠️', jira: '✅', sn: '✅', isNew: true },
       { feature: '실패 알림 DB 기록·관리 UI',              itsm: '✅', zammad: '⚠️', glpi: '❌', jira: '✅', sn: '✅', isNew: true },
@@ -881,7 +882,7 @@ const SW_COMPONENTS = [
     role: 'REST API 서버 · 비즈니스 로직',
     desc: 'ITSM의 핵심 비즈니스 로직을 처리하는 비동기 API 서버입니다. SLA 체커·스냅샷 스케줄러·사용자 동기화가 백그라운드 스레드로 동작하고, slowapi로 Rate Limiting, prometheus-fastapi-instrumentator로 메트릭을 제공합니다.',
     details: [
-      'SQLAlchemy 2.0 ORM + Alembic 마이그레이션 (0001~0063, 63단계)',
+      'SQLAlchemy 2.0 ORM + Alembic 마이그레이션 (0001~0072, 72단계)',
       'slowapi Rate Limiting (포털 5/분·티켓 생성 10/분 등 엔드포인트별 세분화)',
       'prometheus-fastapi-instrumentator → /metrics 노출',
       '비즈니스 KPI 메트릭 27종 (5분 주기 DB 집계, 별도 스레드)',
@@ -907,7 +908,7 @@ const SW_COMPONENTS = [
     role: '주 관계형 데이터베이스',
     desc: '티켓·사용자·SLA·KB·감사로그 등 모든 데이터를 저장합니다. KB 전문 검색에 GIN 인덱스(tsvector), 태그 필터에 ARRAY+GIN, 즐겨찾기 필터에 JSONB를 활용하여 고성능 검색을 구현합니다.',
     details: [
-      'Alembic 마이그레이션 63단계 (0001~0063)',
+      'Alembic 마이그레이션 72단계 (0001~0072)',
       'GIN 인덱스: KB FTS (tsvector), 태그 (TEXT[] ARRAY)',
       'JSONB: saved_filters.filters 컬럼',
       'UserRole.is_active 컬럼: 퇴사자 계정 비활성화 플래그',
@@ -3773,9 +3774,9 @@ function TabPerf() {
         <SectionTitle number="1" title="현재 시스템 상태" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[
-            { emoji: '✅', label: '모든 컨테이너', desc: '11개 Up (재시작 0회)', ok: true },
+            { emoji: '✅', label: '모든 컨테이너', desc: '13개 Up (재시작 0회)', ok: true },
             { emoji: '✅', label: 'API 헬스체크', desc: 'DB·Redis·GitLab·label_sync all ok', ok: true },
-            { emoji: '✅', label: 'DB 마이그레이션', desc: '0059 (최신) · CI alembic check 통과', ok: true },
+            { emoji: '✅', label: 'DB 마이그레이션', desc: '0072 (최신) · CI alembic check 통과', ok: true },
             { emoji: '✅', label: '테스트 커버리지', desc: '97%+ (pytest · --cov-fail-under=95 CI 강제)', ok: true },
             { emoji: '✅', label: 'TypeScript 타입', desc: '오류 없음', ok: true },
             { emoji: '✅', label: 'Celery Worker', desc: '--concurrency=4, healthcheck ping', ok: true },
@@ -4014,7 +4015,7 @@ function TabPerf() {
               label: 'Alembic 마이그레이션 CI 자동화',
               note: 'migrate:check — MR·main·release 브랜치마다 실행 · allow_failure: false',
               color: 'border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20',
-              items: ['postgres:16-alpine CI 서비스 컨테이너에서 검증', 'alembic upgrade head → alembic check', '마이그레이션 파일: 0001~0059 (59단계)', 'pytest는 SQLite → 이 잡이 실제 DB 호환성 보장', 'lint:backend 완료 후 순차 실행'],
+              items: ['postgres:16-alpine CI 서비스 컨테이너에서 검증', 'alembic upgrade head → alembic check', '마이그레이션 파일: 0001~0072 (72단계)', 'pytest는 SQLite → 이 잡이 실제 DB 호환성 보장', 'lint:backend 완료 후 순차 실행'],
             },
             {
               label: '데이터 내보내기·가져오기',
@@ -5392,7 +5393,8 @@ function TabAbout() {
     { version: 'v2.0', major: true,  desc: '앱 아이콘 SVG 통합, Service Worker network-first, i18n 영어 번역 완성, PWA 설치 배너 영어화' },
     { version: 'v2.1', major: false, desc: '전 페이지 헤더 통일(27개 서브페이지), KB·칸반·간트·SLA·캘린더 UI 폭 통일' },
     { version: 'v2.2', major: false, desc: '시간 추적·SLA 준수율·멀티 프로젝트 리포트, 반복 티켓 스케줄, CSAT 트렌드, 에이전트 평점 랭킹' },
-    { version: 'v2.3', major: true,  desc: '변경 관리(RFC) ITIL 워크플로우, 문제 관리(인시던트 연결), 웹 푸시 알림, 알림 규칙, 실패 알림 관리, Alembic 59단계' },
+    { version: 'v2.3', major: true,  desc: '변경 관리(RFC) ITIL 워크플로우, 문제 관리(인시던트 연결), 웹 푸시 알림, 알림 규칙, 실패 알림 관리' },
+    { version: 'v2.4', major: false, desc: 'AI 설정(OpenAI/Ollama), 보안 강화(SSRF·XSS·토큰 노출 수정 ~95건), 성능 최적화(DB 기반 티켓 목록, Redis 캐싱, SLA 복합 인덱스, RichTextEditor 지연 로딩), 알림 ETag/304, WebSocket 쿠키 인증 전환' },
   ]
 
   return (
@@ -5412,7 +5414,7 @@ function TabAbout() {
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-3xl font-extrabold tracking-tight">ZENITH</h2>
-                  <span className="text-xs bg-yellow-400/90 text-yellow-900 px-2 py-0.5 rounded-full font-mono font-bold">v2.3</span>
+                  <span className="text-xs bg-yellow-400/90 text-yellow-900 px-2 py-0.5 rounded-full font-mono font-bold">v2.4</span>
                 </div>
                 <p className="text-blue-200 text-xs mt-0.5">IT Service Management Platform</p>
               </div>
@@ -5423,7 +5425,7 @@ function TabAbout() {
             </p>
             <div className="flex flex-wrap gap-2">
               {['GitLab 통합', 'SLA 자동 추적', '9단계 워크플로우', '5단계 RBAC',
-                'ITIL RFC 변경관리', '문제 관리', 'PWA', 'SSE 실시간', 'DORA 지표', 'OpenTelemetry', 'Web Vitals'].map(tag => (
+                'ITIL RFC 변경관리', '문제 관리', 'AI 분류·요약', 'PWA', 'SSE 실시간', 'DORA 지표', 'OpenTelemetry'].map(tag => (
                 <span key={tag} className="text-xs bg-white/15 hover:bg-white/25 text-white px-2.5 py-1 rounded-full font-medium transition-colors cursor-default">{tag}</span>
               ))}
             </div>
@@ -5431,8 +5433,8 @@ function TabAbout() {
           {/* 우측: 핵심 지표 */}
           <div className="grid grid-cols-2 gap-3 shrink-0 w-full lg:w-auto lg:min-w-[280px]">
             {[
-              { value: '59',   label: 'DB 마이그레이션', icon: '🗄️' },
-              { value: '14',   label: '릴리스 버전', icon: '🚀' },
+              { value: '72',   label: 'DB 마이그레이션', icon: '🗄️' },
+              { value: '15',   label: '릴리스 버전', icon: '🚀' },
               { value: '15+',  label: '기능 모듈', icon: '🧩' },
               { value: '27종', label: 'Prometheus KPI', icon: '📡' },
             ].map(item => (
@@ -5553,7 +5555,7 @@ function TabAbout() {
                 { name: 'Python 3.13',       role: '언어' },
                 { name: 'FastAPI + Uvicorn', role: 'ASGI 서버' },
                 { name: 'SQLAlchemy 2.0',    role: 'ORM' },
-                { name: 'Alembic (59단계)',   role: 'DB 마이그레이션' },
+                { name: 'Alembic (72단계)',   role: 'DB 마이그레이션' },
                 { name: 'Celery + Redis',    role: '비동기 태스크' },
                 { name: 'Jinja2',            role: '이메일 템플릿' },
                 { name: 'python-magic',      role: '파일 보안 검증' },
@@ -5585,6 +5587,7 @@ function TabAbout() {
                 { name: 'GitLab CE',     role: '이슈 트래커 · OAuth' },
                 { name: 'MinIO',         role: 'S3 오브젝트 스토리지' },
                 { name: 'ClamAV',        role: '업로드 바이러스 스캔' },
+                { name: 'Ollama',        role: '로컬 LLM (AI 기능)' },
                 { name: 'Docker Compose',role: '컨테이너 오케스트레이션' },
                 { name: 'Nginx 1.27',    role: '리버스 프록시 · gzip' },
               ],
@@ -5599,6 +5602,7 @@ function TabAbout() {
                 { name: 'OpenTelemetry',      role: '분산 추적 (OTel)' },
                 { name: 'Web Vitals API',     role: 'CLS·LCP·FID·TTFB' },
                 { name: 'Celery Flower',      role: '태스크 모니터링 UI' },
+                { name: 'pg-backup',          role: 'PostgreSQL 자동 백업' },
               ],
             },
           ].map(stack => (
@@ -5818,7 +5822,7 @@ export default function HelpPage() {
             {' · '}
             <Link href="/grafana/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Grafana</Link>
           </div>
-          <div>ZENITH v2.2 · Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Alembic 63단계</div>
+          <div>ZENITH v2.4 · Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Alembic 72단계</div>
         </div>
       </div>
     </div>

@@ -602,7 +602,7 @@ docker compose logs -f clamav
 
 ## 7. DB 마이그레이션
 
-Alembic 마이그레이션 **63단계** (0001~0063)가 관리됩니다.
+Alembic 마이그레이션 **72단계** (0001~0072)가 관리됩니다.
 API 컨테이너 시작 시 **자동으로 최신 버전까지 적용**됩니다.
 
 ```bash
@@ -1704,11 +1704,12 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ## 20. 버전 이력
 
-### 현재 버전 (2026-04-02)
+### 현재 버전 (2026-04-07)
 
 - **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22 · Celery 5 · Gunicorn 23
-- **DB 마이그레이션**: 67단계 (0001~0067)
+- **DB 마이그레이션**: 72단계 (0001~0072)
 - **API 엔드포인트**: 170개+
+- **서비스**: 13개 컨테이너 (+ 선택적 3개: Ollama, pg-backup, OTel Collector)
 - **테스트**: pytest 1,713개 통과 · 코드 커버리지 97%+ · CI --cov-fail-under=95 강제
 - **Grafana 대시보드**: 6개 자동 프로비저닝 (알림 & 인시던트 대시보드, Web Vitals 대시보드 포함)
 - **v1.7 추가**: Celery 실패 메트릭·Slack, DB 슬로우 쿼리 감지, Web Vitals 수집, MinIO 스토리지, 서버 이전 자동화, i18n 한/영
@@ -1720,11 +1721,17 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 - **v2.2 추가**: 구조화 로거(프로덕션 console.log 억제), pre-commit 훅(Husky+lint-staged+ruff), API 에러 응답 표준화(`{"error":{"code","message","detail"}}`), 반복 티켓(Celery Beat cron 자동 생성), 상태 변경 이유 필수 입력(waiting/reopened 전환 시 422 강제), CSAT 트렌드 차트(주별/월별), 에이전트 평점 랭킹(🥇🥈🥉), 낮은 평점(1~2점) 자동 플래그+Telegram 알림
 - **v2.2 프로덕션 최적화**: gunicorn + UvicornWorker 멀티 프로세스(`WORKERS` 환경변수로 조정), nginx upstream keepalive(api 32/web 16), rate limiting(api 30r/s·login 10r/m), PostgreSQL shared_buffers 256MB+work_mem 16MB 튜닝, Redis maxmemory 512MB, 컨테이너별 resource limits, Flower Basic 인증 강제(`FLOWER_USER`/`FLOWER_PASSWORD`), prometheus:v2.55.1·grafana:11.4.0 버전 고정, 비루트 appuser(UID 1001), FastAPI pattern= 경고 제거
 - **v2.3 버그픽스**: 반복 티켓 카테고리·우선순위 한국어 표시 수정(영문 raw value → 레이블 매핑), SLA 대시보드 breach_count·tickets 불일치 수정(orphan SLA 레코드 제외 후 enriched 목록 기준 집계), Service Worker 아이콘·manifest Stale-While-Revalidate 전환(배포 후 아이콘 즉시 갱신), PWA manifest maskable purpose 제거(비호환 RGBA PNG 아이콘)
+- **v2.4 보안·성능·AI**: AI 설정(OpenAI/Ollama), 보안 강화 ~95건(SSRF·XSS·토큰 노출·정보 노출·symlink 탈출 수정), 성능 최적화(DB 기반 티켓 목록/통계, Redis 프로젝트/멤버 캐싱, SLA 복합 인덱스, RichTextEditor/MarkdownRenderer 지연 로딩, Reports N+1→SQL 집계), 알림 ETag/304, WebSocket 쿠키 인증 전환, GitLab 사용자 토큰으로 이슈/노트 업데이트(Administrator → 실제 사용자 표시), `dompurify` 경량화, unused import 55건 정리
 
 ### 마이그레이션 이력
 
 | 버전 | 주요 변경 |
 |------|---------|
+| `0072` | `ticket_search_index.author_username` + `automation_logs` 복합 인덱스 — DB 기반 티켓 목록 최적화 |
+| `0071` | `sla_records(project_id, resolved_at, breached)` 복합 인덱스 — SLA 대시보드 5-20x 성능 향상 |
+| `0070` | `ai_settings.openai_oauth_refresh_token/account_id` — OpenAI Codex OAuth 필드 |
+| `0069` | `ai_settings` OpenAI OAuth 토큰 저장 필드 |
+| `0068` | `ai_settings` 테이블 — AI 설정 (OpenAI/Ollama/Anthropic) |
 | `0067` | `tickets.updated_at` 인덱스 추가 — 최근 수정 정렬 성능 개선 |
 | `0066` | `recurring_tickets` 유니크 제약 — 동일 프로젝트+제목 중복 방지 |
 | `0065` | 중복 인덱스 정리 — 불필요한 복합 인덱스 제거 (쓰기 성능 개선) |
@@ -1828,7 +1835,7 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 | **서버 이전 자동화** | `scripts/migrate.sh` — 사전 점검, PG 덤프 + AES-256-CBC 암호화, 볼륨 백업, rsync 전송, 원격 배포, 헬스체크·롤백 일괄 자동화 |
 | **MinIO 스토리지 활성화** | KB 첨부 업로드 MinIO 우선 → GitLab 폴백 구조. `MINIO_ENDPOINT` 환경변수로 활성화. `scripts/migrate_files_to_minio.py`로 레거시 파일 마이그레이션 |
 | **i18n 한/영 다국어 지원** | `messages/ko.json` · `messages/en.json` 번역 파일 + `src/lib/i18n.ts` 유틸리티. 헤더 🌐 언어 전환 버튼(localStorage 저장), `next-intl` 기반 |
-| **WebSocket 실시간 협업** | 티켓 상세 페이지에 현재 접속자 아바타 표시 + 입력 중 인디케이터 (`/ws/tickets/{iid}`) — JWT 쿼리파라미터 인증, FastAPI 네이티브 WebSocket |
+| **WebSocket 실시간 협업** | 티켓 상세 페이지에 현재 접속자 아바타 표시 + 입력 중 인디케이터 (`/ws/tickets/{iid}`) — httponly 쿠키 인증(URL 토큰 노출 방지), FastAPI 네이티브 WebSocket |
 | **PWA 홈 화면 설치** | `manifest.json` + Service Worker (Cache First/Network First 전략) — 오프라인 폴백 페이지, 홈 화면 추가 배너 (`beforeinstallprompt`) |
 | **다크모드 이메일 템플릿** | `@media (prefers-color-scheme: dark)` 적용 반응형 이메일 HTML — 티켓 생성·상태 변경·SLA 위반 등 9개 이메일 유형 일괄 적용 |
 | **SLA 예측 모델** | 과거 해결 시간 중앙값 기반 `predict_resolution()` — 우선순위별 기본값 + 신뢰도(high/medium/low) 반환 (`GET /tickets/{iid}/sla-prediction`) |

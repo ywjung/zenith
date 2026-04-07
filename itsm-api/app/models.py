@@ -91,6 +91,7 @@ class SLARecord(Base):
         Index("ix_sla_records_deadline_active", "sla_deadline"),
         Index("ix_sla_records_breach_check", "breached", "sla_deadline"),
         Index("ix_sla_records_updated_at", "updated_at"),
+        Index("ix_sla_records_active_project", "project_id", "resolved_at", "breached"),
     )
 
 
@@ -602,9 +603,8 @@ class AutomationLog(Base):
     triggered_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
-        Index("ix_automation_logs_rule_id", "rule_id"),
+        Index("ix_automation_logs_rule_triggered", "rule_id", "triggered_at"),
         Index("ix_automation_logs_ticket_iid", "ticket_iid"),
-        Index("ix_automation_logs_triggered_at", "triggered_at"),
     )
 
 
@@ -757,6 +757,7 @@ class TicketSearchIndex(Base):
     state = Column(String(20), nullable=False, default="opened")
     labels_json = Column(JSONB, nullable=False, server_default="[]")
     assignee_username = Column(String(100), nullable=True)
+    author_username = Column(String(100), nullable=True)
     created_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, nullable=True)
     synced_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
@@ -771,9 +772,10 @@ class TicketSearchIndex(Base):
         Index("ix_ticket_search_desc_trgm", "description_text",
               postgresql_using="gin",
               postgresql_ops={"description_text": "gin_trgm_ops"}),
-        # 상태별/담당자별 필터 (대시보드 · 내 티켓)
+        # 상태별/담당자별/작성자별 필터 (대시보드 · 내 티켓)
         Index("ix_ticket_search_state_project", "state", "project_id"),
         Index("ix_ticket_search_assignee", "assignee_username"),
+        Index("ix_ticket_search_author", "author_username"),
     )
 
 
@@ -871,6 +873,8 @@ class AISettings(Base):
     openai_oauth_scope = Column(String(500), nullable=True)   # 요청 scope
     openai_oauth_access_token = Column(Text, nullable=True)   # 저장된 access token
     openai_oauth_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    openai_oauth_refresh_token = Column(Text, nullable=True)      # PKCE refresh token
+    openai_oauth_account_id = Column(String(200), nullable=True)  # ChatGPT-Account-Id header
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
 

@@ -1,5 +1,4 @@
 """GitLab webhook receiver (양방향 연동)."""
-import hashlib
 import hmac
 import logging
 import re
@@ -12,7 +11,6 @@ from ..config import get_settings
 from ..database import SessionLocal
 from .. import sla as sla_module
 from ..notifications import (
-    notify_status_changed,
     notify_comment_added,
     notify_ticket_created,
     create_db_notification,
@@ -225,6 +223,9 @@ def _upsert_search_index(iid: int, project_id: str, attrs: dict, payload: dict) 
         labels = [lb.get("title", "") for lb in payload.get("labels", [])]
         assignees = payload.get("assignees") or []
         assignee_username = assignees[0].get("username") if assignees else None
+        # 작성자: issue hook payload의 author 또는 최초 user
+        author = attrs.get("author", {}) or payload.get("user", {}) or {}
+        author_username = author.get("username")
 
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         with SessionLocal() as db:
@@ -236,6 +237,7 @@ def _upsert_search_index(iid: int, project_id: str, attrs: dict, payload: dict) 
                 state=state,
                 labels_json=labels,
                 assignee_username=assignee_username,
+                author_username=author_username,
             ).on_conflict_do_update(
                 index_elements=["iid", "project_id"],
                 set_={
@@ -244,6 +246,7 @@ def _upsert_search_index(iid: int, project_id: str, attrs: dict, payload: dict) 
                     "state": state,
                     "labels_json": labels,
                     "assignee_username": assignee_username,
+                    # author_username은 생성 시에만 설정, 업데이트 시 덮어쓰지 않음
                     "synced_at": __import__("sqlalchemy", fromlist=["func"]).func.now(),
                 },
             )
@@ -377,7 +380,7 @@ def _handle_external_issue(iid: int, project_id: str, attrs: dict, payload: dict
 def _sync_forwarded_issue(target_project_id: str, target_iid: int, payload: dict) -> None:
     """개발 프로젝트 이슈 이벤트를 받아 연결된 ITSM 메인 티켓 상태를 동기화한다."""
     from ..models import ProjectForward
-    from ..routers.forwards import _STATUS_RANK, _FORWARD_TO_ITSM, _sync_main_ticket_status
+    from ..routers.forwards import _FORWARD_TO_ITSM, _sync_main_ticket_status
 
     try:
         # 이 개발 이슈와 연결된 ITSM 전달 기록 조회
@@ -470,7 +473,7 @@ def _handle_note_hook(payload: dict) -> None:
         author = payload.get("user", {})
         author_id = str(author.get("id", ""))
         author_name = _safe_str(author.get("name", ""))
-        author_username = _safe_str(author.get("username", ""))
+        _safe_str(author.get("username", ""))
         is_internal = attrs.get("confidential", False)
 
         if not iid:
@@ -480,8 +483,10 @@ def _handle_note_hook(payload: dict) -> None:
         settings = get_settings()
         # H-14: author 기반 봇 필터링 (GitLab 14+의 bot 플래그 또는 설정된 봇 계정명)
         note_author = payload.get("user", {})
-        BOT_USERNAMES = {"gitlab-bot", "itsm-bot", "automation-bot"}  # 필요 시 추가
-        if note_author.get("bot") or note_author.get("username", "") in BOT_USERNAMES:
+        bot_usernames = {"gitlab-bot", "itsm-bot", "automation-bot"}
+        if settings.GITLAB_BOT_USERNAME:
+            bot_usernames.add(settings.GITLAB_BOT_USERNAME)
+        if note_author.get("bot") or note_author.get("username", "") in bot_usernames:
             logger.debug("Note hook: skipping bot author comment on issue #%s", iid)
             return
 
@@ -574,7 +579,7 @@ def _handle_mr_hook(payload: dict) -> None:
         attrs = payload.get("object_attributes", {})
         action = attrs.get("action")  # open, close, merge, update, reopen, approved
         mr_iid = attrs.get("iid")
-        project_id = str(payload.get("project", {}).get("id", ""))
+        str(payload.get("project", {}).get("id", ""))
         settings = get_settings()
         main_project_id = str(settings.GITLAB_PROJECT_ID)
 
@@ -583,7 +588,7 @@ def _handle_mr_hook(payload: dict) -> None:
         combined = f"{title}\n{description}"
         author = payload.get("user", {})
         author_name = author.get("name", "")
-        mr_url = attrs.get("url", "")
+        attrs.get("url", "")
 
         # Extract ticket iids from "Closes #N" / "Fixes #N" patterns, fallback to plain #N
         referenced: set[int] = set()

@@ -343,7 +343,6 @@ function KanbanContent() {
       const apiStatus = srcCol === 'closed' && dstCol === 'open' ? 'reopened' : dstCol
       await updateTicket(iid, { status: apiStatus, change_reason: changeReason }, selectedProject || undefined)
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
       syncTimerRef.current = setTimeout(() => { load().catch(() => setSyncFailed(true)) }, 2000)
     } catch (err) {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current)

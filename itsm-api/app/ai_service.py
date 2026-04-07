@@ -81,14 +81,24 @@ def _call_openai(api_key: str, model: str, prompt: str) -> str:
     except ImportError:
         raise RuntimeError("openai 패키지가 설치되지 않았습니다. pip install openai")
     client = OpenAI(api_key=api_key)
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=1024,
-        temperature=0.1,
-        response_format={"type": "json_object"},
-    )
-    return resp.choices[0].message.content.strip()
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1024,
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        err_msg = str(e)
+        if "insufficient_quota" in err_msg:
+            raise RuntimeError(
+                "OpenAI API 크레딧이 소진되었습니다. "
+                "platform.openai.com/settings/organization/billing 에서 충전하거나, "
+                "AI 설정에서 Ollama(무료 로컬 LLM)로 전환하세요."
+            )
+        raise
 
 
 def _call_ollama(base_url: str, model: str, prompt: str) -> str:
@@ -126,18 +136,79 @@ def _strip_think_tags(text: str) -> str:
     return text
 
 
-def _call_anthropic(api_key: str, prompt: str) -> str:
+def _call_anthropic(api_key: str, prompt: str, model: str | None = None) -> str:
     try:
         import anthropic
     except ImportError:
         raise RuntimeError("anthropic 패키지가 설치되지 않았습니다.")
+    if not model:
+        from .config import get_settings
+        model = get_settings().ANTHROPIC_MODEL
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=model,
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
     return msg.content[0].text.strip()
+
+
+def _maybe_refresh_oauth_token(settings_row: Any) -> None:
+    """OAuth access token이 만료 임박(5분 이내)이면 refresh_token으로 갱신."""
+    if not getattr(settings_row, "openai_oauth_refresh_token", None):
+        return
+    expires_at = getattr(settings_row, "openai_oauth_token_expires_at", None)
+    if not expires_at:
+        return
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    if expires_at.tzinfo is None:
+        from datetime import timezone as _tz
+        expires_at = expires_at.replace(tzinfo=_tz.utc)
+    if expires_at - now > timedelta(minutes=5):
+        return  # 아직 충분히 유효함
+
+    # refresh 시도
+    import httpx
+    auth_method = getattr(settings_row, "openai_auth_method", "api_key")
+    if auth_method == "codex_oauth":
+        token_url = "https://auth.openai.com/oauth/token"
+        client_id = "app_EMoamEEZ73f0CkXaXp7hrann"
+    else:
+        token_url = getattr(settings_row, "openai_oauth_token_url", None)
+        client_id = getattr(settings_row, "openai_oauth_client_id", None)
+    if not token_url or not client_id:
+        return
+
+    try:
+        resp = httpx.post(token_url, data={
+            "grant_type": "refresh_token",
+            "refresh_token": settings_row.openai_oauth_refresh_token,
+            "client_id": client_id,
+        }, timeout=15.0)
+        resp.raise_for_status()
+        data = resp.json()
+        new_access = data.get("access_token")
+        if new_access:
+            settings_row.openai_oauth_access_token = new_access
+            settings_row.openai_api_key = new_access
+            new_refresh = data.get("refresh_token")
+            if new_refresh:
+                settings_row.openai_oauth_refresh_token = new_refresh
+            new_expires = data.get("expires_in")
+            if new_expires:
+                settings_row.openai_oauth_token_expires_at = now + timedelta(seconds=int(new_expires))
+            # DB 커밋은 호출자의 세션에서 처리
+            from .database import SessionLocal
+            db = SessionLocal()
+            try:
+                db.merge(settings_row)
+                db.commit()
+                logger.info("OAuth token refreshed successfully (expires_in=%s)", new_expires)
+            finally:
+                db.close()
+    except Exception as e:
+        logger.warning("OAuth token refresh failed: %s", e)
 
 
 def _dispatch(settings_row: Any, prompt: str) -> str:
@@ -146,6 +217,7 @@ def _dispatch(settings_row: Any, prompt: str) -> str:
     if provider == "openai":
         if not settings_row.openai_api_key:
             raise ValueError("OpenAI API 키가 설정되지 않았습니다.")
+        _maybe_refresh_oauth_token(settings_row)
         return _call_openai(settings_row.openai_api_key, settings_row.openai_model, prompt)
     elif provider == "ollama":
         return _call_ollama(settings_row.ollama_base_url, settings_row.ollama_model, prompt)

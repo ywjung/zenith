@@ -7,7 +7,6 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from ..auth import get_current_user
 from ..database import get_db
 from ..models import AutomationRule, AutomationLog, AuditLog
 from ..rbac import require_admin

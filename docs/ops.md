@@ -1,6 +1,6 @@
 # ZENITH ITSM 운영 매뉴얼
 
-> 최종 업데이트: 2026-04-02 · v2.3
+> 최종 업데이트: 2026-04-07 · v2.4
 
 ---
 
@@ -25,18 +25,21 @@
 
 | 서비스 | 컨테이너명 | 포트 | 역할 |
 |--------|------------|------|------|
-| ITSM Frontend | `itsm-web` | 8111 | Next.js 15 웹 UI |
+| ITSM Frontend | `itsm-web` | 3000 (내부) | Next.js 15 웹 UI |
 | ITSM API | `itsm-api` | 8000 (내부) | FastAPI 백엔드 |
-| Celery Worker | `itsm-celery` | — | 비동기 태스크 (알림, 바이러스 스캔 등) |
-| Celery Beat | `itsm-celery-beat` | — | 스케줄 태스크 (자동 백업, SLA 체크 등) |
-| Celery Flower | `itsm-flower` | 5555 (내부) | Celery 큐 모니터링 UI |
-| PostgreSQL | `itsm-postgres` | 5432 (내부) | 주 데이터베이스 (Alembic 67단계) |
-| Redis | `itsm-redis` | 6379 (내부) | 캐시 / 세션 / Celery 큐 |
-| GitLab | `gitlab` | 8929 | 이슈 트래커 / OAuth |
-| Nginx | `nginx` | 8111 | 리버스 프록시 |
-| ClamAV | `clamav` | — | 바이러스 스캔 |
-| Prometheus | `prometheus` | 9090 | 메트릭 수집 (선택) |
-| Grafana | `grafana` | 3001 | 대시보드 (선택) |
+| Celery Worker | `celery-worker` | — | 비동기 태스크 (알림, 바이러스 스캔 등) |
+| Celery Beat | `celery-beat` | — | 스케줄 태스크 (자동 백업, SLA 체크 등) |
+| Celery Flower | `flower` | 127.0.0.1:5555 | Celery 큐 모니터링 UI |
+| PostgreSQL | `postgres` | 5432 (내부) | 주 데이터베이스 (Alembic 72단계) |
+| Redis | `redis` | 6379 (내부) | 캐시 / 세션 / Celery 큐 / JWT 블랙리스트 |
+| MinIO | `minio` | 127.0.0.1:9000/9001 | S3 오브젝트 스토리지 (파일 첨부) |
+| GitLab | `gitlab` | 8929, 2224 | 이슈 트래커 / OAuth |
+| Nginx | `nginx` | **8111**, 127.0.0.1:1455 | 리버스 프록시 / OAuth 루프백 |
+| ClamAV | `clamav` | 3310 (내부) | 바이러스 스캔 |
+| Prometheus | `prometheus` | 127.0.0.1:9090 | 메트릭 수집 |
+| Grafana | `grafana` | 127.0.0.1:3001 | 대시보드 |
+
+**선택적 프로필**: Ollama (AI, `--profile ollama`), pg-backup (`--profile backup`), OTel Collector (`--profile tracing`)
 
 ### 헬스체크 엔드포인트
 

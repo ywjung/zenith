@@ -12,7 +12,7 @@ from ...auth import get_current_user, require_scope
 from ...audit import write_audit_log
 from ...config import get_settings
 from ...database import get_db
-from ...schemas import TicketCreate, TicketUpdate, SLARecordResponse
+from ...schemas import TicketCreate, TicketUpdate
 from ... import gitlab_client
 from ...rbac import require_developer, require_pl, require_agent
 from ... import sla as sla_module
@@ -150,6 +150,81 @@ def list_tickets(
             _cached = _r.get(_list_cache_key)
             if _cached:
                 return _json.loads(_cached)
+
+        # ── DB 기반 빠른 경로: role=user 또는 created_by_username 필터 ──
+        # TicketSearchIndex에서 조건에 맞는 iid를 먼저 조회하여
+        # GitLab API 전체 조회(get_all_issues)를 회피한다.
+        _use_db_fast_path = (role == "user" or bool(created_by_username)) and not sla
+        if _use_db_fast_path:
+            from ...models import TicketSearchIndex as _TSI
+            q = db.query(_TSI)
+
+            # 작성자 필터
+            target_author = created_by_username or (_user.get("username") if role == "user" else None)
+            if target_author:
+                q = q.filter(_TSI.author_username == target_author)
+
+            # 상태 필터 (라벨 기반)
+            if gl_state == "opened":
+                q = q.filter(_TSI.state == "opened")
+            elif gl_state == "closed":
+                q = q.filter(_TSI.state == "closed")
+            if status_label:
+                q = q.filter(_TSI.labels_json.op("@>")(f'["{status_label}"]'))
+            if not_labels:
+                for nl in not_labels.split(","):
+                    nl = nl.strip()
+                    if nl:
+                        q = q.filter(~_TSI.labels_json.op("@>")(f'["{nl}"]'))
+
+            # 프로젝트 필터
+            pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
+            q = q.filter(_TSI.project_id == pid)
+
+            # 카테고리/우선순위 (라벨)
+            if labels:
+                for lb in labels.split(","):
+                    lb = lb.strip()
+                    if lb:
+                        q = q.filter(_TSI.labels_json.op("@>")(f'["{lb}"]'))
+
+            # 검색
+            if search:
+                q = q.filter(
+                    _TSI.title.ilike(f"%{search}%") | _TSI.description_text.ilike(f"%{search}%")
+                )
+
+            # 날짜 필터
+            if created_after:
+                q = q.filter(_TSI.created_at >= created_after)
+            if created_before:
+                q = q.filter(_TSI.created_at <= created_before)
+
+            # 정렬
+            sort_col = getattr(_TSI, sort_by, _TSI.created_at)
+            q = q.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
+
+            total = q.count()
+            page_rows = q.offset((page - 1) * per_page).limit(per_page).all()
+
+            if page_rows:
+                # DB에서 가져온 iid들로 GitLab API 상세 조회 (페이지 분량만)
+                page_issues = []
+                for row in page_rows:
+                    try:
+                        issue = gitlab_client.get_issue(row.iid, project_id=row.project_id)
+                        page_issues.append(issue)
+                    except Exception:
+                        pass
+                tickets_page = [_issue_to_response(i, mask_pii=(role == "user")) for i in page_issues]
+            else:
+                tickets_page = []
+
+            _attach_sla_deadlines(tickets_page, db)
+            _result = {"tickets": tickets_page, "total": total, "page": page, "per_page": per_page}
+            if _r:
+                _r.setex(_list_cache_key, 180, _json.dumps(_result))
+            return _result
 
         needs_in_memory = role == "user" or bool(created_by_username) or bool(sla)
         api_assignee_username = _user.get("username") if role == "developer" else None
@@ -445,12 +520,11 @@ def get_calendar_tickets(
             SLARecord.project_id == pid,
             SLARecord.sla_deadline >= first_day.replace(tzinfo=None),
             SLARecord.sla_deadline <= last_day.replace(tzinfo=None),
-        ).all()
+        ).limit(500).all()
         sla_iids_in_month = {r.gitlab_issue_iid for r in sla_q}
-        sla_deadline_map = {r.gitlab_issue_iid: r.sla_deadline.isoformat() for r in sla_q}
+        {r.gitlab_issue_iid: r.sla_deadline.isoformat() for r in sla_q}
     except Exception as e:
         logger.warning("Calendar: SLA query failed: %s", e)
-        sla_deadline_map = {}
 
     # SLA 기한이 해당 월에 걸치지만 created_at이 범위 밖인 이슈 추가 조회
     extra_iids = sla_iids_in_month - {iss["iid"] for iss in issues}
@@ -552,7 +626,7 @@ def get_gantt_data(
             status = "closed"
 
         created_raw = issue.get("created_at", "")
-        closed_raw = issue.get("closed_at") or issue.get("updated_at", "")
+        issue.get("closed_at") or issue.get("updated_at", "")
 
         def _parse_date(s: str) -> date:
             if not s:
@@ -758,15 +832,15 @@ def update_ticket(
             title=new_title,
             description=new_description,
             milestone_id=data.milestone_id,
+            gitlab_token=user.get("gitlab_token"),
         )
 
         if data.status is not None and data.status != old_status:
             from_ko = STATUS_KO.get(old_status, old_status)
             to_ko = STATUS_KO.get(data.status, data.status)
-            actor = user.get("name") or user.get("username", "담당자")
-            note_body = f"🔄 **상태 변경**: {from_ko} → **{to_ko}** (by {actor})"
+            note_body = f"🔄 **상태 변경**: {from_ko} → **{to_ko}**"
             try:
-                gitlab_client.add_note(iid, note_body, project_id=project_id)
+                gitlab_client.add_note(iid, note_body, project_id=project_id, gitlab_token=user.get("gitlab_token"))
             except Exception as e:
                 logger.warning("Failed to add status change note to ticket %d: %s", iid, e)
 
@@ -792,10 +866,9 @@ def update_ticket(
             }
             _status_val = data.status.value if hasattr(data.status, "value") else str(data.status)
             _label = _status_labels.get(_status_val, _status_val)
-            _actor_name = user.get("name", user.get("username", ""))
-            _comment = f"**[{_label}]** 상태로 전환되었습니다.\n\n> {data.change_reason}\n\n— {_actor_name}"
+            _comment = f"**[{_label}]** 상태로 전환되었습니다.\n\n> {data.change_reason}"
             try:
-                gitlab_client.add_note(iid, _comment, project_id=pid)
+                gitlab_client.add_note(iid, _comment, project_id=pid, gitlab_token=user.get("gitlab_token"))
             except Exception as _e:
                 logger.warning("Failed to add change_reason note for ticket #%d: %s", iid, _e)
         if data.status in ("resolved", "ready_for_release", "released", "closed"):
@@ -844,6 +917,7 @@ def update_ticket(
                     f"**{_type_label}** — 해결 노트\n\n{data.resolution_note}",
                     project_id=pid,
                     confidential=True,
+                    gitlab_token=user.get("gitlab_token"),
                 )
             except Exception as e:
                 logger.warning("Failed to save resolution note for ticket #%d: %s", iid, e)
@@ -1059,8 +1133,9 @@ def clone_ticket(
     try:
         gitlab_client.add_note(
             iid,
-            f"🔁 이 티켓이 #{new_iid}로 복제됐습니다. (by {user.get('name', user.get('username', ''))})",
+            f"🔁 이 티켓이 #{new_iid}로 복제됐습니다.",
             project_id=pid,
+            gitlab_token=user.get("gitlab_token"),
         )
     except Exception:
         pass
@@ -1099,8 +1174,6 @@ def merge_ticket(
     if target.get("state") == "closed":
         raise HTTPException(status_code=400, detail=f"대상 티켓 #{target_iid}가 이미 닫혀 있습니다.")
 
-    actor = user.get("name") or user.get("username", "?")
-
     try:
         source_notes = gitlab_client.get_notes(iid, project_id=pid)
         user_notes = [n for n in source_notes if not n.get("system", False)]
@@ -1110,27 +1183,30 @@ def merge_ticket(
                 f"**{n.get('author', {}).get('name', '?')}** ({n.get('created_at', '')[:10]}):\n{n.get('body', '')}"
                 for n in user_notes
             )
-            gitlab_client.add_note(target_iid, combined, project_id=pid)
+            gitlab_client.add_note(target_iid, combined, project_id=pid, gitlab_token=user.get("gitlab_token"))
     except Exception as e:
         logger.warning("Merge: failed to copy notes from #%s: %s", iid, e)
 
     try:
+        _gl_tok = user.get("gitlab_token")
         gitlab_client.add_note(
             iid,
-            f"🔀 이 티켓은 #{target_iid}로 병합됐습니다. (by {actor})\n\n"
+            f"🔀 이 티켓은 #{target_iid}로 병합됐습니다.\n\n"
             f"추가 문의는 #{target_iid}에서 이어서 처리됩니다.",
             project_id=pid,
+            gitlab_token=_gl_tok,
         )
-        gitlab_client.update_issue(iid, state_event="close", project_id=pid)
+        gitlab_client.update_issue(iid, state_event="close", project_id=pid, gitlab_token=_gl_tok)
     except Exception as e:
         logger.warning("Merge: failed to close source #%s: %s", iid, e)
 
     try:
         gitlab_client.add_note(
             target_iid,
-            f"🔀 #{iid} 티켓이 이 티켓으로 병합됐습니다. (by {actor})\n\n"
+            f"🔀 #{iid} 티켓이 이 티켓으로 병합됐습니다.\n\n"
             f"**원본 제목:** {source.get('title', '')}",
             project_id=pid,
+            gitlab_token=user.get("gitlab_token"),
         )
     except Exception as e:
         logger.warning("Merge: failed to add merge note to target #%s: %s", target_iid, e)
@@ -1165,14 +1241,13 @@ def trigger_ticket_pipeline(
         pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
         pipeline_id = result.get("id", "?")
         pipeline_url = result.get("web_url", "")
-        actor = user.get("name") or user.get("username", "?")
         note = (
-            f"⚙️ **파이프라인 트리거됨** (by {actor})\n\n"
+            f"⚙️ **파이프라인 트리거됨**\n\n"
             f"- **브랜치:** `{ref}`\n"
             f"- **파이프라인:** [{pipeline_id}]({pipeline_url})\n"
             f"- **상태:** {result.get('status', 'pending')}"
         )
-        gitlab_client.add_note(iid, note, project_id=pid)
+        gitlab_client.add_note(iid, note, project_id=pid, gitlab_token=user.get("gitlab_token"))
     except Exception as e:
         logger.warning("Failed to add pipeline note to ticket #%s: %s", iid, e)
 
@@ -1330,7 +1405,7 @@ def extend_ticket_sla(
     user: dict = Depends(require_pl),
 ):
     """SLA 기한 연장 — IT 관리자 이상. body: {minutes: int}"""
-    from datetime import datetime as dt, timezone, timedelta
+    from datetime import timezone, timedelta
     pid = project_id or get_settings().GITLAB_PROJECT_ID
     record = sla_module.get_sla_record(db, iid, pid)
     if not record:

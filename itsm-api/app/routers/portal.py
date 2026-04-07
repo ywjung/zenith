@@ -284,9 +284,13 @@ def portal_extend_token(request: Request, token: str, db: Session = Depends(get_
     if not guest:
         raise HTTPException(status_code=404, detail="유효하지 않은 링크입니다.")
 
-    # 이미 만료된 경우도 연장 허용 (최대 now + 7일)
+    # 최대 연장 한도: 생성일로부터 90일 (무제한 연장 방지)
+    max_expiry = (guest.created_at or now) + timedelta(days=90)
+    if guest.expires_at and guest.expires_at >= max_expiry:
+        raise HTTPException(status_code=400, detail="최대 연장 한도(90일)에 도달했습니다.")
+
     base = max(guest.expires_at, now)
-    new_expiry = base + timedelta(days=7)
+    new_expiry = min(base + timedelta(days=7), max_expiry)
     guest.expires_at = new_expiry
     db.commit()
 

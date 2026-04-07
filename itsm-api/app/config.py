@@ -119,6 +119,7 @@ class Settings(BaseSettings):
 
     # AI 요약 (Anthropic Claude)
     ANTHROPIC_API_KEY: str = ""   # Claude API 키 — 미설정 시 AI 요약 비활성화
+    ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"  # Claude 모델 ID
 
     # 세션 최대 개수 (동일 계정 동시 로그인 제한, 0=무제한)
     MAX_ACTIVE_SESSIONS: int = 5

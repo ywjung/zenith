@@ -9,7 +9,8 @@ import type { KBRevision } from '@/lib/api'
 import type { KBArticle } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
-import MarkdownRenderer from '@/components/MarkdownRenderer'
+import dynamic from 'next/dynamic'
+const MarkdownRenderer = dynamic(() => import('@/components/MarkdownRenderer'), { ssr: false })
 import { formatName } from '@/lib/utils'
 
 const CAT_META: Record<string, { icon: string; color: string }> = {

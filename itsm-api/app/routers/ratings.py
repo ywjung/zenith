@@ -76,7 +76,7 @@ def create_rating(
     db.commit()
     db.refresh(rating)
 
-    _post_gitlab_comment(iid, employee_name, data.score, data.comment)
+    _post_gitlab_comment(iid, employee_name, data.score, data.comment, gitlab_token=user.get("gitlab_token"))
     if data.score <= 2:
         _notify_low_rating(iid, employee_name, data.score, data.comment, db)
     return rating
@@ -100,7 +100,7 @@ def update_rating(
     db.commit()
     db.refresh(existing)
 
-    _post_gitlab_comment(iid, existing.employee_name, data.score, data.comment, updated=True)
+    _post_gitlab_comment(iid, existing.employee_name, data.score, data.comment, updated=True, gitlab_token=user.get("gitlab_token"))
     if data.score <= 2:
         _notify_low_rating(iid, existing.employee_name, data.score, data.comment, db)
     return existing
@@ -110,10 +110,13 @@ def update_rating(
 def get_rating(
     iid: int,
     db: Session = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
-    """하위 호환용 — 해당 티켓의 첫 번째 평가 반환."""
-    return db.query(Rating).filter(Rating.gitlab_issue_iid == iid).first()
+    """하위 호환용 — 해당 티켓의 평가 반환. 에이전트/관리자는 전체, 일반 사용자는 본인 것만."""
+    role = user.get("role", "user")
+    if role in ("admin", "agent", "pl"):
+        return db.query(Rating).filter(Rating.gitlab_issue_iid == iid).first()
+    return _get_my_rating(iid, user.get("username", ""), db)
 
 
 def _notify_low_rating(iid: int, employee_name: str, score: int, comment: Optional[str], db) -> None:
@@ -160,7 +163,7 @@ def _notify_low_rating(iid: int, employee_name: str, score: int, comment: Option
         logger.warning("_notify_low_rating failed for #%d: %s", iid, e)
 
 
-def _post_gitlab_comment(iid: int, name: str, score: int, comment: Optional[str], updated: bool = False):
+def _post_gitlab_comment(iid: int, name: str, score: int, comment: Optional[str], updated: bool = False, gitlab_token: Optional[str] = None):
     stars = "⭐" * score
     action = "수정" if updated else "완료"
     body = (
@@ -171,6 +174,6 @@ def _post_gitlab_comment(iid: int, name: str, score: int, comment: Optional[str]
     if comment:
         body += f"**의견:** {comment}"
     try:
-        gitlab_client.add_note(iid, body)
+        gitlab_client.add_note(iid, body, gitlab_token=gitlab_token)
     except Exception as e:
         logger.warning("Failed to add rating comment to GitLab issue #%d: %s", iid, e)

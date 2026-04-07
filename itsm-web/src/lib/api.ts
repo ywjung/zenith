@@ -63,11 +63,14 @@ async function request<T>(path: string, init?: RequestInit & { timeoutMs?: numbe
     const retryAfter = parseInt(res.headers.get('Retry-After') || '1', 10)
     const waitMs = Math.min(Math.max(retryAfter, 1), 10) * 1000
     await new Promise(resolve => setTimeout(resolve, waitMs))
+    const retrySignal = init?.signal ?? controller.signal
+    if (retrySignal.aborted) throw new Error('요청이 취소되었습니다.')
     const retryRes = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: { 'Content-Type': 'application/json', ...init?.headers },
       cache: 'no-store',
       credentials: 'include',
+      signal: retrySignal,
     })
     if (retryRes.ok) {
       if (retryRes.status === 204 || retryRes.headers.get('content-length') === '0') return undefined as T
@@ -435,12 +438,13 @@ export interface AISettingsData {
   feature_classify: boolean
   feature_summarize: boolean
   feature_kb_suggest: boolean
-  openai_auth_method: string          // 'api_key' | 'oauth'
+  openai_auth_method: string          // 'api_key' | 'oauth' | 'codex_oauth'
   openai_oauth_client_id: string | null
   openai_oauth_auth_url: string | null
   openai_oauth_token_url: string | null
   openai_oauth_scope: string | null
   openai_oauth_connected: boolean     // access token 보유 여부
+  openai_oauth_account_id: string | null  // 연결된 ChatGPT 계정 ID
 }
 
 export interface AIStatusResult {

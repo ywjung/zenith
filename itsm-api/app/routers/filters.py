@@ -1,5 +1,4 @@
 """F-13: Saved filter presets."""
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException

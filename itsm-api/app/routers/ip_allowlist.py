@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import IpAllowlistEntry
-from ..auth import get_current_user
 from ..rbac import require_admin
 
 logger = logging.getLogger(__name__)

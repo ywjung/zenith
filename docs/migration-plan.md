@@ -1,9 +1,9 @@
 # ZENITH ITSM 서버 이전 계획서
 
 **작성일**: 2026-03-17
-**최종 업데이트**: 2026-03-25
-**버전**: v2.0
-**대상 시스템**: ZENITH ITSM v2.2 (Docker Compose 기반)
+**최종 업데이트**: 2026-04-07
+**버전**: v3.0
+**대상 시스템**: ZENITH ITSM v2.4 (Docker Compose 기반)
 
 ---
 
@@ -31,30 +31,41 @@
 
 | 컨테이너 | 이미지 | 역할 | 외부 포트 | 영속 볼륨 |
 |----------|--------|------|-----------|-----------|
-| nginx | nginx:1.27-alpine | 리버스 프록시 / 단일 진입점 | **8111** | — |
+| nginx | nginx:1.27-alpine | 리버스 프록시 / 단일 진입점 | **8111**, 127.0.0.1:1455 | — |
 | itsm-web | itsm-web:latest | Next.js 15 프론트엔드 | 3000 (내부) | — |
-| itsm-api | itsm-api:latest | FastAPI 백엔드 | 8000 (내부) | gitlab_data (읽기전용) |
-| itsm-celery | itsm-api:latest | Celery Worker (비동기 태스크) | — | — |
-| itsm-celery-beat | itsm-api:latest | Celery Beat (스케줄 태스크) | — | — |
-| itsm-flower | mher/flower | Celery 모니터링 UI | 5555 (내부) | — |
+| itsm-api | itsm-api:latest | FastAPI 백엔드 | 8000 (내부) | — |
+| celery-worker | itsm-api:latest | Celery Worker (비동기 태스크) | — | — |
+| celery-beat | itsm-api:latest | Celery Beat (스케줄 태스크) | — | itsm_celery_beat |
+| flower | mher/flower:2.0 | Celery 모니터링 UI | 127.0.0.1:5555 | — |
 | postgres | postgres:17 | 주 데이터베이스 | — | **itsm_pgdata** |
 | redis | redis:7.4-alpine | SSE Pub/Sub · 캐시 · Celery 큐 | — | **itsm_redis** |
 | clamav | clamav/clamav:1.4 | 바이러스 스캔 | — | itsm_clamav |
-| prometheus | prom/prometheus | 메트릭 수집 | 9090 | itsm_prometheus |
-| grafana | grafana/grafana | 대시보드 | 3001 | itsm_grafana |
-| gitlab | gitlab-ce | OAuth SSO / 이슈 저장소 | 8929, 2224 | gitlab_config/logs/data |
+| minio | minio/minio | S3 오브젝트 스토리지 (파일 첨부) | 127.0.0.1:9000/9001 | **itsm_minio** |
+| prometheus | prom/prometheus:v2.55.1 | 메트릭 수집 | 127.0.0.1:9090 | itsm_prometheus |
+| grafana | grafana/grafana:11.4.0 | 대시보드 | 127.0.0.1:3001 | itsm_grafana |
+| gitlab | gitlab-ce:18.10.1 | OAuth SSO / 이슈 저장소 | 8929, 2224 | gitlab_config/logs/data |
+
+**선택적 프로필 서비스** (필요 시 활성화):
+
+| 컨테이너 | 프로필 | 역할 | 포트 |
+|----------|--------|------|------|
+| ollama | `ollama` | 로컬 LLM (AI 기능) | 127.0.0.1:11434 |
+| pg-backup | `backup` | PostgreSQL 자동 백업 | — |
+| otel-collector | `tracing` | OpenTelemetry 수집기 | 127.0.0.1:4317/4318 |
 
 ### 1.2 이전 대상 데이터
 
 | 데이터 | 위치 | 중요도 | 비고 |
 |--------|------|--------|------|
-| PostgreSQL DB | Docker 볼륨 `itsm_pgdata` | 🔴 최고 | 티켓·사용자·SLA 등 전체 |
-| 업로드 파일 | itsm-api 컨테이너 `/app/uploads` | 🔴 최고 | 첨부파일 원본 |
+| PostgreSQL DB | Docker 볼륨 `itsm_pgdata` | 🔴 최고 | 티켓·사용자·SLA·AI설정·변경관리 등 전체 (72 마이그레이션) |
+| MinIO 파일 | Docker 볼륨 `itsm_minio` | 🔴 최고 | 첨부파일 원본 (S3 호환 스토리지) |
 | 환경변수 (.env) | 서버 로컬 파일 | 🔴 최고 | 시크릿 포함 — 암호화 전송 필수 |
-| Redis 데이터 | Docker 볼륨 `itsm_redis` | 🟠 중간 | 캐시 성격 — 재시작 시 재구성 가능 |
+| nginx htpasswd | `nginx/htpasswd/` | 🔴 최고 | Prometheus/Grafana 인증 파일 |
+| Redis 데이터 | Docker 볼륨 `itsm_redis` | 🟠 중간 | 캐시·JWT 블랙리스트 — 재시작 시 재구성 가능 |
 | GitLab 데이터 | Docker 볼륨 `gitlab_*` 3개 | ⚠️ 별도 판단 | GitLab 공식 절차로 별도 이전 |
 | Grafana 볼륨 | Docker 볼륨 `itsm_grafana` | 🟡 낮음 | 대시보드는 코드로 프로비저닝됨 |
 | Prometheus TSDB | Docker 볼륨 `itsm_prometheus` | 🟡 낮음 | 이전 후 새로 수집 가능 |
+| Celery Beat | Docker 볼륨 `itsm_celery_beat` | 🟡 낮음 | 스케줄 상태 — 재시작 시 자동 복구 |
 
 > **GitLab 이전 별도 검토 필요**
 > GitLab은 독립적인 대형 서비스이므로 ITSM 이전과 분리하여 GitLab 공식 백업/복원 절차를 사용합니다.
@@ -393,7 +404,7 @@ cd /opt/itsm
 docker compose up -d postgres redis clamav
 sleep 20
 
-# API (Alembic 마이그레이션 자동 실행 — 63단계 자동 적용, 0001~0063)
+# API (Alembic 마이그레이션 자동 실행 — 72단계 자동 적용, 0001~0072)
 docker compose up -d itsm-api
 
 # API 헬스체크 대기

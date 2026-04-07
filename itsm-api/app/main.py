@@ -226,7 +226,6 @@ def _run_user_sync():
     USER_SYNC_REQUIRE_GROUP=false: 그룹 OR 프로젝트 멤버 중 하나라도 해당하면 활성 유지.
     """
     from .models import UserRole
-    from datetime import datetime, timezone
 
     settings = get_settings()
     require_group = getattr(settings, "USER_SYNC_REQUIRE_GROUP", True)
@@ -1034,11 +1033,11 @@ from .ws_manager import manager as _ws_manager
 async def ticket_ws(
     websocket: WebSocket,
     ticket_iid: str,
-    token: str = _WSQuery(..., description="JWT access token (itsm_token cookie value)"),
+    token: str = _WSQuery(default="", description="JWT access token (deprecated, use cookie)"),
 ):
     """티켓 실시간 협업 WebSocket.
 
-    연결 시 token 쿼리 파라미터로 JWT를 검증하고,
+    인증: httponly 쿠키(itsm_token) 우선, 쿼리 파라미터 폴백(하위호환).
     접속자 목록(viewers)과 타이핑 인디케이터(typing)를 브로드캐스트한다.
     """
     import jwt as _jose_jwt
@@ -1048,9 +1047,15 @@ async def ticket_ws(
 
     _ws_settings = _ws_get_settings()
 
+    # 쿠키 우선, 쿼리 파라미터 폴백 (URL에 토큰 노출 방지)
+    ws_token = websocket.cookies.get("itsm_token") or token
+    if not ws_token:
+        await websocket.close(code=1008)
+        return
+
     # JWT 검증
     try:
-        payload = _jose_jwt.decode(token, _ws_settings.SECRET_KEY, algorithms=[_JWT_ALGORITHM])
+        payload = _jose_jwt.decode(ws_token, _ws_settings.SECRET_KEY, algorithms=[_JWT_ALGORITHM])
     except _JoseJWTError:
         await websocket.close(code=1008)
         return

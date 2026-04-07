@@ -1,5 +1,4 @@
 """Comments and timeline endpoints."""
-import json as _json
 import logging
 from typing import Optional
 

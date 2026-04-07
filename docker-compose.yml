@@ -381,6 +381,7 @@ services:
         hard: 65536
     ports:
       - "${APP_PORT:-8111}:80"
+      - "127.0.0.1:1455:1455"  # OpenAI Codex OAuth loopback redirect (localhost만 허용)
     environment:
       METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN must be set in .env}
     volumes:

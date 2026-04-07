@@ -1,3 +1,4 @@
+import json
 import logging
 
 from typing import Literal
@@ -12,14 +13,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
+_PROJECTS_CACHE_TTL = 300  # 5분
+_MEMBERS_CACHE_TTL = 300
+
+
+def _redis():
+    try:
+        from ..redis_client import get_redis
+        return get_redis()
+    except Exception:
+        return None
+
 
 @router.get("/", response_model=list[dict])
 def list_projects(user: dict = Depends(get_current_user)):
-    """로그인한 사용자가 접근 가능한 GitLab 프로젝트 목록 반환."""
+    """로그인한 사용자가 접근 가능한 GitLab 프로젝트 목록 반환 (5분 Redis 캐시)."""
+    cache_key = f"itsm:projects:{user['sub']}"
+    r = _redis()
+    if r:
+        cached = r.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
     try:
-        # Admin token + 멤버십 기반 프로젝트 목록 조회
         projects = gitlab_client.get_user_projects(user["sub"])
-        return [
+        result = [
             {
                 "id": str(p["id"]),
                 "name": p["name"],
@@ -28,6 +46,9 @@ def list_projects(user: dict = Depends(get_current_user)):
             }
             for p in projects
         ]
+        if r:
+            r.setex(cache_key, _PROJECTS_CACHE_TTL, json.dumps(result))
+        return result
     except Exception as e:
         logger.error("list_projects error: %s", e)
         raise HTTPException(status_code=502, detail="프로젝트 목록을 불러오지 못했습니다.")
@@ -56,9 +77,18 @@ def list_project_members(
     ).all()
     assignable_ids = {u.gitlab_user_id for u in assignable}
 
+    cache_key = f"itsm:members:{project_id}"
+    r = _redis()
+    if r:
+        cached = r.get(cache_key)
+        if cached:
+            # 캐시된 전체 멤버에서 assignable 필터 적용
+            all_members = json.loads(cached)
+            return [m for m in all_members if m["id"] in assignable_ids]
+
     try:
         members = gitlab_client.get_project_members(project_id)
-        return [
+        all_members = [
             {
                 "id": m["id"],
                 "name": m["name"],
@@ -66,8 +96,10 @@ def list_project_members(
                 "avatar_url": m.get("avatar_url"),
             }
             for m in members
-            if m["id"] in assignable_ids
         ]
+        if r:
+            r.setex(cache_key, _MEMBERS_CACHE_TTL, json.dumps(all_members))
+        return [m for m in all_members if m["id"] in assignable_ids]
     except Exception as e:
         logger.error("list_project_members project=%s error: %s", project_id, e)
         raise HTTPException(status_code=502, detail="프로젝트 멤버 목록을 불러오지 못했습니다.")

@@ -1,4 +1,4 @@
-from enum import Enum, StrEnum
+from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from datetime import datetime, date
 from typing import Optional
@@ -146,7 +146,7 @@ class BulkUpdate(BaseModel):
 
 class RatingCreate(BaseModel):
     employee_name: Optional[str] = Field(default=None, max_length=100)
-    employee_email: Optional[str] = Field(default=None, max_length=200)
+    employee_email: Optional[EmailStr] = Field(default=None)
     score: int = Field(..., ge=1, le=5, description="만족도 점수 (1~5)")
     comment: Optional[str] = Field(default=None, max_length=2000, description="추가 의견")
 

@@ -3,7 +3,6 @@ import threading
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 
 from fastapi import Depends, HTTPException, Request
 import jwt as _jwt_lib
@@ -93,6 +92,7 @@ def create_token(user: dict, gitlab_token: str = "", role: str = "user") -> str:
     jti(JWT ID)를 포함해 로그아웃 시 블랙리스트 무효화가 가능하다.
     """
     settings = get_settings()
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user["id"]),
         "username": user["username"],
@@ -101,7 +101,8 @@ def create_token(user: dict, gitlab_token: str = "", role: str = "user") -> str:
         "avatar_url": user.get("avatar_url"),
         "organization": user.get("organization") or "",
         "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS),
+        "iat": now,
+        "exp": now + timedelta(hours=TOKEN_EXPIRE_HOURS),
         "jti": str(uuid.uuid4()),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)

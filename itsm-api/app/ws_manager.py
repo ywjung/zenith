@@ -3,7 +3,6 @@
 In-memory only (single-process). Redis pub/sub is intentionally omitted
 to keep complexity low; add it later if multi-worker support is needed.
 """
-import asyncio
 import logging
 from collections import defaultdict
 

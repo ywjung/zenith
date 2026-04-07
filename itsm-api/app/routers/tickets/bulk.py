@@ -1,6 +1,5 @@
 """Bulk operations endpoint."""
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
@@ -32,6 +31,7 @@ def bulk_update_tickets(
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     results: dict = {"success": [], "errors": []}
+    _gl_token = user.get("gitlab_token")
 
     def _process_one(iid: int) -> tuple[int, Exception | None]:
         """단일 티켓 처리. (iid, None) 성공 | (iid, exc) 실패."""
@@ -74,6 +74,7 @@ def bulk_update_tickets(
                 state_event=state_event,
                 project_id=data.project_id,
                 assignee_id=assignee_id,
+                gitlab_token=_gl_token,
             )
             return iid, None
         except Exception as exc:

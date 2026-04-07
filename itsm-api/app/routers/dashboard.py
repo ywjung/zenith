@@ -63,12 +63,25 @@ def update_dashboard_config(
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # 허용된 위젯 ID·속성만 통과 (임의 속성 주입 방지)
+    valid_ids = {w["id"] for w in DEFAULT_WIDGETS}
+    sanitized: list[dict] = []
+    for w in data.widgets[:20]:
+        wid = w.get("id") if isinstance(w, dict) else None
+        if wid not in valid_ids:
+            continue
+        sanitized.append({
+            "id": wid,
+            "visible": bool(w.get("visible", True)),
+            "order": int(w.get("order", 0)),
+        })
+
     config = db.query(UserDashboardConfig).filter_by(username=user["username"]).with_for_update().first()
     if config:
-        config.widgets = list(data.widgets)[:20]  # 최대 20개 위젯
+        config.widgets = sanitized
         flag_modified(config, "widgets")
     else:
-        config = UserDashboardConfig(username=user["username"], widgets=list(data.widgets)[:20])
+        config = UserDashboardConfig(username=user["username"], widgets=sanitized)
         db.add(config)
     db.commit()
     db.refresh(config)

@@ -33,8 +33,9 @@ def _get_fernet():
             return None
         _fernet_instance = Fernet(key.encode() if isinstance(key, str) else key)
     except Exception as e:
-        logger.error("Fernet init failed: %s", e)
+        logger.error("Fernet init failed (TOKEN_ENCRYPTION_KEY may be invalid): %s", e)
         _fernet_instance = None
+        _fernet_checked = False  # 키 교체 후 재시도 가능하도록 리셋
 
     return _fernet_instance
 

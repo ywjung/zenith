@@ -13,10 +13,11 @@ function CallbackContent() {
     if (called.current) return
     called.current = true
 
-    // params를 먼저 읽은 후 URL 정리 — replaceState가 useSearchParams()를 초기화할 수 있음
     const code = params.get('code')
     const state = params.get('state')
     const error = params.get('error')
+
+    // GitLab OAuth 처리 ─────────────────────────────────
 
     // URL에서 code/state 제거 — 주소창 노출 방지 (보안)
     window.history.replaceState({}, '', '/auth/callback')

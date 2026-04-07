@@ -1,10 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
 import {
   fetchAISettings, updateAISettings, testAIConnection, fetchOllamaModels,
-  fetchOpenAIOAuthClientCredentials, disconnectOpenAIOAuth,
   type AISettingsData, type OllamaModel,
 } from '@/lib/api'
 
@@ -16,7 +14,6 @@ const OPENAI_MODELS = [
 
 export default function AISettingsPage() {
   const [settings, setSettings] = useState<AISettingsData | null>(null)
-  const searchParams = useSearchParams()
 
   const [form, setForm] = useState({
     enabled: false,
@@ -28,13 +25,7 @@ export default function AISettingsPage() {
     feature_classify: true,
     feature_summarize: true,
     feature_kb_suggest: true,
-    // OAuth
     openai_auth_method: 'api_key',
-    openai_oauth_client_id: '',
-    openai_oauth_client_secret: '',
-    openai_oauth_auth_url: '',
-    openai_oauth_token_url: '',
-    openai_oauth_scope: 'openid',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -42,9 +33,6 @@ export default function AISettingsPage() {
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [oauthMsg, setOauthMsg] = useState<{ ok: boolean; msg: string } | null>(null)
-  const [oauthWorking, setOauthWorking] = useState(false)
-
   // Ollama 모델 목록 조회
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([])
   const [ollamaFetching, setOllamaFetching] = useState(false)
@@ -52,15 +40,6 @@ export default function AISettingsPage() {
   const [ollamaFetched, setOllamaFetched] = useState(false)
 
   useEffect(() => {
-    // OAuth 콜백 결과 처리
-    const oauthResult = searchParams.get('oauth')
-    if (oauthResult === 'success') {
-      setOauthMsg({ ok: true, msg: 'OpenAI OAuth 연결이 완료되었습니다.' })
-    } else if (oauthResult === 'error') {
-      const msg = searchParams.get('msg') || 'unknown'
-      setOauthMsg({ ok: false, msg: `OAuth 연결 실패: ${msg}` })
-    }
-
     fetchAISettings()
       .then(data => {
         setSettings(data)
@@ -75,10 +54,6 @@ export default function AISettingsPage() {
           feature_summarize: data.feature_summarize,
           feature_kb_suggest: data.feature_kb_suggest,
           openai_auth_method: data.openai_auth_method || 'api_key',
-          openai_oauth_client_id: data.openai_oauth_client_id || '',
-          openai_oauth_auth_url: data.openai_oauth_auth_url || '',
-          openai_oauth_token_url: data.openai_oauth_token_url || '',
-          openai_oauth_scope: data.openai_oauth_scope || 'openid',
         }))
       })
       .catch(() => setError('설정을 불러오는 중 오류가 발생했습니다.'))
@@ -102,18 +77,10 @@ export default function AISettingsPage() {
         feature_summarize: merged.feature_summarize,
         feature_kb_suggest: merged.feature_kb_suggest,
         openai_auth_method: merged.openai_auth_method,
-        openai_oauth_client_id: merged.openai_oauth_client_id || null,
-        openai_oauth_auth_url: merged.openai_oauth_auth_url || null,
-        openai_oauth_token_url: merged.openai_oauth_token_url || null,
-        openai_oauth_scope: merged.openai_oauth_scope || null,
       }
       // API 키 입력값이 있을 때만 전송
       if (merged.openai_api_key.trim()) {
         payload.openai_api_key = merged.openai_api_key.trim()
-      }
-      // OAuth client_secret 입력값이 있을 때만 전송
-      if (merged.openai_oauth_client_secret.trim()) {
-        payload.openai_oauth_client_secret = merged.openai_oauth_client_secret.trim()
       }
       const updated = await updateAISettings(payload)
       setSettings(updated)
@@ -181,94 +148,6 @@ export default function AISettingsPage() {
       setOllamaModels([])
     } finally {
       setOllamaFetching(false)
-    }
-  }
-
-  // Authorization Code Flow: 팝업 창에서 OAuth 로그인 후 postMessage로 결과 수신
-  const handleOAuthConnect = async () => {
-    setOauthWorking(true)
-    setOauthMsg(null)
-    try {
-      await doSave()  // OAuth 설정 먼저 저장
-    } catch {
-      setOauthMsg({ ok: false, msg: '설정 저장 실패' })
-      setOauthWorking(false)
-      return
-    }
-
-    const redirectUri = `${window.location.origin}/api/admin/ai-settings/openai-oauth/callback`
-    const startUrl = `/api/admin/ai-settings/openai-oauth/start?redirect_uri=${encodeURIComponent(redirectUri)}`
-
-    const popup = window.open(startUrl, 'oauth_popup', 'width=520,height=680,scrollbars=yes,resizable=yes')
-    if (!popup) {
-      setOauthMsg({ ok: false, msg: '팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.' })
-      setOauthWorking(false)
-      return
-    }
-
-    const handleMessage = async (event: MessageEvent) => {
-      // 같은 origin에서 온 메시지만 처리
-      if (event.origin !== window.location.origin) return
-      if (event.data?.event === 'oauth_success') {
-        cleanup()
-        setOauthMsg({ ok: true, msg: 'OpenAI OAuth 연결이 완료되었습니다.' })
-        const updated = await fetchAISettings()
-        setSettings(updated)
-        setOauthWorking(false)
-      } else if (event.data?.event === 'oauth_error') {
-        cleanup()
-        setOauthMsg({ ok: false, msg: `OAuth 연결 실패: ${event.data.msg}` })
-        setOauthWorking(false)
-      }
-    }
-
-    let closedTimer: ReturnType<typeof setInterval>
-    const cleanup = () => {
-      window.removeEventListener('message', handleMessage)
-      clearInterval(closedTimer)
-    }
-
-    window.addEventListener('message', handleMessage)
-
-    // 팝업을 중간에 닫으면 working 상태 해제
-    closedTimer = setInterval(() => {
-      if (popup.closed) {
-        cleanup()
-        setOauthWorking(false)
-      }
-    }, 800)
-  }
-
-  // Client Credentials Flow: 서버-to-서버 자동 토큰 발급
-  const handleOAuthClientCredentials = async () => {
-    setOauthWorking(true)
-    setOauthMsg(null)
-    try {
-      await doSave()
-      const res = await fetchOpenAIOAuthClientCredentials()
-      setOauthMsg({ ok: true, msg: `토큰 발급 완료 (만료: ${res.expires_in ? `${res.expires_in}초 후` : '없음'})` })
-      const updated = await fetchAISettings()
-      setSettings(updated)
-    } catch (e: unknown) {
-      setOauthMsg({ ok: false, msg: e instanceof Error ? e.message : '토큰 발급 실패' })
-    } finally {
-      setOauthWorking(false)
-    }
-  }
-
-  const handleOAuthDisconnect = async () => {
-    setOauthWorking(true)
-    setOauthMsg(null)
-    try {
-      await disconnectOpenAIOAuth()
-      setOauthMsg({ ok: true, msg: 'OAuth 연결이 해제되었습니다.' })
-      const updated = await fetchAISettings()
-      setSettings(updated)
-      setForm(f => ({ ...f, openai_auth_method: 'api_key' }))
-    } catch (e: unknown) {
-      setOauthMsg({ ok: false, msg: e instanceof Error ? e.message : '연결 해제 실패' })
-    } finally {
-      setOauthWorking(false)
     }
   }
 
@@ -356,175 +235,27 @@ export default function AISettingsPage() {
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
           <p className="font-semibold text-gray-900 dark:text-white">OpenAI 설정</p>
 
-          {/* 인증 방식 선택 */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">인증 방식</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: 'api_key', label: 'API Key', icon: '🔑', desc: '정적 API 키 직접 입력' },
-                { value: 'oauth', label: 'OAuth 2.0', icon: '🔐', desc: '클라이언트 ID/Secret 방식' },
-              ].map(m => (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => set('openai_auth_method', m.value)}
-                  className={`flex flex-col items-start gap-0.5 p-3 rounded-lg border-2 transition-all text-left ${
-                    form.openai_auth_method === m.value
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  <span className="text-lg">{m.icon} <span className="text-sm font-semibold text-gray-900 dark:text-white">{m.label}</span></span>
-                  <span className="text-xs text-gray-500">{m.desc}</span>
-                </button>
-              ))}
-            </div>
+          {/* API 키 */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              API 키
+              {settings?.openai_api_key_set && (
+                <span className="ml-2 text-xs text-green-600 dark:text-green-400">✓ 저장됨</span>
+              )}
+            </label>
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder={settings?.openai_api_key_set ? '변경하려면 새 키 입력 (비워두면 유지)' : 'sk-...'}
+              value={form.openai_api_key}
+              onChange={e => set('openai_api_key', e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-400">
+              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer"
+                className="text-blue-500 hover:underline">platform.openai.com</a>에서 발급 — API 크레딧 필요
+            </p>
           </div>
-
-          {/* API Key 방식 */}
-          {form.openai_auth_method === 'api_key' && (
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                API 키
-                {settings?.openai_api_key_set && !settings?.openai_oauth_connected && (
-                  <span className="ml-2 text-xs text-green-600 dark:text-green-400">✓ 저장됨</span>
-                )}
-              </label>
-              <input
-                type="password"
-                placeholder={settings?.openai_api_key_set ? '변경하려면 새 키 입력 (비워두면 유지)' : 'sk-...'}
-                value={form.openai_api_key}
-                onChange={e => set('openai_api_key', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-400">
-                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline">platform.openai.com</a>에서 발급
-              </p>
-            </div>
-          )}
-
-          {/* OAuth 2.0 방식 */}
-          {form.openai_auth_method === 'oauth' && (
-            <div className="space-y-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 p-4">
-              {/* 연결 상태 */}
-              {settings?.openai_oauth_connected ? (
-                <div className="flex items-center justify-between rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 px-3 py-2">
-                  <span className="text-sm text-green-700 dark:text-green-300">✅ OAuth 연결됨 (토큰 보유)</span>
-                  <button
-                    type="button"
-                    onClick={handleOAuthDisconnect}
-                    disabled={oauthWorking}
-                    className="text-xs text-red-600 hover:underline disabled:opacity-50"
-                  >
-                    연결 해제
-                  </button>
-                </div>
-              ) : (
-                <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-                  ⚠️ OAuth 미연결 — 아래 설정 후 연결하세요.
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Client ID</label>
-                  <input
-                    type="text"
-                    placeholder="client_id"
-                    value={form.openai_oauth_client_id}
-                    onChange={e => set('openai_oauth_client_id', e.target.value)}
-                    className="w-full px-2 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                    Client Secret
-                    {settings?.openai_oauth_connected && <span className="ml-1 text-green-600">✓</span>}
-                  </label>
-                  <input
-                    type="password"
-                    placeholder={settings?.openai_oauth_connected ? '변경하려면 입력' : 'client_secret'}
-                    value={form.openai_oauth_client_secret}
-                    onChange={e => set('openai_oauth_client_secret', e.target.value)}
-                    className="w-full px-2 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Token URL (토큰 교환)</label>
-                <input
-                  type="text"
-                  placeholder="https://auth.openai.com/oauth/token"
-                  value={form.openai_oauth_token_url}
-                  onChange={e => set('openai_oauth_token_url', e.target.value)}
-                  className="w-full px-2 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  Auth URL <span className="font-normal text-gray-400">(Authorization Code Flow 시)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://auth.openai.com/oauth/authorize"
-                  value={form.openai_oauth_auth_url}
-                  onChange={e => set('openai_oauth_auth_url', e.target.value)}
-                  className="w-full px-2 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Scope</label>
-                <input
-                  type="text"
-                  placeholder="openid"
-                  value={form.openai_oauth_scope}
-                  onChange={e => set('openai_oauth_scope', e.target.value)}
-                  className="w-full px-2 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* 연결 버튼 */}
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleOAuthClientCredentials}
-                  disabled={oauthWorking || !form.openai_oauth_client_id || !form.openai_oauth_token_url}
-                  className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-semibold transition-colors"
-                  title="Client Credentials — 서버-to-서버 자동 토큰 발급"
-                >
-                  {oauthWorking ? '처리 중...' : '🔐 Client Credentials 연결'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleOAuthConnect}
-                  disabled={oauthWorking || !form.openai_oauth_client_id || !form.openai_oauth_auth_url}
-                  className="flex-1 py-2 rounded-lg border border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-40 text-blue-600 dark:text-blue-400 text-xs font-semibold transition-colors"
-                  title="Authorization Code Flow — 팝업 창에서 로그인 후 자동 완료"
-                >
-                  {oauthWorking ? '처리 중...' : '🌐 브라우저 로그인으로 연결'}
-                </button>
-              </div>
-
-              {oauthMsg && (
-                <div className={`rounded px-3 py-2 text-xs ${
-                  oauthMsg.ok
-                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-                    : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                }`}>
-                  {oauthMsg.ok ? '✅ ' : '❌ '}{oauthMsg.msg}
-                </div>
-              )}
-
-              <p className="text-xs text-gray-400 border-t border-gray-200 dark:border-gray-600 pt-2">
-                <strong>Client Credentials</strong>: 서버-to-서버 자동 인증 (Azure OpenAI, 엔터프라이즈용)<br/>
-                <strong>브라우저 로그인</strong>: 팝업 창에서 계정 로그인 → 완료 시 자동 닫힘
-              </p>
-            </div>
-          )}
 
           <div className="space-y-1">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">모델</label>

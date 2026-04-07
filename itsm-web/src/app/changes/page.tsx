@@ -85,7 +85,7 @@ function ChangesContent() {
       setTotal(res.total)
       if (isAgent) setStats(s)
     } catch (e) {
-      console.error(e)
+      void e // 변경 요청 목록 로드 실패 — UI에서 빈 목록 표시
     } finally {
       setLoading(false)
     }

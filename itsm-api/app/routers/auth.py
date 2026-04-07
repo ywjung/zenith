@@ -4,7 +4,6 @@ import logging
 import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +11,6 @@ import httpx
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 import jwt as jose_jwt
-from jwt.exceptions import InvalidTokenError as JWTError
 from pydantic import BaseModel
 
 from ..auth import TOKEN_EXPIRE_HOURS, ALGORITHM, create_token, get_current_user, blacklist_token, store_gitlab_token, delete_gitlab_token
@@ -439,7 +437,7 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
     }
     new_token = create_token(user_stub, role=role)
     # VULN-01: gitlab_token은 JWT payload 대신 Redis에 저장
-    _new_jti = jose_jwt.get_unverified_claims(new_token).get("jti", "")
+    _new_jti = jose_jwt.decode(new_token, options={"verify_signature": False}, algorithms=[ALGORITHM]).get("jti", "")
     if _new_jti:
         store_gitlab_token(_new_jti, new_gitlab_token, TOKEN_EXPIRE_HOURS * 3600)
 
@@ -468,6 +466,7 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
         samesite="strict",
         secure=settings.COOKIE_SECURE,
     )
+    logger.info("Token refreshed for user_id=%s role=%s", record.gitlab_user_id, role)
     return response
 
 
@@ -648,7 +647,7 @@ def create_sudo_token(
     sudo_token은 HttpOnly 쿠키(itsm_sudo)로 자동 전달된다.
     """
     from ..models import SudoToken
-    from ..rbac import ROLE_LEVELS, require_admin
+    from ..rbac import ROLE_LEVELS
     import httpx as _httpx
 
     role = user.get("role", "user")

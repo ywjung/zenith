@@ -78,10 +78,14 @@ export function markdownToHtml(md: string): string {
     return `\x00CODE${codeBlocks.length - 1}\x00`
   })
 
+  // HTML 속성 이스케이프 헬퍼
+  const escAttr = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+  const safeUrl = (u: string) => /^\s*javascript:/i.test(u) ? '' : escAttr(u)
+
   // 이미지: ![alt](url) → <img>  (링크보다 먼저 처리)
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => `<img src="${safeUrl(src)}" alt="${escAttr(alt)}">`)
   // 링크: [text](url) → <a>
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, href) => `<a href="${safeUrl(href)}">${escAttr(text)}</a>`)
 
   // 굵게: **text** 또는 __text__  (한 줄 내에서만)
   html = html.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>')
@@ -113,7 +117,8 @@ export function markdownToHtml(md: string): string {
     const m = raw.match(/^```(\w*)\n?([\s\S]*?)```$/)
     if (!m) return raw
     const lang = m[1] ? ` class="language-${m[1]}"` : ''
-    return `<pre><code${lang}>${m[2]}</code></pre>`
+    const escaped = m[2].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    return `<pre><code${lang}>${escaped}</code></pre>`
   })
 
   return html

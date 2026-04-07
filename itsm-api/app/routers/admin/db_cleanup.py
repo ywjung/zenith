@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ...database import get_db
-from ...models import AuditLog, KBRevision, Notification
+from ...models import AuditLog, Notification
 from ...rbac import require_admin
 
 logger = logging.getLogger(__name__)

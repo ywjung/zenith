@@ -15,7 +15,6 @@ from ...redis_client import get_redis as _get_redis
 from .helpers import (
     ALLOWED_MIME_TYPES,
     MAX_FILE_SIZE,
-    _detect_mime_from_bytes,
     _get_issue_requester,
     _is_issue_assigned_to_user,
     _scan_with_clamav,
@@ -136,51 +135,57 @@ def get_ticket_stats(
 
     try:
         if needs_in_memory:
-            issues = gitlab_client.get_all_issues(
-                state="all", project_id=project_id,
-            )
-            if role == "user":
-                my_username = _user.get("username", "")
-                issues = [i for i in issues if _get_issue_requester(i)[0] == my_username]
-            elif role == "developer":
-                issues = [i for i in issues if _is_issue_assigned_to_user(i, _user)]
+            # ── DB 기반 빠른 경로: user/developer 통계를 TicketSearchIndex에서 계산 ──
+            from ...models import TicketSearchIndex as _TSI
+            from ...database import get_db as _get_db_func
+            _db = next(_get_db_func())
+            try:
+                _base = _db.query(_TSI)
+                pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
+                _base = _base.filter(_TSI.project_id == pid)
+                # problem 티켓 제외
+                _base = _base.filter(~_TSI.labels_json.op("@>")('"problem"'))
 
-            def _count_in(state_val, label=None, not_label=None):
-                count = 0
-                for i in issues:
-                    s = i.get("state", "")
-                    lbls = i.get("labels", [])
-                    if state_val == "all":
-                        pass
-                    elif state_val == "opened" and s != "opened":
-                        continue
-                    elif state_val == "closed" and s != "closed":
-                        continue
-                    if label and label not in lbls:
-                        continue
-                    if not_label:
-                        blocked = [nl.strip() for nl in not_label.split(",")]
-                        if any(b in lbls for b in blocked):
-                            continue
-                    count += 1
-                return count
+                if role == "user":
+                    _base = _base.filter(_TSI.author_username == _user.get("username", ""))
+                elif role == "developer":
+                    _base = _base.filter(_TSI.assignee_username == _user.get("username", ""))
 
-            _all_sl = "status::approved,status::in_progress,status::waiting,status::resolved,status::testing,status::ready_for_release,status::released"
-            _result = {
-                "all":              _count_in("all"),
-                "open":             _count_in("opened", not_label=_all_sl),
-                "approved":         _count_in("opened", label="status::approved"),
-                "in_progress":      _count_in("opened", label="status::in_progress"),
-                "waiting":          _count_in("opened", label="status::waiting"),
-                "resolved":         _count_in("opened", label="status::resolved"),
-                "testing":          _count_in("opened", label="status::testing"),
-                "ready_for_release":_count_in("opened", label="status::ready_for_release"),
-                "released":         _count_in("opened", label="status::released"),
-                "closed":           _count_in("closed"),
-            }
-            if _r:
-                _r.setex(_cache_key, 300, _json.dumps(_result))
-            return _result
+                _all_statuses = [
+                    "status::approved", "status::in_progress", "status::waiting",
+                    "status::resolved", "status::testing", "status::ready_for_release", "status::released",
+                ]
+
+                def _db_count(state_val, label=None, not_labels=None):
+                    q = _base
+                    if state_val == "opened":
+                        q = q.filter(_TSI.state == "opened")
+                    elif state_val == "closed":
+                        q = q.filter(_TSI.state == "closed")
+                    if label:
+                        q = q.filter(_TSI.labels_json.op("@>")(f'["{label}"]'))
+                    if not_labels:
+                        for nl in not_labels:
+                            q = q.filter(~_TSI.labels_json.op("@>")(f'["{nl}"]'))
+                    return q.count()
+
+                _result = {
+                    "all":              _db_count("all"),
+                    "open":             _db_count("opened", not_labels=_all_statuses),
+                    "approved":         _db_count("opened", label="status::approved"),
+                    "in_progress":      _db_count("opened", label="status::in_progress"),
+                    "waiting":          _db_count("opened", label="status::waiting"),
+                    "resolved":         _db_count("opened", label="status::resolved"),
+                    "testing":          _db_count("opened", label="status::testing"),
+                    "ready_for_release":_db_count("opened", label="status::ready_for_release"),
+                    "released":         _db_count("opened", label="status::released"),
+                    "closed":           _db_count("closed"),
+                }
+                if _r:
+                    _r.setex(_cache_key, 300, _json.dumps(_result))
+                return _result
+            finally:
+                _db.close()
 
         def _count(state, labels=None, not_labels=None):
             _, total = gitlab_client.get_issues(
@@ -434,10 +439,13 @@ def proxy_upload(
             if os.path.isdir(upload_dir):
                 entries = [e for e in os.listdir(upload_dir) if os.path.isfile(os.path.join(upload_dir, e))]
                 if len(entries) == 1:
-                    actual_path = os.path.join(upload_dir, entries[0])
-                    content_type = mimetypes.guess_type(entries[0])[0] or content_type
-                    force_download = download or (content_type not in _INLINE_SAFE_MIMES)
-                    disposition = _make_disposition(entries[0], force_download)
+                    candidate = os.path.realpath(os.path.join(upload_dir, entries[0]))
+                    # symlink 탈출 방지: 실제 경로가 업로드 디렉토리 내부인지 검증
+                    if candidate.startswith(os.path.realpath(upload_dir) + os.sep):
+                        actual_path = candidate
+                        content_type = mimetypes.guess_type(entries[0])[0] or content_type
+                        force_download = download or (content_type not in _INLINE_SAFE_MIMES)
+                        disposition = _make_disposition(entries[0], force_download)
 
         if os.path.isfile(actual_path):
             with open(actual_path, "rb") as f:

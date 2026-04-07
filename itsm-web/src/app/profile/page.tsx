@@ -496,8 +496,10 @@ function ProfileContent() {
                   type="checkbox"
                   checked={rule.enabled}
                   onChange={async e => {
-                    const updated = await updateNotificationRule(rule.id, { enabled: e.target.checked })
-                    setNotifRules(prev => prev.map(r => r.id === rule.id ? updated : r))
+                    try {
+                      const updated = await updateNotificationRule(rule.id, { enabled: e.target.checked })
+                      setNotifRules(prev => prev.map(r => r.id === rule.id ? updated : r))
+                    } catch { /* 토글 실패 시 원상복구 — 체크박스는 React state로 관리되므로 자동 복원 */ }
                   }}
                   className="rounded text-blue-600"
                 />
@@ -521,8 +523,10 @@ function ProfileContent() {
                   >수정</button>
                   <button
                     onClick={async () => {
-                      await deleteNotificationRule(rule.id)
-                      setNotifRules(prev => prev.filter(r => r.id !== rule.id))
+                      try {
+                        await deleteNotificationRule(rule.id)
+                        setNotifRules(prev => prev.filter(r => r.id !== rule.id))
+                      } catch { /* 삭제 실패 무시 — 목록 갱신하지 않으면 UI 일관성 유지 */ }
                     }}
                     className="text-xs text-red-500 hover:underline"
                   >삭제</button>

@@ -1,10 +1,9 @@
 """In-app notifications router with SSE streaming."""
 import asyncio
-import json
 import logging
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -18,18 +17,12 @@ logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_notifications(
+    request: Request,
     limit: int = Query(default=30, ge=1, le=200),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
     recipient_id = str(user.get("sub", ""))
-    rows = (
-        db.query(Notification)
-        .filter(Notification.recipient_id == recipient_id)
-        .order_by(Notification.created_at.desc())
-        .limit(limit)
-        .all()
-    )
     unread_count = (
         db.query(Notification)
         .filter(
@@ -38,10 +31,34 @@ def list_notifications(
         )
         .count()
     )
-    return {
-        "unread_count": unread_count,
-        "notifications": [_notif_to_dict(n) for n in rows],
-    }
+    # ETag: unread_count + 최신 알림 ID 기반 — 변경 없으면 304 반환
+    latest = (
+        db.query(Notification.id)
+        .filter(Notification.recipient_id == recipient_id)
+        .order_by(Notification.created_at.desc())
+        .limit(1)
+        .scalar()
+    )
+    import hashlib
+    etag_src = f"{unread_count}:{latest or 0}"
+    etag = f'"{hashlib.md5(etag_src.encode()).hexdigest()}"'
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match and if_none_match == etag:
+        from starlette.responses import Response as _Resp
+        return _Resp(status_code=304, headers={"ETag": etag})
+
+    rows = (
+        db.query(Notification)
+        .filter(Notification.recipient_id == recipient_id)
+        .order_by(Notification.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    from starlette.responses import JSONResponse as _JSONResp
+    return _JSONResp(
+        content={"unread_count": unread_count, "notifications": [_notif_to_dict(n) for n in rows]},
+        headers={"ETag": etag},
+    )
 
 
 @router.patch("/{notif_id}/read")
@@ -82,8 +99,12 @@ async def notification_stream(
 ):
     """SSE endpoint that streams real-time notifications via Redis pub/sub."""
     recipient_id = str(user.get("sub", ""))
+    if not recipient_id:
+        raise HTTPException(status_code=401, detail="유효하지 않은 사용자입니다.")
 
     async def event_generator() -> AsyncGenerator[str, None]:
+        pubsub = None
+        r = None
         try:
             import redis.asyncio as aioredis
             from ..config import get_settings
@@ -137,8 +158,10 @@ async def notification_stream(
         finally:
             # 클라이언트 강제 종료(탭 닫기 등) 시에도 반드시 정리
             try:
-                await pubsub.unsubscribe(f"notifications:{recipient_id}")
-                await r.aclose()
+                if pubsub:
+                    await pubsub.unsubscribe(f"notifications:{recipient_id}")
+                if r:
+                    await r.aclose()
             except Exception:
                 pass
 

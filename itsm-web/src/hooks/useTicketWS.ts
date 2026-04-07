@@ -13,27 +13,17 @@ interface UseTicketWSResult {
   sendTyping: (isTyping: boolean) => void
 }
 
-/** Read a cookie value by name from document.cookie. */
-function getCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null
-  const match = document.cookie
-    .split('; ')
-    .find((row) => row.startsWith(`${name}=`))
-  return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : null
-}
-
 /** Derive the WebSocket base URL from the current page origin.
  *  http://localhost/...  → ws://localhost/api/ws/...
  *  https://itsm.corp/... → wss://itsm.corp/api/ws/...
+ *
+ *  인증은 httponly 쿠키(itsm_token)로 자동 전송됨 — URL에 토큰 미포함 (보안).
  */
 function buildWsUrl(ticketIid: string | number): string | null {
   if (typeof window === 'undefined') return null
-  const token = getCookie('itsm_token')
-  if (!token) return null
-
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
-  return `${protocol}//${host}/api/ws/tickets/${ticketIid}?token=${encodeURIComponent(token)}`
+  return `${protocol}//${host}/api/ws/tickets/${ticketIid}`
 }
 
 export function useTicketWS(ticketIid: string | number): UseTicketWSResult {

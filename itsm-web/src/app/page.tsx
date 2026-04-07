@@ -288,7 +288,7 @@ function HomeContent() {
   useEffect(() => {
     const es = new EventSource(`${API_BASE}/notifications/stream`, { withCredentials: true })
     es.onmessage = () => { refreshStats() }
-    es.onerror = () => {}
+    es.onerror = () => { es.close() }
     return () => es.close()
   }, [refreshStats])
 

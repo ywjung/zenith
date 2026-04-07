@@ -1,6 +1,5 @@
 """Users router: 사용자 프로필 관련 엔드포인트 (아바타 업로드 등)."""
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
