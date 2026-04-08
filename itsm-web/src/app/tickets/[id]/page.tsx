@@ -14,7 +14,7 @@ import { useServiceTypes } from '@/context/ServiceTypesContext'
 import { formatName, formatDate, formatFileSize, getFileIcon, isImageFile, markdownToHtml } from '@/lib/utils'
 import { PRIORITY_OPTIONS, API_BASE } from '@/lib/constants'
 import dynamic from 'next/dynamic'
-import DOMPurify from 'dompurify'
+import DOMPurify from 'isomorphic-dompurify'
 const MarkdownRenderer = dynamic(() => import('@/components/MarkdownRenderer'), { ssr: false })
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false })
 import ResolutionNoteModal from '@/components/ResolutionNoteModal'
