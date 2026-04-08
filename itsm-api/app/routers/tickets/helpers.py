@@ -403,15 +403,48 @@ PRIORITY_MAP = {
 STATUS_KO = {
     "open":              "접수됨",
     "approved":          "승인완료",
-    "in_progress":       "처리 중",
-    "waiting":           "추가정보 대기 중",
-    "resolved":          "처리 완료",
-    "testing":           "테스트 중",
+    "in_progress":       "처리중",
+    "waiting":           "대기중",
+    "resolved":          "처리완료",
+    "testing":           "테스트중",
     "ready_for_release": "운영배포전",
     "released":          "운영반영완료",
     "closed":            "종료됨",
     "reopened":          "재개됨",
 }
+
+# ── GitLab 라벨 한글화 매핑 ──────────────────────────────────────────────
+# GitLab 라벨명(한글) ↔ 내부 API 상태값(영문) 변환
+STATUS_LABEL = {k: f"status::{v}" for k, v in STATUS_KO.items() if k != "reopened"}
+STATUS_LABEL_REV = {v: k for k, v in STATUS_LABEL.items()}  # "status::접수됨" → "open"
+
+PRIORITY_LABEL = {k: f"prio::{v}" for k, v in PRIORITY_MAP.items()}
+PRIORITY_LABEL_REV = {v: k for k, v in PRIORITY_LABEL.items()}  # "prio::긴급" → "critical"
+
+def status_to_label(status: str) -> str:
+    """내부 상태값 → GitLab 라벨명. 예: 'open' → 'status::접수됨'"""
+    return STATUS_LABEL.get(status, f"status::{status}")
+
+def label_to_status(label: str) -> str:
+    """GitLab 라벨명 → 내부 상태값. 예: 'status::접수됨' → 'open'"""
+    if label in STATUS_LABEL_REV:
+        return STATUS_LABEL_REV[label]
+    # 하위 호환: 영문 라벨도 지원
+    if label.startswith("status::"):
+        return label[8:]
+    return label
+
+def priority_to_label(priority: str) -> str:
+    """내부 우선순위 → GitLab 라벨명. 예: 'high' → 'prio::높음'"""
+    return PRIORITY_LABEL.get(priority, f"prio::{priority}")
+
+def label_to_priority(label: str) -> str:
+    """GitLab 라벨명 → 내부 우선순위. 예: 'prio::높음' → 'high'"""
+    if label in PRIORITY_LABEL_REV:
+        return PRIORITY_LABEL_REV[label]
+    if label.startswith("prio::"):
+        return label[6:]
+    return label
 
 # 이 상태로 전환 시 change_reason 필수 입력
 REASON_REQUIRED_TRANSITIONS: set[str] = {"waiting", "reopened"}
@@ -435,15 +468,9 @@ def _parse_labels(labels: list[str]) -> dict:
         if label.startswith("cat::"):
             result["category"] = label[5:]
         elif label.startswith("prio::"):
-            raw = label[6:]
-            if "." in raw and raw[0].isupper():
-                raw = raw.split(".")[-1].lower()
-            result["priority"] = raw
+            result["priority"] = label_to_priority(label)
         elif label.startswith("status::"):
-            raw = label[8:]
-            if "." in raw and raw[0].isupper():
-                raw = raw.split(".")[-1].lower()
-            result["status"] = raw
+            result["status"] = label_to_status(label)
     return result
 
 

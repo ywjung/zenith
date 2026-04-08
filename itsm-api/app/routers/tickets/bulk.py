@@ -11,6 +11,8 @@ from ...rbac import require_pl
 from ...schemas import BulkUpdate
 from .helpers import (
     VALID_TRANSITIONS,
+    status_to_label,
+    priority_to_label,
     _invalidate_ticket_list_cache,
     _parse_labels,
 )
@@ -54,12 +56,12 @@ def bulk_update_tickets(
                 assignee_id = int(data.value)
             elif data.action == "set_priority" and data.value:
                 remove_labels = [lb for lb in current_labels if lb.startswith("prio::")]
-                add_labels.append(f"prio::{data.value}")
+                add_labels.append(priority_to_label(data.value))
             elif data.action == "set_status" and data.value:
                 new_status = data.value
                 if new_status in VALID_TRANSITIONS.get(old_status, set()):
                     remove_labels = [lb for lb in current_labels if lb.startswith("status::")]
-                    add_labels.append(f"status::{new_status}")
+                    add_labels.append(status_to_label(new_status))
             elif data.action == "add_label" and data.value:
                 if data.value not in current_labels:
                     add_labels.append(data.value)

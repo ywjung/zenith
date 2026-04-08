@@ -1,3 +1,4 @@
+from .helpers import label_to_status
 """이슈 관계(Linked Issues) 엔드포인트."""
 import json
 import logging
@@ -62,7 +63,7 @@ def get_ticket_links(
         for link in raw:
             issue = link.get("issue") or link
             labels = issue.get("labels", [])
-            status = next((lb[8:] for lb in labels if lb.startswith("status::")), "open")
+            status = next((label_to_status(lb) for lb in labels if lb.startswith("status::")), "open")
             target = issue.get("iid")
             if target:
                 gitlab_links[target] = {

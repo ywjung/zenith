@@ -37,14 +37,14 @@ def export_tickets_csv(
         if state == "closed":
             gl_state = "closed"
         else:
-            labels.append(f"status::{state}")
+            labels.append(status_to_label(state))
             gl_state = "opened"
     else:
         gl_state = "all"
     if category:
         labels.append(f"cat::{category}")
     if priority:
-        labels.append(f"prio::{priority}")
+        labels.append(priority_to_label(priority))
 
     label_str = ",".join(labels) if labels else None
     issues = gitlab_client.get_all_issues(
@@ -111,14 +111,14 @@ def export_tickets_xlsx(
         if state == "closed":
             gl_state = "closed"
         else:
-            labels.append(f"status::{state}")
+            labels.append(status_to_label(state))
             gl_state = "opened"
     else:
         gl_state = "all"
     if category:
         labels.append(f"cat::{category}")
     if priority:
-        labels.append(f"prio::{priority}")
+        labels.append(priority_to_label(priority))
 
     label_str = ",".join(labels) if labels else None
     issues = gitlab_client.get_all_issues(
@@ -261,7 +261,7 @@ async def import_tickets_csv(
         assignee_username = (row.get("assignee_username") or "").strip()
 
         try:
-            labels = ["status::open", f"prio::{priority}"]
+            labels = [status_to_label("open"), priority_to_label(priority)]
             if category:
                 labels.append(f"cat::{category}")
 

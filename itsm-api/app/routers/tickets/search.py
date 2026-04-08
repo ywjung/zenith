@@ -20,6 +20,9 @@ from .helpers import (
     _scan_with_clamav,
     _strip_image_metadata,
     _validate_magic_bytes,
+    status_to_label,
+    label_to_status,
+    label_to_priority,
     user_limiter,
     LIMIT_SEARCH,
     LIMIT_UPLOAD,
@@ -49,8 +52,9 @@ def search_tickets(
         out = []
         for row in rows:
             labels = row.labels_json or []
-            status = next((lb[8:] for lb in labels if lb.startswith("status::")), "open")
-            priority = next((lb[6:] for lb in labels if lb.startswith("prio::")), "medium")
+            from .helpers import label_to_status, label_to_priority
+            status = next((label_to_status(lb) for lb in labels if lb.startswith("status::")), "open")
+            priority = next((label_to_priority(lb) for lb in labels if lb.startswith("prio::")), "medium")
             category = next((lb[5:] for lb in labels if lb.startswith("cat::")), "other")
             assignees = [{"username": row.assignee_username}] if row.assignee_username else []
             out.append({
@@ -155,8 +159,8 @@ def get_ticket_stats(
                     _base = _base.filter(_TSI.assignee_username == _user.get("username", ""))
 
                 _all_statuses = [
-                    "status::approved", "status::in_progress", "status::waiting",
-                    "status::resolved", "status::testing", "status::ready_for_release", "status::released",
+                    status_to_label("approved"), status_to_label("in_progress"), status_to_label("waiting"),
+                    status_to_label("resolved"), status_to_label("testing"), status_to_label("ready_for_release"), status_to_label("released"),
                 ]
 
                 def _db_count(state_val, label=None, not_labels=None):
@@ -175,13 +179,13 @@ def get_ticket_stats(
                 _result = {
                     "all":              _db_count("all"),
                     "open":             _db_count("opened", not_labels=_all_statuses),
-                    "approved":         _db_count("opened", label="status::approved"),
-                    "in_progress":      _db_count("opened", label="status::in_progress"),
-                    "waiting":          _db_count("opened", label="status::waiting"),
-                    "resolved":         _db_count("opened", label="status::resolved"),
-                    "testing":          _db_count("opened", label="status::testing"),
-                    "ready_for_release":_db_count("opened", label="status::ready_for_release"),
-                    "released":         _db_count("opened", label="status::released"),
+                    "approved":         _db_count("opened", label=status_to_label("approved")),
+                    "in_progress":      _db_count("opened", label=status_to_label("in_progress")),
+                    "waiting":          _db_count("opened", label=status_to_label("waiting")),
+                    "resolved":         _db_count("opened", label=status_to_label("resolved")),
+                    "testing":          _db_count("opened", label=status_to_label("testing")),
+                    "ready_for_release":_db_count("opened", label=status_to_label("ready_for_release")),
+                    "released":         _db_count("opened", label=status_to_label("released")),
                     "closed":           _db_count("closed"),
                 }
                 if _r:
@@ -205,8 +209,8 @@ def get_ticket_stats(
             _base = _base.filter(~_jc2(_TSI.labels_json, '["problem"]'))
 
             _all_statuses = [
-                "status::approved", "status::in_progress", "status::waiting",
-                "status::resolved", "status::testing", "status::ready_for_release", "status::released",
+                status_to_label("approved"), status_to_label("in_progress"), status_to_label("waiting"),
+                status_to_label("resolved"), status_to_label("testing"), status_to_label("ready_for_release"), status_to_label("released"),
             ]
 
             def _db_count(state_val, label=None, not_labels=None):
@@ -225,13 +229,13 @@ def get_ticket_stats(
             _result = {
                 "all":              _db_count("all"),
                 "open":             _db_count("opened", not_labels=_all_statuses),
-                "approved":         _db_count("opened", label="status::approved"),
-                "in_progress":      _db_count("opened", label="status::in_progress"),
-                "waiting":          _db_count("opened", label="status::waiting"),
-                "resolved":         _db_count("opened", label="status::resolved"),
-                "testing":          _db_count("opened", label="status::testing"),
-                "ready_for_release":_db_count("opened", label="status::ready_for_release"),
-                "released":         _db_count("opened", label="status::released"),
+                "approved":         _db_count("opened", label=status_to_label("approved")),
+                "in_progress":      _db_count("opened", label=status_to_label("in_progress")),
+                "waiting":          _db_count("opened", label=status_to_label("waiting")),
+                "resolved":         _db_count("opened", label=status_to_label("resolved")),
+                "testing":          _db_count("opened", label=status_to_label("testing")),
+                "ready_for_release":_db_count("opened", label=status_to_label("ready_for_release")),
+                "released":         _db_count("opened", label=status_to_label("released")),
                 "closed":           _db_count("closed"),
             }
         finally:

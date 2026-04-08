@@ -28,8 +28,11 @@ from ...redis_client import get_redis as _get_redis
 from .helpers import (
     STATUS_KO,
     CATEGORY_MAP,
+    PRIORITY_MAP,
     VALID_TRANSITIONS,
     REASON_REQUIRED_TRANSITIONS,
+    status_to_label,
+    priority_to_label,
     _apply_automation_actions,
     _attach_sla_deadlines,
     _can_requester_modify,
@@ -72,34 +75,35 @@ def list_tickets(
         status_label: Optional[str] = None
         not_labels: Optional[str] = None
 
-        _all_status_labels = "status::approved,status::in_progress,status::waiting,status::resolved,status::testing,status::ready_for_release,status::released"
+        _sl = status_to_label  # shorthand
+        _all_status_labels = ",".join([_sl("approved"), _sl("in_progress"), _sl("waiting"), _sl("resolved"), _sl("testing"), _sl("ready_for_release"), _sl("released")])
         if state == "open":
             gl_state = "opened"
             not_labels = _all_status_labels
         elif state == "approved":
             gl_state = "opened"
-            status_label = "status::approved"
+            status_label = _sl("approved")
         elif state == "in_progress":
             gl_state = "opened"
-            status_label = "status::in_progress"
+            status_label = _sl("in_progress")
         elif state == "waiting":
             gl_state = "opened"
-            status_label = "status::waiting"
+            status_label = _sl("waiting")
         elif state == "active":
             gl_state = "opened"
-            not_labels = "status::resolved,status::ready_for_release,status::released"
+            not_labels = ",".join([_sl("resolved"), _sl("ready_for_release"), _sl("released")])
         elif state == "resolved":
             gl_state = "opened"
-            status_label = "status::resolved"
+            status_label = _sl("resolved")
         elif state == "testing":
             gl_state = "opened"
-            status_label = "status::testing"
+            status_label = _sl("testing")
         elif state == "ready_for_release":
             gl_state = "opened"
-            status_label = "status::ready_for_release"
+            status_label = _sl("ready_for_release")
         elif state == "released":
             gl_state = "opened"
-            status_label = "status::released"
+            status_label = _sl("released")
         elif state == "closed":
             gl_state = "closed"
 
@@ -130,7 +134,7 @@ def list_tickets(
             else:
                 label_parts.append(f"cat::{category}")
         if priority:
-            label_parts.append(f"prio::{priority}")
+            label_parts.append(priority_to_label(priority))
         labels = ",".join(label_parts) if label_parts else None
 
         role = _user.get("role", "user")
@@ -410,7 +414,7 @@ def create_ticket(
     gitlab_client.ensure_labels(data.project_id)
 
     _cat_label = CATEGORY_MAP.get(str(data.category), str(data.category))
-    labels = [f"cat::{_cat_label}", f"prio::{data.priority}", "status::open"]
+    labels = [f"cat::{_cat_label}", priority_to_label(data.priority), status_to_label("open")]
 
     table_rows = [
         ("신청자", data.employee_name),
@@ -671,13 +675,10 @@ def get_gantt_data(
         iid_set.add(iid)
 
         labels = issue.get("labels", [])
-        priority = "medium"
-        status = "open"
-        for lbl in labels:
-            if lbl.startswith("prio::"):
-                priority = lbl[6:]
-            if lbl.startswith("status::"):
-                status = lbl[8:]
+        from .helpers import _parse_labels as _pl, label_to_priority, label_to_status
+        parsed = _pl(labels)
+        priority = parsed["priority"]
+        status = parsed["status"]
         if issue.get("state") == "closed":
             status = "closed"
 
@@ -843,13 +844,13 @@ def update_ticket(
                 state_event = "close"
             elif data.status == "reopened":
                 state_event = "reopen"
-                final_labels.append("status::open")
+                final_labels.append(status_to_label("open"))
             else:
-                final_labels.append(f"status::{data.status.value}")
+                final_labels.append(status_to_label(data.status.value))
 
         if data.priority is not None:
             final_labels = [l for l in final_labels if not l.startswith("prio::")]
-            final_labels.append(f"prio::{data.priority}")
+            final_labels.append(priority_to_label(data.priority))
 
         new_title = None
         new_description = None
@@ -1154,7 +1155,7 @@ def clone_ticket(
     priority = next((lb[6:] for lb in orig_labels if lb.startswith("prio::")), "medium")
 
     new_title = f"[복제] {original.get('title', '')}"
-    new_labels = [f"cat::{category}", f"prio::{priority}", "status::open"]
+    new_labels = [f"cat::{category}", priority_to_label(priority), status_to_label("open")]
 
     try:
         new_issue = gitlab_client.create_issue(

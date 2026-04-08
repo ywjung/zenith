@@ -642,18 +642,18 @@ _labels_initialized: set[str] = set()
 
 # status:: / prio:: 는 워크플로우 고정값 — 코드에서 직접 참조하므로 변경 불가
 REQUIRED_LABELS = [
-    ("status::open",              "#5cb85c"),
-    ("status::approved",          "#27ae60"),
-    ("status::in_progress",       "#0275d8"),
-    ("status::waiting",           "#f0ad4e"),
-    ("status::resolved",          "#5bc0de"),
-    ("status::testing",           "#8e44ad"),
-    ("status::ready_for_release", "#e67e22"),
-    ("status::released",          "#2980b9"),
-    ("prio::low",                 "#bdc3c7"),
-    ("prio::medium",        "#f39c12"),
-    ("prio::high",          "#e67e22"),
-    ("prio::critical",      "#e74c3c"),
+    ("status::접수됨",       "#5cb85c"),
+    ("status::승인완료",     "#27ae60"),
+    ("status::처리중",       "#0275d8"),
+    ("status::대기중",       "#f0ad4e"),
+    ("status::처리완료",     "#5bc0de"),
+    ("status::테스트중",     "#8e44ad"),
+    ("status::운영배포전",   "#e67e22"),
+    ("status::운영반영완료", "#2980b9"),
+    ("prio::낮음",           "#bdc3c7"),
+    ("prio::보통",           "#f39c12"),
+    ("prio::높음",           "#e67e22"),
+    ("prio::긴급",           "#e74c3c"),
 ]
 
 # cat:: 라벨은 DB service_types 테이블에서 동적으로 관리
