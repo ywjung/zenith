@@ -1,6 +1,6 @@
 """문제 관리 (Problem Management, ITIL).
 
-문제(Problem)는 하나 이상의 인시던트의 근본 원인이 되는 이슈이다.
+문제(Problem)는 하나 이상의 티켓의 근본 원인이 되는 이슈이다.
 티켓 타입이 "problem"으로 설정된 GitLab 이슈를 관리한다.
 """
 import logging
@@ -76,7 +76,7 @@ def _serialize_issue(issue: dict, ticket_type: str = "problem") -> dict:
 
 
 def _fetch_incident_summaries(incident_iids: list[int], pid: str) -> list[dict]:
-    """인시던트 iid 목록을 받아 GitLab에서 제목·상태·우선순위를 배치 조회한다."""
+    """티켓 iid 목록을 받아 GitLab에서 제목·상태·우선순위를 배치 조회한다."""
     if not incident_iids:
         return []
     summaries: list[dict] = []
@@ -161,7 +161,7 @@ def list_problems(
     start = (page - 1) * per_page
     paged = all_issues[start:start + per_page]
 
-    # 연결된 인시던트 iid 배치 조회 (N+1 방지)
+    # 연결된 티켓 iid 배치 조회 (N+1 방지)
     paged_iids = [iss["iid"] for iss in paged]
     links = (
         db.query(TicketLink)
@@ -176,7 +176,7 @@ def list_problems(
     for lk in links:
         link_map.setdefault(lk.source_iid, []).append(lk.target_iid)
 
-    # 연결된 인시던트 전체의 제목·상태를 한 번에 조회
+    # 연결된 티켓 전체의 제목·상태를 한 번에 조회
     all_incident_iids: list[int] = []
     for iids in link_map.values():
         all_incident_iids.extend(iids)
@@ -399,7 +399,7 @@ def link_incident(
     user: dict = Depends(require_agent),
     db: Session = Depends(get_db),
 ):
-    """인시던트를 문제에 연결한다."""
+    """티켓을 문제에 연결한다."""
     pid = _pid(body.project_id)
 
     meta = db.query(TicketTypeMeta).filter_by(ticket_iid=iid, project_id=pid, ticket_type="problem").first()
@@ -407,12 +407,12 @@ def link_incident(
         raise HTTPException(status_code=404, detail="Problem ticket not found")
 
     if body.incident_iid == iid:
-        raise HTTPException(status_code=422, detail="문제 티켓 자신을 인시던트로 연결할 수 없습니다.")
+        raise HTTPException(status_code=422, detail="문제 티켓 자신을 연결할 수 없습니다.")
 
     try:
         gitlab_client.get_issue(body.incident_iid, project_id=pid)
     except Exception:
-        raise HTTPException(status_code=404, detail=f"인시던트 티켓 #{body.incident_iid}을(를) 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail=f"티켓 #{body.incident_iid}을(를) 찾을 수 없습니다.")
 
     existing = (
         db.query(TicketLink)
@@ -425,7 +425,7 @@ def link_incident(
         .first()
     )
     if existing:
-        raise HTTPException(status_code=409, detail="이미 연결된 인시던트입니다.")
+        raise HTTPException(status_code=409, detail="이미 연결된 티켓입니다.")
 
     link = TicketLink(
         source_iid=iid,
@@ -447,7 +447,7 @@ def unlink_incident(
     user: dict = Depends(require_agent),
     db: Session = Depends(get_db),
 ):
-    """인시던트-문제 연결을 해제한다."""
+    """티켓-문제 연결을 해제한다."""
     pid = _pid(project_id)
     link = (
         db.query(TicketLink)
@@ -460,7 +460,7 @@ def unlink_incident(
         .first()
     )
     if not link:
-        raise HTTPException(status_code=404, detail="연결된 인시던트를 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail="연결된 티켓을 찾을 수 없습니다.")
     db.delete(link)
     db.commit()
     return {"status": "unlinked"}

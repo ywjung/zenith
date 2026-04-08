@@ -89,7 +89,7 @@ itsm_problems_total = Gauge(
     "itsm_problems_total", "문제 티켓 수"
 )
 itsm_problem_linked_incidents_total = Gauge(
-    "itsm_problem_linked_incidents_total", "문제에 연결된 인시던트 총 수"
+    "itsm_problem_linked_incidents_total", "문제에 연결된 티켓 총 수"
 )
 
 # 변경 관리 (Change Management)

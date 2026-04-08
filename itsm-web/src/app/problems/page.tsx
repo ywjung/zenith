@@ -145,7 +145,7 @@ function ProblemsContent() {
   const [editing, setEditing]               = useState(false)
   const [editError, setEditError]           = useState('')
 
-  // 인시던트 연결 모달
+  // 티켓 연결 모달
   const [linkTarget, setLinkTarget]     = useState<ProblemTicket | null>(null)
   const [linkIidInput, setLinkIidInput] = useState('')
   const [linking, setLinking]           = useState(false)
@@ -226,7 +226,7 @@ function ProblemsContent() {
   }
 
   async function handleUnlink(problemIid: number, incidentIid: number) {
-    if (!confirm(`인시던트 #${incidentIid}의 연결을 해제하시겠습니까?`)) return
+    if (!confirm(`티켓 #${incidentIid}의 연결을 해제하시겠습니까?`)) return
     try {
       await unlinkIncidentFromProblem(problemIid, incidentIid)
       await load()
@@ -250,7 +250,7 @@ function ProblemsContent() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🔍 문제 관리</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            인시던트의 근본 원인(Problem)을 식별하고 추적합니다.
+            티켓의 근본 원인(Problem)을 식별하고 추적합니다.
           </p>
         </div>
         {isAgent && (
@@ -270,7 +270,7 @@ function ProblemsContent() {
             { value: stats.total_problems,        label: '전체 문제',       color: 'text-purple-600 dark:text-purple-400' },
             { value: openCount,                    label: '열린 문제',       color: 'text-green-600 dark:text-green-400' },
             { value: criticalCount,                label: '긴급',            color: 'text-red-600 dark:text-red-400' },
-            { value: stats.total_linked_incidents, label: '연결된 인시던트', color: 'text-orange-600 dark:text-orange-400' },
+            { value: stats.total_linked_incidents, label: '연결된 티켓', color: 'text-orange-600 dark:text-orange-400' },
           ].map(item => (
             <div key={item.label} className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm p-4 text-center">
               <div className={`text-2xl font-bold ${item.color}`}>{item.value}</div>
@@ -360,7 +360,7 @@ function ProblemsContent() {
                       <PriorityPill priority={prob.priority} />
                       {incCount > 0 && (
                         <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded-full font-medium">
-                          인시던트 {incCount}
+                          티켓 {incCount}
                         </span>
                       )}
                       {isAgent && (
@@ -418,11 +418,11 @@ function ProblemsContent() {
                           </div>
                         )}
 
-                        {/* 연결된 인시던트 */}
+                        {/* 연결된 티켓 */}
                         {incCount > 0 && (
                           <div>
                             <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
-                              연결된 인시던트 ({incCount})
+                              연결된 티켓 ({incCount})
                             </p>
                             <div className="space-y-1.5">
                               {incidents.map(inc => (
@@ -497,7 +497,7 @@ function ProblemsContent() {
                   value={createTitle}
                   onChange={e => setCreateTitle(e.target.value)}
                   className="w-full px-3 py-2 text-sm border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  placeholder="인시던트의 근본 원인을 설명해주세요"
+                  placeholder="티켓의 근본 원인을 설명해주세요"
                 />
               </div>
               <div>
@@ -592,20 +592,20 @@ function ProblemsContent() {
         </div>
       )}
 
-      {/* 인시던트 연결 모달 */}
+      {/* 티켓 연결 모달 */}
       {linkTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">인시던트 연결</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">티켓 연결</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              문제 #{linkTarget.iid}에 연결할 인시던트 번호를 입력해주세요.
+              문제 #{linkTarget.iid}에 연결할 티켓 번호를 입력해주세요.
             </p>
             <form onSubmit={handleLinkIncident} className="space-y-3">
               <input
                 type="number" min={1}
                 value={linkIidInput}
                 onChange={e => setLinkIidInput(e.target.value)}
-                placeholder="인시던트 번호 (예: 42)"
+                placeholder="티켓 번호 (예: 42)"
                 className="w-full px-3 py-2 text-sm border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 autoFocus
               />

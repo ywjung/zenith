@@ -17,7 +17,7 @@ router = APIRouter(prefix="/ticket-types", tags=["ticket-types"])
 VALID_TYPES = {"incident", "service_request", "change", "problem"}
 
 TYPE_LABELS = {
-    "incident": "인시던트",
+    "incident": "티켓",
     "service_request": "서비스 요청",
     "change": "변경 요청",
     "problem": "문제",

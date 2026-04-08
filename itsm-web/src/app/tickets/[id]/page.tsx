@@ -407,7 +407,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
 // ---------------------------------------------------------------------------
 
 const TICKET_TYPES = [
-  { value: 'incident',        label: '인시던트',    color: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' },
+  { value: 'incident',        label: '티켓',    color: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' },
   { value: 'service_request', label: '서비스 요청', color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' },
   { value: 'change',          label: '변경 요청',   color: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300' },
   { value: 'problem',         label: '문제',        color: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' },
@@ -557,7 +557,7 @@ function TicketTypePanel({
         </p>
       )}
 
-      {/* 문제 유형: 연결된 인시던트/변경 관리 */}
+      {/* 문제 유형: 연결된 티켓/변경 관리 */}
       {isAgent && isProblem && (
         <div className="pt-1">
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">연결된 티켓 (problem_of)</p>
@@ -600,7 +600,7 @@ function TicketTypePanel({
         </div>
       )}
 
-      {/* 인시던트/변경 유형: 연결된 문제 */}
+      {/* 일반/변경 유형: 연결된 문제 */}
       {isAgent && !isProblem && problemLinks.length > 0 && (
         <div className="pt-1">
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">연결된 문제</p>

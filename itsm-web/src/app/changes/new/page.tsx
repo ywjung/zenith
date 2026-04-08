@@ -304,7 +304,7 @@ function NewChangeContent() {
                   type="number"
                   value={form.related_ticket_iid}
                   onChange={e => setForm(f => ({ ...f, related_ticket_iid: e.target.value }))}
-                  placeholder="인시던트/서비스 요청 번호"
+                  placeholder="관련 티켓 번호"
                   className={inputCls}
                   min={1}
                 />
