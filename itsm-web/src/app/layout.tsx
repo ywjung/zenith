@@ -13,6 +13,8 @@ import KeyboardShortcuts from '@/components/KeyboardShortcuts'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
 import PWAInstallPrompt from '@/components/PWAInstallPrompt'
 import OnboardingTour from '@/components/OnboardingTour'
+import { Toaster } from 'sonner'
+import OfflineBanner from '@/components/OfflineBanner'
 
 export const metadata: Metadata = {
   title: 'ZENITH',
@@ -69,6 +71,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <KeyboardShortcuts />
             <PWAInstallPrompt />
             <OnboardingTour />
+            <OfflineBanner />
+            <Toaster
+              position="top-right"
+              richColors
+              closeButton
+              toastOptions={{
+                className: 'text-sm',
+                duration: 4000,
+              }}
+            />
             <WebVitalsReporter />
           </ServiceTypesProvider>
           </RoleLabelsProvider>

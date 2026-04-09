@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const RESOLUTION_TYPES = [
   { value: 'permanent_fix', label: '🔧 영구 해결', desc: '근본 원인이 제거됨' },
@@ -24,8 +24,20 @@ export default function ResolutionNoteModal({ ticketIid, targetStatus, onConfirm
 
   const statusLabel = targetStatus === 'resolved' ? '처리완료' : '종료'
 
+  // ESC 키로 모달 닫기
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
         {/* 헤더 */}
         <div className="px-6 pt-6 pb-4 border-b dark:border-gray-700 shrink-0">

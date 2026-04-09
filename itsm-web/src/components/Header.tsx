@@ -261,6 +261,7 @@ export default function Header() {
               <button
                 onClick={cycleTheme}
                 title={`Theme: ${theme} (click to change)`}
+                aria-label={`테마 전환 (현재: ${theme})`}
                 className="p-1.5 rounded-md hover:bg-blue-600 dark:hover:bg-gray-700 transition-colors text-sm opacity-80 hover:opacity-100"
               >
                 {themeIcon}
@@ -269,7 +270,7 @@ export default function Header() {
 
               {/* 프로필 드롭다운 */}
               <div className="relative flex items-center gap-2 border-l border-blue-500 dark:border-gray-700 pl-3 group">
-                <button className="flex items-center gap-2 cursor-pointer">
+                <button className="flex items-center gap-2 cursor-pointer" aria-label="사용자 메뉴">
                   <span className="opacity-90 text-sm whitespace-nowrap">{formatName(user.name)}</span>
                   {user.role !== 'user' && (
                     <span className="text-xs bg-blue-500 dark:bg-gray-700 px-1.5 py-0.5 rounded whitespace-nowrap">
