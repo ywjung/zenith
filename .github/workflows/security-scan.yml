@@ -14,7 +14,7 @@ jobs:
     name: Python pip-audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
@@ -43,7 +43,7 @@ jobs:
     name: Node npm audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
@@ -63,7 +63,7 @@ jobs:
     name: Trivy container scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build API image
         run: docker build -t itsm-api:scan ./itsm-api
