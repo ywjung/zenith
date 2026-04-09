@@ -33,12 +33,12 @@ export default function ResolutionNoteModal({ ticketIid, targetStatus, onConfirm
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
       onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] animate-scaleIn">
         {/* 헤더 */}
         <div className="px-6 pt-6 pb-4 border-b dark:border-gray-700 shrink-0">
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">

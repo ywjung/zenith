@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -41,6 +41,13 @@ export default function Header() {
   const t = useTranslations()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileViewsOpen, setMobileViewsOpen] = useState(false)
+  const pathname = usePathname()
+
+  // 라우트 변경 시 모바일 메뉴 자동 닫기
+  useEffect(() => {
+    setMobileMenuOpen(false)
+    setMobileViewsOpen(false)
+  }, [pathname])
 
   function cycleTheme() {
     const next: Record<string, 'light' | 'dark' | 'system'> = {
@@ -324,8 +331,10 @@ export default function Header() {
           {user && <NotificationBell />}
           <button
             onClick={() => setMobileMenuOpen(o => !o)}
-            className="p-2 rounded-md hover:bg-blue-600 dark:hover:bg-gray-700 transition-colors"
-            aria-label="Menu"
+            className="p-2 rounded-md hover:bg-blue-600 dark:hover:bg-gray-700 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/80"
+            aria-label={mobileMenuOpen ? '메뉴 닫기' : '메뉴 열기'}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-nav"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               {mobileMenuOpen
@@ -339,7 +348,7 @@ export default function Header() {
 
       {/* 모바일 드롭다운 메뉴 */}
       {mobileMenuOpen && user && (
-        <div className="md:hidden bg-blue-800 dark:bg-gray-900 border-t border-blue-600 dark:border-gray-800 px-4 py-3 space-y-1 text-sm">
+        <div id="mobile-nav" className="md:hidden bg-blue-800 dark:bg-gray-900 border-t border-blue-600 dark:border-gray-800 px-4 py-3 space-y-1 text-sm animate-fadeIn">
           <p className="text-blue-300 dark:text-gray-500 text-xs uppercase tracking-wide pb-1">핵심 메뉴</p>
           <Link href="/" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🎫 {t('nav.tickets')}</Link>
           <Link href="/tickets/new" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>+ {t('ticket.new')}</Link>

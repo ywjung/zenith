@@ -1140,7 +1140,8 @@ function HomeContent() {
             </div>
           </div>
 
-          {/* Table */}
+          {/* Table — 모바일 가로 스크롤 */}
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
           {loading ? (
             <table className="w-full text-sm">
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
@@ -1268,6 +1269,7 @@ function HomeContent() {
               </tbody>
             </table>
           )}
+          </div>
 
           {/* Pagination */}
           {!loading && totalPages > 1 && (
