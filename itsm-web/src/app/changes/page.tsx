@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import RequireAuth from '@/components/RequireAuth'
+import EmptyState from '@/components/EmptyState'
+import { SkeletonRow } from '@/components/Skeleton'
 import { listChanges, getChangeStats, transitionChange, type ChangeRequest } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { formatDate } from '@/lib/utils'
@@ -229,15 +231,17 @@ function ChangesContent() {
         {/* 목록 */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
           {loading ? (
-            <div className="flex items-center justify-center py-20 text-gray-400">로딩 중...</div>
-          ) : changes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-gray-500">
-              <div className="text-4xl mb-3">🔄</div>
-              <div className="text-sm">변경 요청이 없습니다</div>
-              <Link href="/changes/new" className="mt-3 text-sm text-blue-600 hover:underline">
-                첫 번째 변경 요청 만들기
-              </Link>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {[1,2,3,4,5].map(i => <SkeletonRow key={i} cols={5} />)}
             </div>
+          ) : changes.length === 0 ? (
+            <EmptyState
+              icon="🔄"
+              title="변경 요청이 없습니다"
+              description="ITIL 기반 변경 관리를 시작해보세요."
+              actionLabel="+ 첫 번째 변경 요청 만들기"
+              actionHref="/changes/new"
+            />
           ) : (
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {changes.map(cr => (

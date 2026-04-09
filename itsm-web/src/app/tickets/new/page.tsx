@@ -11,6 +11,7 @@ import {
 } from '@/lib/api'
 import type { GitLabProject, ProjectMember, Milestone, TicketTemplate, KBArticle, CustomFieldDef } from '@/types'
 import dynamic from 'next/dynamic'
+import { toast } from 'sonner'
 import RequireAuth from '@/components/RequireAuth'
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false })
 import { useAuth } from '@/context/AuthContext'
@@ -386,10 +387,13 @@ function NewTicketContent() {
       const qs = ticket.project_id ? `?project_id=${ticket.project_id}` : ''
       submittedRef.current = true
       clearDraft()
+      toast.success(`티켓 #${ticket.iid}이(가) 등록되었습니다.`)
       router.push(`/tickets/${ticket.iid}${qs}`)
     } catch (err: unknown) {
       setUploadingFiles(false)
-      setError(err instanceof Error ? err.message : t('submit_failed'))
+      const msg = err instanceof Error ? err.message : t('submit_failed')
+      setError(msg)
+      toast.error(msg)
       setSubmitting(false)
     }
   }

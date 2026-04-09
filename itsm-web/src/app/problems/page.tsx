@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import RequireAuth from '@/components/RequireAuth'
+import EmptyState from '@/components/EmptyState'
+import { SkeletonRow } from '@/components/Skeleton'
 import { useAuth } from '@/context/AuthContext'
 import {
   listProblems, createProblem, updateProblem, getProblemStats,
@@ -182,9 +185,12 @@ function ProblemsContent() {
       await createProblem({ title: createTitle, description: createDesc, priority: createPriority })
       setShowCreate(false)
       setCreateTitle(''); setCreateDesc(''); setCreatePriority('medium')
+      toast.success('문제가 등록되었습니다.')
       await load()
     } catch (e: unknown) {
-      setCreateError(e instanceof Error ? e.message : '생성 실패')
+      const msg = e instanceof Error ? e.message : '생성 실패'
+      setCreateError(msg)
+      toast.error(msg)
     } finally { setCreating(false) }
   }
 
@@ -204,9 +210,12 @@ function ProblemsContent() {
     try {
       await updateProblem(editTarget.iid, { title: editTitle, description: editDesc, priority: editPriority })
       setEditTarget(null)
+      toast.success('문제가 수정되었습니다.')
       await load()
     } catch (e: unknown) {
-      setEditError(e instanceof Error ? e.message : '수정 실패')
+      const msg = e instanceof Error ? e.message : '수정 실패'
+      setEditError(msg)
+      toast.error(msg)
     } finally { setEditing(false) }
   }
 
@@ -219,9 +228,12 @@ function ProblemsContent() {
     try {
       await linkIncidentToProblem(linkTarget.iid, iid)
       setLinkTarget(null); setLinkIidInput('')
+      toast.success(`티켓 #${iid}이(가) 문제에 연결되었습니다.`)
       await load()
     } catch (e: unknown) {
-      setLinkError(e instanceof Error ? e.message : '연결 실패')
+      const msg = e instanceof Error ? e.message : '연결 실패'
+      setLinkError(msg)
+      toast.error(msg)
     } finally { setLinking(false) }
   }
 
@@ -229,9 +241,12 @@ function ProblemsContent() {
     if (!confirm(`티켓 #${incidentIid}의 연결을 해제하시겠습니까?`)) return
     try {
       await unlinkIncidentFromProblem(problemIid, incidentIid)
+      toast.success('연결이 해제되었습니다.')
       await load()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '연결 해제에 실패했습니다.')
+      const msg = e instanceof Error ? e.message : '연결 해제에 실패했습니다.'
+      setError(msg)
+      toast.error(msg)
     }
   }
 
@@ -315,20 +330,22 @@ function ProblemsContent() {
         <div className="p-3 mb-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">{error}</div>
       )}
       {loading && (
-        <div className="text-center py-12 text-gray-400 dark:text-gray-500">불러오는 중...</div>
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border dark:border-gray-700 shadow-sm overflow-hidden">
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {[1,2,3,4].map(i => <SkeletonRow key={i} cols={4} />)}
+          </div>
+        </div>
       )}
 
       {/* 빈 상태 */}
       {!loading && problems.length === 0 && (
-        <div className="text-center py-16">
-          <div className="text-4xl mb-3">🔍</div>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">등록된 문제가 없습니다.</p>
-          {isAgent && (
-            <button onClick={() => setShowCreate(true)} className="mt-3 text-blue-600 dark:text-blue-400 text-sm hover:underline">
-              첫 번째 문제 등록하기
-            </button>
-          )}
-        </div>
+        <EmptyState
+          icon="🔍"
+          title="등록된 문제가 없습니다"
+          description="반복되는 인시던트의 근본 원인(Problem)을 등록하여 추적해보세요."
+          actionLabel={isAgent ? '+ 첫 번째 문제 등록하기' : undefined}
+          onAction={isAgent ? () => setShowCreate(true) : undefined}
+        />
       )}
 
       {/* 문제 목록 — 아코디언 */}

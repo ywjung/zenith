@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import RequireAuth from '@/components/RequireAuth'
 import { createChange } from '@/lib/api'
 
@@ -103,9 +104,12 @@ function NewChangeContent() {
         const { transitionChange } = await import('@/lib/api')
         await transitionChange(cr.id, 'submitted')
       }
+      toast.success(asDraft ? '변경 요청이 초안으로 저장되었습니다.' : '변경 요청이 제출되었습니다.')
       router.push(`/changes/${cr.id}`)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
+      const msg = err instanceof Error ? err.message : '오류가 발생했습니다.'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setSubmitting(false)
     }

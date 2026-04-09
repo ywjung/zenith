@@ -15,6 +15,7 @@ import type { FilterOptions } from '@/lib/api'
 import { formatName, formatDate } from '@/lib/utils'
 import { PRIORITY_ORDER, DEFAULT_PER_PAGE, API_BASE } from '@/lib/constants'
 import type { Ticket, GitLabProject, TicketStats, SavedFilter, KBArticle, NotificationItem } from '@/types'
+import { toast } from 'sonner'
 import { StatusBadge, PriorityBadge, CategoryBadge, SlaBadge } from '@/components/StatusBadge'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
@@ -397,12 +398,16 @@ function HomeContent() {
   async function handleBulkSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (selectedIids.size === 0 || !selectedProject) return
+    const count = selectedIids.size
     setBulkProcessing(true); setBulkError(null)
     try {
       await bulkUpdateTickets({ iids: Array.from(selectedIids), project_id: selectedProject, action: bulkAction, value: bulkValue || undefined })
       setSelectedIids(new Set()); await load()
+      toast.success(`${count}개 티켓에 일괄 작업을 완료했습니다.`)
     } catch (err: unknown) {
-      setBulkError(err instanceof Error ? err.message : '일괄작업 실패')
+      const msg = err instanceof Error ? err.message : '일괄작업 실패'
+      setBulkError(msg)
+      toast.error(msg)
     } finally {
       setBulkProcessing(false)
     }
@@ -436,9 +441,16 @@ function HomeContent() {
     try {
       const result = await importTicketsCSV(importFile, selectedProject || undefined)
       setImportResult(result)
-      if (result.imported > 0) await load()
+      if (result.imported > 0) {
+        toast.success(`${result.imported}건의 티켓을 가져왔습니다.${result.failed?.length ? ` (실패 ${result.failed.length}건)` : ''}`)
+        await load()
+      } else if (result.failed?.length) {
+        toast.error(`CSV 가져오기 실패: ${result.failed.length}건의 오류`)
+      }
     } catch (e: unknown) {
-      setImportError(e instanceof Error ? e.message : 'CSV 가져오기 실패')
+      const msg = e instanceof Error ? e.message : 'CSV 가져오기 실패'
+      setImportError(msg)
+      toast.error(msg)
     } finally {
       setImportLoading(false)
     }
