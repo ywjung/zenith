@@ -103,7 +103,7 @@ export default function RichTextEditor({
   value,
   onChange,
   placeholder = '내용을 입력하세요...',
-  minHeight = '160px',
+  minHeight = '200px',
   onImageUpload,
   onInsertRef,
   mentionUsers = [],
@@ -352,12 +352,13 @@ export default function RichTextEditor({
         </ToolbarButton>
       </div>
 
-      {/* Editor content */}
-      <EditorContent
-        editor={editor}
-        className="prose prose-sm max-w-none px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:outline-none"
-        style={{ minHeight }}
-      />
+      {/* Editor content — 드래그로 높이 조절 가능 (resize-y) */}
+      <div className="overflow-y-auto resize-y" style={{ minHeight, maxHeight: '600px' }}>
+        <EditorContent
+          editor={editor}
+          className="prose prose-sm max-w-none px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:outline-none h-full"
+        />
+      </div>
     </div>
   )
 }

@@ -188,7 +188,7 @@ export default function PortalPage() {
                       onChange={e => setExtraFields(f => ({ ...f, [field.name]: e.target.value }))}
                       rows={3}
                       required={field.required}
-                      className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
                     />
                   ) : field.type === 'select' ? (
                     <select
@@ -273,9 +273,9 @@ export default function PortalPage() {
               value={form.content}
               onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
               required
-              rows={6}
+              rows={8}
               placeholder={t('portal.content_placeholder')}
-              className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
             />
           </div>
         </div>

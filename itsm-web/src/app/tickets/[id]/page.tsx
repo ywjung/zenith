@@ -1690,7 +1690,7 @@ function TicketDetailContent() {
             onChange={e => setWaitingReasonInput(e.target.value)}
             rows={3}
             placeholder="예: 오류 발생 스크린샷과 정확한 발생 시각을 알려주세요."
-            className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
           />
           <div className="flex gap-2 mt-4 justify-end">
             <button
@@ -1816,7 +1816,7 @@ function TicketDetailContent() {
                 value={editForm.description}
                 onChange={(v) => setEditForm((f) => ({ ...f, description: v }))}
                 placeholder="내용을 입력하세요."
-                minHeight="200px"
+                minHeight="280px"
                 onImageUpload={handleEditImageUpload}
               />
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">이미지는 툴바 🖼 버튼으로 직접 삽입하세요.</p>
@@ -2083,7 +2083,7 @@ function TicketDetailContent() {
                   {editingCommentId === c.id ? (
                     <div className="space-y-2">
                       <textarea
-                        className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
                         rows={4}
                         value={editingCommentBody}
                         onChange={(e) => setEditingCommentBody(e.target.value)}
@@ -2137,7 +2137,7 @@ function TicketDetailContent() {
               sendTyping(val.replace(/<[^>]*>/g, '').trim().length > 0)
             }}
             placeholder="처리 내용을 입력하세요... (@로 멘션)"
-            minHeight="100px"
+            minHeight="160px"
             mentionUsers={members.map(m => ({ id: m.username, label: m.name }))}
           />
 

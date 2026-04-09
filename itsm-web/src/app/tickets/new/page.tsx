@@ -621,7 +621,7 @@ function NewTicketContent() {
                 value={form.description}
                 onChange={(html) => setForm((prev) => ({ ...prev, description: html }))}
                 placeholder={t('content_placeholder')}
-                minHeight="180px"
+                minHeight="280px"
                 onImageUpload={handleDescriptionImageUpload}
               />
             </div>

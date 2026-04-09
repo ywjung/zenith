@@ -221,7 +221,7 @@ function NewChangeContent() {
                 <textarea
                   value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  rows={4}
+                  rows={6}
                   placeholder="변경 이유, 목적, 세부 내용을 설명하세요"
                   className={inputCls}
                 />
@@ -231,7 +231,7 @@ function NewChangeContent() {
                 <textarea
                   value={form.impact}
                   onChange={e => setForm(f => ({ ...f, impact: e.target.value }))}
-                  rows={2}
+                  rows={3}
                   placeholder="영향받는 시스템·서비스·사용자를 기술하세요"
                   className={inputCls}
                 />
@@ -241,7 +241,7 @@ function NewChangeContent() {
                 <textarea
                   value={form.rollback_plan}
                   onChange={e => setForm(f => ({ ...f, rollback_plan: e.target.value }))}
-                  rows={2}
+                  rows={3}
                   placeholder="변경 실패 시 원복 절차를 기술하세요"
                   className={inputCls}
                 />

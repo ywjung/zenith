@@ -254,13 +254,13 @@ function ChangeDetailContent() {
               <textarea
                 value={comment}
                 onChange={e => setComment(e.target.value)}
-                rows={2}
+                rows={3}
                 placeholder={
                   showCommentFor === 'approved'    ? '승인 코멘트 (선택)' :
                   showCommentFor === 'rejected'    ? '반려 사유를 입력하세요' :
                   '처리 결과를 입력하세요'
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white resize-y focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 autoFocus
               />
             </div>
