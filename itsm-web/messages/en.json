@@ -1411,5 +1411,30 @@
     "error_exchange_failed": "An error occurred during sign-in. Please try again.",
     "callback_processing": "Signing in",
     "callback_wait": "Please wait..."
+  },
+  "rating": {
+    "back": "← Back to ticket",
+    "title_edit": "Edit Satisfaction Rating",
+    "title_new": "Rate Satisfaction",
+    "subtitle_edit": "You can update your previous rating.",
+    "subtitle_new": "Share honest feedback to help improve IT service.",
+    "loading": "Loading...",
+    "score_required": "Please select a rating.",
+    "submit_failed": "Failed to submit rating.",
+    "score_label": "Select your satisfaction rating",
+    "score_summary": "{score} · {label}",
+    "comment_label": "Additional feedback",
+    "comment_optional": "(optional)",
+    "comment_placeholder": "Share your thoughts about the service.",
+    "rater": "Rater:",
+    "submitting": "Submitting...",
+    "submit_edit": "✏️ Update rating",
+    "submit_new": "⭐ Submit rating",
+    "cancel": "Cancel",
+    "score_1": "Very dissatisfied",
+    "score_2": "Dissatisfied",
+    "score_3": "Neutral",
+    "score_4": "Satisfied",
+    "score_5": "Very satisfied"
   }
 }

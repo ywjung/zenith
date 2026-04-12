@@ -1411,5 +1411,30 @@
     "error_exchange_failed": "로그인 처리 중 오류가 발생했습니다. 다시 시도해 주세요.",
     "callback_processing": "로그인 처리 중",
     "callback_wait": "잠시만 기다려 주세요..."
+  },
+  "rating": {
+    "back": "← 티켓으로 돌아가기",
+    "title_edit": "만족도 평가 수정",
+    "title_new": "만족도 평가",
+    "subtitle_edit": "이전에 남긴 평가를 수정할 수 있습니다.",
+    "subtitle_new": "IT 서비스 개선을 위해 솔직한 의견을 남겨주세요.",
+    "loading": "로딩 중...",
+    "score_required": "별점을 선택해주세요.",
+    "submit_failed": "평가 제출에 실패했습니다.",
+    "score_label": "서비스 만족도를 선택해주세요",
+    "score_summary": "{score}점 · {label}",
+    "comment_label": "추가 의견",
+    "comment_optional": "(선택)",
+    "comment_placeholder": "서비스에 대한 의견을 자유롭게 작성해주세요.",
+    "rater": "평가자:",
+    "submitting": "제출 중...",
+    "submit_edit": "✏️ 평가 수정",
+    "submit_new": "⭐ 평가 제출",
+    "cancel": "취소",
+    "score_1": "매우 불만족",
+    "score_2": "불만족",
+    "score_3": "보통",
+    "score_4": "만족",
+    "score_5": "매우 만족"
   }
 }
