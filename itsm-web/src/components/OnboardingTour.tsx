@@ -2,63 +2,30 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { useAuth } from '@/context/AuthContext'
 
 const TOUR_DONE_KEY = 'zenith_tour_done'
+const TOUR_STEP_KEY = 'zenith_tour_step'
 
 interface TourStep {
   target: string
-  title: string
-  description: string
+  titleKey: string
+  descKey: string
   position: 'top' | 'bottom' | 'left' | 'right'
 }
 
 const COMMON_STEPS: TourStep[] = [
-  {
-    target: '[data-tour="nav-tickets"]',
-    title: '티켓 목록',
-    description: '접수된 모든 IT 지원 요청을 확인하고 상태별로 필터링할 수 있습니다.',
-    position: 'bottom',
-  },
-  {
-    target: '[data-tour="nav-new-ticket"]',
-    title: '새 티켓 등록',
-    description: '새로운 IT 지원 요청을 등록합니다. 제목, 설명, 우선순위를 입력해 제출하세요.',
-    position: 'bottom',
-  },
-  {
-    target: '[data-tour="global-search"]',
-    title: '통합 검색',
-    description: '티켓 번호, 제목, 키워드로 원하는 티켓을 빠르게 찾아보세요.',
-    position: 'bottom',
-  },
-  {
-    target: '[data-tour="notification-bell"]',
-    title: '알림',
-    description: '티켓 상태 변경, 댓글 추가 등 중요한 이벤트를 실시간으로 알려줍니다.',
-    position: 'bottom',
-  },
+  { target: '[data-tour="nav-tickets"]',       titleKey: 'step_tickets_title',    descKey: 'step_tickets_desc',    position: 'bottom' },
+  { target: '[data-tour="nav-new-ticket"]',    titleKey: 'step_new_ticket_title', descKey: 'step_new_ticket_desc', position: 'bottom' },
+  { target: '[data-tour="global-search"]',     titleKey: 'step_search_title',     descKey: 'step_search_desc',     position: 'bottom' },
+  { target: '[data-tour="notification-bell"]', titleKey: 'step_notif_title',      descKey: 'step_notif_desc',      position: 'bottom' },
 ]
 
 const AGENT_STEPS: TourStep[] = [
-  {
-    target: '[data-tour="nav-kanban"]',
-    title: '칸반 보드',
-    description: '티켓을 상태별 컬럼으로 시각화하여 전체 처리 현황을 한눈에 파악합니다.',
-    position: 'bottom',
-  },
-  {
-    target: '[data-tour="nav-reports"]',
-    title: '리포트',
-    description: 'SLA 준수율, 처리 시간, 카테고리별 통계 등 업무 현황을 분석합니다.',
-    position: 'bottom',
-  },
-  {
-    target: '[data-tour="nav-admin"]',
-    title: '관리자 메뉴',
-    description: '사용자 관리, 자동화 규칙, 알림 채널 등 시스템 설정을 관리합니다.',
-    position: 'bottom',
-  },
+  { target: '[data-tour="nav-kanban"]',  titleKey: 'step_kanban_title',  descKey: 'step_kanban_desc',  position: 'bottom' },
+  { target: '[data-tour="nav-reports"]', titleKey: 'step_reports_title', descKey: 'step_reports_desc', position: 'bottom' },
+  { target: '[data-tour="nav-admin"]',   titleKey: 'step_admin_title',   descKey: 'step_admin_desc',   position: 'bottom' },
 ]
 
 interface TargetRect {
@@ -109,11 +76,24 @@ function computeCardPosition(
 }
 
 export default function OnboardingTour() {
+  const t = useTranslations('onboarding')
   const { user, loading, isAgent } = useAuth()
   const router = useRouter()
 
   const [active, setActive] = useState(false)
-  const [stepIndex, setStepIndex] = useState(0)
+  const [stepIndex, setStepIndex] = useState(() => {
+    if (typeof window === 'undefined') return 0
+    try {
+      const saved = localStorage.getItem(TOUR_STEP_KEY)
+      return saved ? Math.max(0, parseInt(saved, 10) || 0) : 0
+    } catch { return 0 }
+  })
+
+  // 단계 변경 시 진행 상황 저장 (중간에 페이지를 떠나도 다음에 이어서 진행)
+  useEffect(() => {
+    if (!active) return
+    try { localStorage.setItem(TOUR_STEP_KEY, String(stepIndex)) } catch { /* ignore */ }
+  }, [active, stepIndex])
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null)
   const [cardPos, setCardPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
 
@@ -179,7 +159,10 @@ export default function OnboardingTour() {
   }, [active])
 
   function markDone() {
-    localStorage.setItem(TOUR_DONE_KEY, '1')
+    try {
+      localStorage.setItem(TOUR_DONE_KEY, '1')
+      localStorage.removeItem(TOUR_STEP_KEY)
+    } catch { /* ignore */ }
     setActive(false)
     setTargetRect(null)
   }
@@ -276,14 +259,14 @@ export default function OnboardingTour() {
         className="fixed inset-0 z-[9997]"
         style={{ cursor: 'default' }}
         onClick={handleSkip}
-        aria-label="투어 건너뛰기"
+        aria-label={t('skip_aria')}
       />
 
       {/* 말풍선 카드 */}
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`온보딩 투어 ${stepIndex + 1}단계: ${currentStep.title}`}
+        aria-label={t('dialog_aria', { step: stepIndex + 1, title: t(currentStep.titleKey as 'step_tickets_title') })}
         className="fixed z-[9999] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700"
         style={{
           top: cardPos.top,
@@ -300,13 +283,13 @@ export default function OnboardingTour() {
               {stepIndex + 1} / {steps.length}
             </span>
             <h3 className="text-base font-bold text-gray-900 dark:text-white leading-snug">
-              {currentStep.title}
+              {t(currentStep.titleKey as 'step_tickets_title')}
             </h3>
           </div>
           <button
             onClick={handleSkip}
             className="ml-3 mt-0.5 p-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors shrink-0"
-            aria-label="투어 건너뛰기"
+            aria-label={t('skip_aria')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -317,7 +300,7 @@ export default function OnboardingTour() {
         {/* 카드 본문 */}
         <div className="px-5 py-4">
           <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-            {currentStep.description}
+            {t(currentStep.descKey as 'step_tickets_desc')}
           </p>
         </div>
 
@@ -341,7 +324,7 @@ export default function OnboardingTour() {
             onClick={handleSkip}
             className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
           >
-            건너뛰기
+            {t('skip')}
           </button>
           <div className="flex items-center gap-2">
             {stepIndex > 0 && (
@@ -349,14 +332,14 @@ export default function OnboardingTour() {
                 onClick={handlePrev}
                 className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors font-medium"
               >
-                이전
+                {t('prev')}
               </button>
             )}
             <button
               onClick={handleNext}
               className="px-4 py-1.5 text-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 rounded-lg transition-colors font-medium"
             >
-              {isLast ? '완료' : '다음'}
+              {isLast ? t('done') : t('next')}
             </button>
           </div>
         </div>

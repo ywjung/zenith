@@ -1644,5 +1644,27 @@
     "reason_placeholder": "e.g., On-site device replacement completed",
     "cancel": "Cancel",
     "confirm": "Change to {label}"
+  },
+  "onboarding": {
+    "step_tickets_title": "Ticket List",
+    "step_tickets_desc": "View all submitted IT support requests and filter by status.",
+    "step_new_ticket_title": "New Ticket",
+    "step_new_ticket_desc": "Submit a new IT support request with title, description, and priority.",
+    "step_search_title": "Global Search",
+    "step_search_desc": "Quickly find tickets by number, title, or keywords.",
+    "step_notif_title": "Notifications",
+    "step_notif_desc": "Real-time alerts for status changes, comments, and other events.",
+    "step_kanban_title": "Kanban Board",
+    "step_kanban_desc": "Visualize tickets by status column for at-a-glance progress tracking.",
+    "step_reports_title": "Reports",
+    "step_reports_desc": "Analyze SLA compliance, processing times, and category statistics.",
+    "step_admin_title": "Admin Menu",
+    "step_admin_desc": "Manage users, automation rules, notification channels, and system settings.",
+    "skip_aria": "Skip tour",
+    "dialog_aria": "Onboarding step {step}: {title}",
+    "skip": "Skip",
+    "prev": "Previous",
+    "next": "Next",
+    "done": "Done"
   }
 }

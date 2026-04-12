@@ -1644,5 +1644,27 @@
     "reason_placeholder": "예: 현장 방문 후 장치 교체 완료",
     "cancel": "취소",
     "confirm": "{label}로 변경"
+  },
+  "onboarding": {
+    "step_tickets_title": "티켓 목록",
+    "step_tickets_desc": "접수된 모든 IT 지원 요청을 확인하고 상태별로 필터링할 수 있습니다.",
+    "step_new_ticket_title": "새 티켓 등록",
+    "step_new_ticket_desc": "새로운 IT 지원 요청을 등록합니다. 제목, 설명, 우선순위를 입력해 제출하세요.",
+    "step_search_title": "통합 검색",
+    "step_search_desc": "티켓 번호, 제목, 키워드로 원하는 티켓을 빠르게 찾아보세요.",
+    "step_notif_title": "알림",
+    "step_notif_desc": "티켓 상태 변경, 댓글 추가 등 중요한 이벤트를 실시간으로 알려줍니다.",
+    "step_kanban_title": "칸반 보드",
+    "step_kanban_desc": "티켓을 상태별 컬럼으로 시각화하여 전체 처리 현황을 한눈에 파악합니다.",
+    "step_reports_title": "리포트",
+    "step_reports_desc": "SLA 준수율, 처리 시간, 카테고리별 통계 등 업무 현황을 분석합니다.",
+    "step_admin_title": "관리자 메뉴",
+    "step_admin_desc": "사용자 관리, 자동화 규칙, 알림 채널 등 시스템 설정을 관리합니다.",
+    "skip_aria": "투어 건너뛰기",
+    "dialog_aria": "온보딩 투어 {step}단계: {title}",
+    "skip": "건너뛰기",
+    "prev": "이전",
+    "next": "다음",
+    "done": "완료"
   }
 }
