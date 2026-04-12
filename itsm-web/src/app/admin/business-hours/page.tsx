@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useAuth } from '@/context/AuthContext'
 import { API_BASE } from '@/lib/constants'
 import { errorMessage } from '@/lib/utils'
 
-const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
+const DAY_KEYS = ['day_mon','day_tue','day_wed','day_thu','day_fri','day_sat','day_sun'] as const
 
 interface ScheduleItem {
   day_of_week: number
@@ -21,7 +22,7 @@ interface Holiday {
 }
 
 function defaultSchedule(): ScheduleItem[] {
-  return DAY_LABELS.map((_, i) => ({
+  return DAY_KEYS.map((_, i) => ({
     day_of_week: i,
     start_time: '09:00',
     end_time: '18:00',
@@ -39,6 +40,7 @@ function getYearTabs(holidays: Holiday[], pinnedYears: number[]): number[] {
 }
 
 export default function BusinessHoursPage() {
+  const t = useTranslations('admin.business_hours')
   const { isAdmin } = useAuth()
   const [schedule, setSchedule] = useState<ScheduleItem[]>(defaultSchedule())
   const [holidays, setHolidays] = useState<Holiday[]>([])
@@ -79,7 +81,7 @@ export default function BusinessHoursPage() {
           setPinnedYears(pinned.sort((a, b) => b - a))
         }
       })
-      .catch(() => setMsg({ type: 'err', text: '설정을 불러오지 못했습니다.' }))
+      .catch(() => setMsg({ type: 'err', text: t('load_failed') }))
       .finally(() => setLoading(false))
   }, [isAdmin])
 
@@ -106,7 +108,7 @@ export default function BusinessHoursPage() {
       setPinnedYears(prev => prev.filter(y => y !== year))
     } else {
       const err = await r.json().catch(() => ({}))
-      setMsg({ type: 'err', text: (err as { detail?: string }).detail ?? '연도 삭제 실패' })
+      setMsg({ type: 'err', text: (err as { detail?: string }).detail ?? t('year_delete_failed') })
     }
   }
 
@@ -124,10 +126,10 @@ export default function BusinessHoursPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ schedule }),
       })
-      if (!r.ok) throw new Error((await r.json()).detail ?? '저장 실패')
-      setMsg({ type: 'ok', text: '업무 시간 설정이 저장되었습니다.' })
+      if (!r.ok) throw new Error((await r.json()).detail ?? t('save_failed'))
+      setMsg({ type: 'ok', text: t('save_success') })
     } catch (e: unknown) {
-      setMsg({ type: 'err', text: errorMessage(e, '저장 실패') })
+      setMsg({ type: 'err', text: errorMessage(e, t('save_failed')) })
     } finally {
       setSaving(false)
     }
@@ -144,13 +146,13 @@ export default function BusinessHoursPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: newDate, name: newName || null }),
       })
-      if (!r.ok) throw new Error((await r.json()).detail ?? '추가 실패')
+      if (!r.ok) throw new Error((await r.json()).detail ?? t('add_failed'))
       const added: Holiday = await r.json()
       setHolidays(prev => [...prev, added].sort((a, b) => a.date.localeCompare(b.date)))
       setNewDate('')
       setNewName('')
     } catch (e: unknown) {
-      setMsg({ type: 'err', text: errorMessage(e, '추가 실패') })
+      setMsg({ type: 'err', text: errorMessage(e, t('add_failed')) })
     } finally {
       setAddingHoliday(false)
     }
@@ -163,10 +165,10 @@ export default function BusinessHoursPage() {
         method: 'DELETE',
         credentials: 'include',
       })
-      if (!r.ok && r.status !== 204) throw new Error('삭제 실패')
+      if (!r.ok && r.status !== 204) throw new Error(t('delete_failed'))
       setHolidays(prev => prev.filter(h => h.id !== id))
     } catch (e: unknown) {
-      setMsg({ type: 'err', text: errorMessage(e, '삭제 실패') })
+      setMsg({ type: 'err', text: errorMessage(e, t('delete_failed')) })
     }
   }
 
@@ -174,14 +176,14 @@ export default function BusinessHoursPage() {
     return (
       <div className="text-center py-20">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500 dark:text-gray-400">관리자 권한이 필요합니다.</p>
+        <p className="text-gray-500 dark:text-gray-400">{t('no_permission')}</p>
       </div>
     )
   }
 
   if (loading) {
     return (
-      <div className="text-center py-20 text-gray-400 dark:text-gray-500">불러오는 중…</div>
+      <div className="text-center py-20 text-gray-400 dark:text-gray-500">{t('loading')}</div>
     )
   }
 
@@ -195,11 +197,10 @@ export default function BusinessHoursPage() {
               <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              SLA 업무 시간 설정
+              {t('title')}
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              SLA 마감 시한은 업무 시간 기준으로 계산됩니다. 예: 업무 시간 4시간 정책은
-              오후 5시 접수 시 다음 날 오전 10시가 마감이 됩니다.
+              {t('subtitle')}
             </p>
           </div>
         </div>
@@ -219,13 +220,13 @@ export default function BusinessHoursPage() {
       {/* 요일별 업무 시간 */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-800 dark:text-gray-100">요일별 업무 시간</h3>
+          <h3 className="font-semibold text-gray-800 dark:text-gray-100">{t('weekly_title')}</h3>
           <button
             onClick={saveSchedule}
             disabled={saving}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
           >
-            {saving ? '저장 중…' : '저장'}
+            {saving ? t('saving') : t('save')}
           </button>
         </div>
 
@@ -237,7 +238,7 @@ export default function BusinessHoursPage() {
                 <span className={`text-sm font-semibold ${
                   i >= 5 ? 'text-blue-500' : 'text-gray-700 dark:text-gray-300'
                 }`}>
-                  {DAY_LABELS[i]}요일
+                  {t('day_suffix', { day: t(DAY_KEYS[i]) })}
                 </span>
               </div>
 
@@ -269,18 +270,18 @@ export default function BusinessHoursPage() {
                     className="border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 dark:text-gray-200"
                   />
                   <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
-                    ({calcHours(row.start_time, row.end_time)}시간)
+                    {t('hours_label', { n: calcHours(row.start_time, row.end_time) })}
                   </span>
                 </div>
               ) : (
-                <div className="flex-1 text-sm text-gray-400 dark:text-gray-500">휴무일 — SLA 계산 제외</div>
+                <div className="flex-1 text-sm text-gray-400 dark:text-gray-500">{t('closed_day')}</div>
               )}
             </div>
           ))}
         </div>
 
         <div className="px-6 py-3 bg-blue-50 dark:bg-blue-900/20 border-t border-blue-100 dark:border-blue-900 text-xs text-blue-600 dark:text-blue-400">
-          💡 비활성(OFF) 요일은 SLA 업무 시간 계산에서 제외됩니다. 업무 시간을 설정하지 않으면 24/7 기준으로 계산됩니다.
+          {t('weekly_hint')}
         </div>
       </div>
 
@@ -288,8 +289,8 @@ export default function BusinessHoursPage() {
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         {/* 헤더 */}
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-          <h3 className="font-semibold text-gray-800 dark:text-gray-100">공휴일 관리</h3>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">공휴일은 업무 시간 계산에서 자동으로 제외됩니다.</p>
+          <h3 className="font-semibold text-gray-800 dark:text-gray-100">{t('holidays_title')}</h3>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{t('holidays_desc')}</p>
         </div>
 
         {/* 연도 탭 */}
@@ -308,7 +309,7 @@ export default function BusinessHoursPage() {
                       : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                   } ${canRemove ? 'pr-7' : ''}`}
                 >
-                  {year}년
+                  {t('year_suffix', { year })}
                   {count > 0 && (
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
                       isActive
@@ -329,9 +330,9 @@ export default function BusinessHoursPage() {
                         handleYearChange(remaining[0] ?? THIS_YEAR)
                       }
                     }}
-                    title={`${year}년 탭 삭제`}
+                    title={t('year_delete_title', { year })}
                     className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs leading-none"
-                   aria-label="삭제">
+                   aria-label={t('delete_aria')}>
                     ×
                   </button>
                 )}
@@ -358,28 +359,28 @@ export default function BusinessHoursPage() {
                 type="number"
                 value={yearInput}
                 onChange={e => setYearInput(e.target.value)}
-                placeholder="연도"
+                placeholder={t('year_placeholder')}
                 min={2000}
                 max={2100}
                 autoFocus
                 className="w-24 border border-blue-400 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 dark:text-gray-200"
               />
-              <button type="submit" className="px-2 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg">확인</button>
+              <button type="submit" className="px-2 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg">{t('confirm')}</button>
               <button
                 type="button"
                 onClick={() => { setAddingYear(false); setYearInput('') }}
                 className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-lg"
               >
-                취소
+                {t('cancel')}
               </button>
             </form>
           ) : (
             <button
               onClick={() => setAddingYear(true)}
-              title="연도 추가"
+              title={t('year_add_title')}
               className="px-3 py-2 text-sm font-medium text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-t-lg border-b-2 border-transparent transition-colors"
             >
-              + 연도
+              {t('add_year')}
             </button>
           )}
         </div>
@@ -399,7 +400,7 @@ export default function BusinessHoursPage() {
             />
             <input
               type="text"
-              placeholder="공휴일 이름 (선택)"
+              placeholder={t('holiday_name_placeholder')}
               value={newName}
               onChange={e => setNewName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addHoliday()}
@@ -410,7 +411,7 @@ export default function BusinessHoursPage() {
               disabled={addingHoliday || !newDate}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
             >
-              {addingHoliday ? '추가 중…' : '+ 추가'}
+              {addingHoliday ? t('holiday_adding') : t('holiday_add')}
             </button>
           </div>
         </div>
@@ -420,7 +421,7 @@ export default function BusinessHoursPage() {
           const yearHolidays = holidays.filter(h => h.date.startsWith(String(selectedYear)))
           return yearHolidays.length === 0 ? (
             <div className="px-6 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
-              {selectedYear}년 등록된 공휴일이 없습니다.
+              {t('empty_year', { year: selectedYear })}
             </div>
           ) : (
             <div className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -431,14 +432,14 @@ export default function BusinessHoursPage() {
                       {h.date.slice(5).replace('-', '/')}
                     </span>
                     <span className="text-sm text-gray-700 dark:text-gray-300">
-                      {h.name || <span className="text-gray-400 dark:text-gray-500 italic">이름 없음</span>}
+                      {h.name || <span className="text-gray-400 dark:text-gray-500 italic">{t('no_name')}</span>}
                     </span>
                   </div>
                   <button
                     onClick={() => removeHoliday(h.id)}
                     className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                   >
-                    삭제
+                    {t('delete')}
                   </button>
                 </div>
               ))}
