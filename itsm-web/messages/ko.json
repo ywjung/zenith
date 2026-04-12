@@ -1124,6 +1124,8 @@
     "error_token_exchange": "인증 처리 중 오류가 발생했습니다. 다시 시도해 주세요.",
     "error_user_info": "사용자 정보를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.",
     "error_auth_failed": "로그인에 실패했습니다. 다시 시도해 주세요.",
-    "error_exchange_failed": "로그인 처리 중 오류가 발생했습니다. 다시 시도해 주세요."
+    "error_exchange_failed": "로그인 처리 중 오류가 발생했습니다. 다시 시도해 주세요.",
+    "callback_processing": "로그인 처리 중",
+    "callback_wait": "잠시만 기다려 주세요..."
   }
 }

@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
 
 function CallbackContent() {
+  const t = useTranslations('login')
   const params = useSearchParams()
   const router = useRouter()
   const called = useRef(false)
@@ -71,8 +73,8 @@ function CallbackContent() {
         </div>
 
         <div className="text-center">
-          <p className="text-white text-sm font-medium">로그인 처리 중</p>
-          <p className="text-slate-500 text-xs mt-1">잠시만 기다려 주세요...</p>
+          <p className="text-white text-sm font-medium">{t('callback_processing')}</p>
+          <p className="text-slate-500 text-xs mt-1">{t('callback_wait')}</p>
         </div>
       </div>
     </div>

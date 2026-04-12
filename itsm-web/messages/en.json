@@ -1124,6 +1124,8 @@
     "error_token_exchange": "An error occurred during authentication. Please try again.",
     "error_user_info": "Could not fetch user info. Please try again later.",
     "error_auth_failed": "Sign-in failed. Please try again.",
-    "error_exchange_failed": "An error occurred during sign-in. Please try again."
+    "error_exchange_failed": "An error occurred during sign-in. Please try again.",
+    "callback_processing": "Signing in",
+    "callback_wait": "Please wait..."
   }
 }
