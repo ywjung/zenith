@@ -46,6 +46,7 @@ from .helpers import (
     _sla_to_dict,
     user_limiter,
     LIMIT_TICKET_CREATE,
+    LIMIT_AI,
 )
 
 logger = logging.getLogger(__name__)
@@ -1565,7 +1566,9 @@ def get_sla_prediction(
 
 
 @crud_router.post("/{iid}/ai-summary")
+@(user_limiter.limit(LIMIT_AI) if user_limiter else lambda f: f)
 def ai_summarize_ticket(
+    request: Request,
     iid: int,
     project_id: Optional[str] = Query(default=None),
     _user: dict = Depends(get_current_user),
@@ -1613,7 +1616,9 @@ def ai_summarize_ticket(
 
 
 @crud_router.post("/{iid}/ai-classify")
+@(user_limiter.limit(LIMIT_AI) if user_limiter else lambda f: f)
 def ai_classify_ticket(
+    request: Request,
     iid: int,
     project_id: Optional[str] = Query(default=None),
     _user: dict = Depends(get_current_user),

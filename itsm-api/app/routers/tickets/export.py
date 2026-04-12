@@ -4,12 +4,13 @@ import io
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
 from sqlalchemy.orm import Session
 
 from ...database import get_db
 from ... import gitlab_client
 from ...rbac import require_pl, require_agent
+from ...rate_limit import user_limiter, LIMIT_EXPORT
 from .helpers import _issue_to_response, _attach_sla_deadlines
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,9 @@ export_router = APIRouter()
 
 
 @export_router.get("/export/csv")
+@(user_limiter.limit(LIMIT_EXPORT) if user_limiter else lambda f: f)
 def export_tickets_csv(
+    request: Request,
     state: Optional[str] = Query(default=None),
     category: Optional[str] = Query(default=None),
     priority: Optional[str] = Query(default=None),
@@ -87,7 +90,9 @@ def export_tickets_csv(
 
 
 @export_router.get("/export/xlsx")
+@(user_limiter.limit(LIMIT_EXPORT) if user_limiter else lambda f: f)
 def export_tickets_xlsx(
+    request: Request,
     state: Optional[str] = Query(default=None),
     category: Optional[str] = Query(default=None),
     priority: Optional[str] = Query(default=None),

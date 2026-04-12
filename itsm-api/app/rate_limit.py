@@ -95,3 +95,5 @@ LIMIT_KB_CREATE = "30/minute"
 LIMIT_COMMENT = "30/minute"       # 댓글 생성 제한 (스팸 방지)
 LIMIT_SEARCH = "60/minute"        # 검색 요청 제한
 LIMIT_PORTAL = "5/minute"         # 포털 비로그인 신청 제한
+LIMIT_AI = "10/minute"            # AI 요약/분류 — LLM API 비용 보호
+LIMIT_EXPORT = "10/hour"          # CSV/XLSX 내보내기 — 대량 데이터 DoS 방지

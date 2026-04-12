@@ -160,19 +160,27 @@ def update_ai_settings(
 
 @router.post("/test")
 def test_ai_connection(
+    request: Request,
     body: dict = None,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
     """
     AI 연결 테스트.
     body로 설정값을 직접 전달하면 그 값으로 테스트 (저장 전에도 가능).
     body가 없으면 DB에 저장된 설정으로 테스트.
 
+    SEC #2: 임의 URL을 외부에서 입력받으므로 sudo token 필수.
+    이전엔 admin 쿠키만으로 호출 가능 → 도난된 admin 세션으로 SSRF 가능.
+
     2단계:
       1) 서버 연결 확인 (Ollama: /api/tags, OpenAI: models list)
       2) 최소 추론 테스트 (단답형 JSON → 빠름)
     """
+    # SEC #2: sudo 인증 요구
+    from ...routers.auth import verify_sudo_token
+    verify_sudo_token(request, admin, db)
+
     import time
     import httpx
     from ... import ai_service
@@ -220,7 +228,11 @@ def test_ai_connection(
         except httpx.TimeoutException:
             raise HTTPException(status_code=504, detail="Ollama 서버 응답 시간 초과")
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Ollama 연결 오류: {e}")
+            logger.error("Ollama connection failed: %s", e)
+            raise HTTPException(
+                status_code=502,
+                detail="Ollama 연결 오류가 발생했습니다. 관리자 로그를 확인하세요.",
+            )
 
         if cfg.ollama_model not in model_names:
             available = ", ".join(model_names[:5]) or "(없음)"
@@ -278,13 +290,21 @@ def test_ai_connection(
 
 @router.post("/ollama-models")
 def list_ollama_models(
+    request: Request,
     body: dict,
-    _admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin),
 ):
     """
     주어진 Ollama 서버 URL에서 설치된 모델 목록을 조회합니다.
     Body: {base_url: "http://..."}
+
+    SEC #2: 외부 입력 URL에 GET 요청을 발행하므로 sudo token 필수.
     """
+    # SEC #2: sudo 인증 요구
+    from ...routers.auth import verify_sudo_token
+    verify_sudo_token(request, admin, db)
+
     import httpx
 
     base_url = (body.get("base_url") or "").rstrip("/")
@@ -466,11 +486,17 @@ def openai_oauth_start(
     state = secrets.token_urlsafe(32)
     verifier, challenge = _pkce_pair()
 
+    # SEC #10: state를 시작 admin에게 바인딩 — callback이 다른 사용자에 의해 횡탈되는 것 방지
+    admin_sub = str(_admin.get("sub", "") or "")
+
     r = _redis()
     if r:
         r.setex(f"{_OAUTH_STATE_PREFIX}{state}", _OAUTH_STATE_TTL, "valid")
         r.setex(f"{_OAUTH_STATE_PREFIX}ruri:{state}", _OAUTH_STATE_TTL, redirect_uri)
         r.setex(f"{_OAUTH_STATE_PREFIX}pkce:{state}", _OAUTH_STATE_TTL, verifier)
+        # SEC #10: state → 시작 admin sub 매핑 (callback에서 검증)
+        if admin_sub:
+            r.setex(f"{_OAUTH_STATE_PREFIX}sub:{state}", _OAUTH_STATE_TTL, admin_sub)
         if is_codex:
             r.setex(f"{_OAUTH_STATE_PREFIX}codex:{state}", _OAUTH_STATE_TTL, "1")
 
@@ -527,6 +553,7 @@ def openai_oauth_callback(
     redirect_uri = None
     code_verifier = None
     is_codex = False
+    bound_admin_sub: Optional[str] = None
     if r:
         key = f"{_OAUTH_STATE_PREFIX}{state}"
         if not r.exists(key):
@@ -548,6 +575,19 @@ def openai_oauth_callback(
         codex_flag = r.get(f"{_OAUTH_STATE_PREFIX}codex:{state}")
         r.delete(f"{_OAUTH_STATE_PREFIX}codex:{state}")
         is_codex = bool(codex_flag)
+
+        # SEC #10: state를 시작한 admin sub 복원 (audit log 용도)
+        sub_raw = r.get(f"{_OAUTH_STATE_PREFIX}sub:{state}")
+        r.delete(f"{_OAUTH_STATE_PREFIX}sub:{state}")
+        if sub_raw:
+            bound_admin_sub = sub_raw.decode() if isinstance(sub_raw, bytes) else sub_raw
+        # Codex callback은 cross-site redirect (auth.openai.com → localhost:1455)이므로
+        # SameSite=strict 쿠키가 전송되지 않아 cookie 기반 검증 불가.
+        # state 자체가 32바이트 random + Redis 단발 사용으로 충분히 강력하므로
+        # bound sub는 audit trail 용도로만 사용.
+        logger.info("OAuth callback success: state=%s bound_admin_sub=%s ip=%s",
+                    state[:16], bound_admin_sub or "(none)",
+                    request.client.host if request.client else "unknown")
 
     # Codex OAuth는 항상 고정 redirect_uri 사용
     if is_codex:
