@@ -1065,10 +1065,28 @@
     },
     "failed_notifications": {
       "title": "Failed Notifications",
-      "subtitle": "Notifications that permanently failed after retries",
-      "refresh": "🔄 Refresh",
-      "load_failed": "Failed to load",
-      "none": "No failed notifications."
+      "subtitle": "Records of notifications that exceeded the max retry count.",
+      "loading": "Loading…",
+      "refresh": "↻ Refresh",
+      "tab_open": "Open",
+      "tab_resolved": "Resolved",
+      "empty_resolved": "No resolved items.",
+      "empty_open": "No open failed notifications.",
+      "retry_count": "retried {n}×",
+      "resolved_badge": "Resolved",
+      "task_id_label": "ID: {id}",
+      "payload_open": "▼ Show payload",
+      "payload_close": "▲ Hide payload",
+      "processing": "Processing…",
+      "mark_resolved": "Mark resolved",
+      "delete": "Delete",
+      "delete_confirm_title": "Permanently delete this item?",
+      "delete_confirm_ok": "Confirm",
+      "resolve_error": "An error occurred while resolving.",
+      "delete_error": "An error occurred while deleting.",
+      "loading_items": "Loading…",
+      "prev_page": "Prev",
+      "next_page": "Next"
     }
   },
   "error_page": {

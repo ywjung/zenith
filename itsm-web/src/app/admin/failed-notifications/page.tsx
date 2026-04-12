@@ -2,6 +2,7 @@
 
 import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useConfirm } from '@/components/ConfirmProvider'
 import { API_BASE } from '@/lib/constants'
 import { logger } from '@/lib/logger'
@@ -25,6 +26,7 @@ interface ListResponse {
 }
 
 export default function FailedNotificationsPage() {
+  const t = useTranslations('admin.failed_notifications')
   const confirm = useConfirm()
   const [data, setData] = useState<ListResponse | null>(null)
   const [showResolved, setShowResolved] = useState(false)
@@ -72,14 +74,14 @@ export default function FailedNotificationsPage() {
       await fetchData(showResolved, page * LIMIT)
     } catch (err) {
       logger.error('Resolve failed:', err)
-      toast.error('처리 중 오류가 발생했습니다.')
+      toast.error(t('resolve_error'))
     } finally {
       setActionLoading(null)
     }
   }
 
   async function handleDelete(id: number) {
-    if (!(await confirm({ title: '이 항목을 영구 삭제하시겠습니까?', variant: 'danger', confirmLabel: '확인' }))) return
+    if (!(await confirm({ title: t('delete_confirm_title'), variant: 'danger', confirmLabel: t('delete_confirm_ok') }))) return
     setActionLoading(id)
     try {
       const res = await fetch(`${API_BASE}/admin/failed-notifications/${id}`, {
@@ -90,7 +92,7 @@ export default function FailedNotificationsPage() {
       await fetchData(showResolved, page * LIMIT)
     } catch (err) {
       logger.error('Delete failed:', err)
-      toast.error('삭제 중 오류가 발생했습니다.')
+      toast.error(t('delete_error'))
     } finally {
       setActionLoading(null)
     }
@@ -104,10 +106,10 @@ export default function FailedNotificationsPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <span>⚠️</span>
-            실패 알림 추적
+            {t('title')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            최대 재시도 횟수를 초과한 알림 전송 실패 기록입니다.
+            {t('subtitle')}
           </p>
         </div>
         <button
@@ -115,11 +117,10 @@ export default function FailedNotificationsPage() {
           disabled={loading}
           className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg font-medium transition-colors"
         >
-          {loading ? '로딩 중…' : '↻ 새로고침'}
+          {loading ? t('loading') : t('refresh')}
         </button>
       </div>
 
-      {/* 필터 탭 */}
       <div className="flex gap-2">
         <button
           onClick={() => setShowResolved(false)}
@@ -129,7 +130,7 @@ export default function FailedNotificationsPage() {
               : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
           }`}
         >
-          미처리
+          {t('tab_open')}
           {data && !showResolved && (
             <span className="ml-1.5 bg-white/20 text-white rounded-full px-1.5 py-0.5 text-xs">
               {data.total}
@@ -144,7 +145,7 @@ export default function FailedNotificationsPage() {
               : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
           }`}
         >
-          처리 완료
+          {t('tab_resolved')}
           {data && showResolved && (
             <span className="ml-1.5 bg-white/20 text-white rounded-full px-1.5 py-0.5 text-xs">
               {data.total}
@@ -153,13 +154,12 @@ export default function FailedNotificationsPage() {
         </button>
       </div>
 
-      {/* 목록 */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-400 text-sm">불러오는 중…</div>
+          <div className="p-8 text-center text-gray-400 text-sm">{t('loading_items')}</div>
         ) : !data || data.items.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">
-            {showResolved ? '처리 완료된 항목이 없습니다.' : '미처리 실패 알림이 없습니다.'}
+            {showResolved ? t('empty_resolved') : t('empty_open')}
           </div>
         ) : (
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -172,17 +172,17 @@ export default function FailedNotificationsPage() {
                         {item.task_name}
                       </span>
                       <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-1.5 py-0.5 rounded">
-                        재시도 {item.retry_count}회
+                        {t('retry_count', { n: item.retry_count })}
                       </span>
                       {item.resolved && (
                         <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-                          처리 완료
+                          {t('resolved_badge')}
                         </span>
                       )}
                     </div>
                     {item.task_id && (
                       <p className="text-xs text-gray-400 mt-0.5 font-mono truncate">
-                        ID: {item.task_id}
+                        {t('task_id_label', { id: item.task_id })}
                       </p>
                     )}
                     {item.error_message && (
@@ -192,17 +192,16 @@ export default function FailedNotificationsPage() {
                     )}
                     <p className="text-xs text-gray-400 mt-1">
                       {item.created_at
-                        ? new Date(item.created_at).toLocaleString('ko-KR')
+                        ? new Date(item.created_at).toLocaleString()
                         : '-'}
                     </p>
 
-                    {/* payload 토글 */}
                     {item.payload && (
                       <button
                         onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
                         className="text-xs text-blue-500 hover:text-blue-700 mt-1"
                       >
-                        {expandedId === item.id ? '▲ payload 닫기' : '▼ payload 보기'}
+                        {expandedId === item.id ? t('payload_close') : t('payload_open')}
                       </button>
                     )}
                     {expandedId === item.id && item.payload && (
@@ -212,7 +211,6 @@ export default function FailedNotificationsPage() {
                     )}
                   </div>
 
-                  {/* 액션 버튼 */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {!item.resolved && (
                       <button
@@ -220,7 +218,7 @@ export default function FailedNotificationsPage() {
                         disabled={actionLoading === item.id}
                         className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
                       >
-                        {actionLoading === item.id ? '처리 중…' : '확인 처리'}
+                        {actionLoading === item.id ? t('processing') : t('mark_resolved')}
                       </button>
                     )}
                     <button
@@ -228,7 +226,7 @@ export default function FailedNotificationsPage() {
                       disabled={actionLoading === item.id}
                       className="text-xs bg-gray-200 hover:bg-red-100 hover:text-red-700 dark:bg-gray-700 dark:hover:bg-red-900/30 dark:hover:text-red-400 disabled:opacity-60 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg font-medium transition-colors"
                     >
-                      삭제
+                      {t('delete')}
                     </button>
                   </div>
                 </div>
@@ -238,7 +236,6 @@ export default function FailedNotificationsPage() {
         )}
       </div>
 
-      {/* 페이지네이션 */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <button
@@ -246,7 +243,7 @@ export default function FailedNotificationsPage() {
             disabled={page === 0}
             className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            이전
+            {t('prev_page')}
           </button>
           <span className="text-sm text-gray-600 dark:text-gray-400">
             {page + 1} / {totalPages}
@@ -256,7 +253,7 @@ export default function FailedNotificationsPage() {
             disabled={page >= totalPages - 1}
             className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            다음
+            {t('next_page')}
           </button>
         </div>
       )}
