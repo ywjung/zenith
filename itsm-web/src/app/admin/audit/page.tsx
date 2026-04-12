@@ -1,39 +1,40 @@
 'use client'
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { fetchAuditLogsCursor, downloadAuditLogs } from '@/lib/api'
 import type { AuditLogEntry } from '@/types'
 import { useAuth } from '@/context/AuthContext'
 import { errorMessage } from '@/lib/utils'
 
-const ACTION_META: Record<string, { label: string; icon: string; color: string }> = {
-  'ticket.create':              { label: '티켓 생성',       icon: '✚', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
-  'ticket.update':              { label: '티켓 수정',       icon: '✎', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' },
-  'ticket.delete':              { label: '티켓 삭제',       icon: '✕', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
-  'ticket.merge':               { label: '티켓 병합',       icon: '⇢', color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' },
-  'ticket.pipeline_trigger':    { label: '파이프라인 실행',  icon: '▶', color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400' },
-  'ticket.custom_fields.update':{ label: '커스텀필드 수정',  icon: '✎', color: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400' },
-  'ticket.bulk.close':          { label: '일괄 종료',       icon: '⊗', color: 'bg-slate-100 dark:bg-slate-700/40 text-slate-700 dark:text-slate-300' },
-  'ticket.bulk.assign':         { label: '일괄 배정',       icon: '⇒', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' },
-  'ticket.bulk.set_priority':   { label: '우선순위 변경',   icon: '↑', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' },
-  'user.role_change':           { label: '역할 변경',       icon: '🔑', color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' },
-  'kb.create':                  { label: 'KB 생성',         icon: '✚', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400' },
-  'kb.update':                  { label: 'KB 수정',         icon: '✎', color: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400' },
-  'kb.delete':                  { label: 'KB 삭제',         icon: '✕', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
-  'custom_field.create':        { label: '커스텀필드 생성',  icon: '✚', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
-  'custom_field.update':        { label: '커스텀필드 수정',  icon: '✎', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' },
-  'custom_field.delete':        { label: '커스텀필드 삭제',  icon: '✕', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
-  'business_hours.update':      { label: '업무시간 수정',   icon: '🕐', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' },
-  'holiday.add':                { label: '휴일 추가',       icon: '✚', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
-  'holiday.delete':             { label: '휴일 삭제',       icon: '✕', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
-  'update':                     { label: '설정 수정',       icon: '✎', color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' },
+const ACTION_META: Record<string, { labelKey: string; icon: string; color: string }> = {
+  'ticket.create':              { labelKey: 'act_ticket_create',               icon: '✚', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
+  'ticket.update':              { labelKey: 'act_ticket_update',               icon: '✎', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' },
+  'ticket.delete':              { labelKey: 'act_ticket_delete',               icon: '✕', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
+  'ticket.merge':               { labelKey: 'act_ticket_merge',                icon: '⇢', color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' },
+  'ticket.pipeline_trigger':    { labelKey: 'act_ticket_pipeline_trigger',     icon: '▶', color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400' },
+  'ticket.custom_fields.update':{ labelKey: 'act_ticket_custom_fields_update', icon: '✎', color: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400' },
+  'ticket.bulk.close':          { labelKey: 'act_ticket_bulk_close',           icon: '⊗', color: 'bg-slate-100 dark:bg-slate-700/40 text-slate-700 dark:text-slate-300' },
+  'ticket.bulk.assign':         { labelKey: 'act_ticket_bulk_assign',          icon: '⇒', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' },
+  'ticket.bulk.set_priority':   { labelKey: 'act_ticket_bulk_set_priority',    icon: '↑', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' },
+  'user.role_change':           { labelKey: 'act_user_role_change',            icon: '🔑', color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' },
+  'kb.create':                  { labelKey: 'act_kb_create',                   icon: '✚', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400' },
+  'kb.update':                  { labelKey: 'act_kb_update',                   icon: '✎', color: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400' },
+  'kb.delete':                  { labelKey: 'act_kb_delete',                   icon: '✕', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
+  'custom_field.create':        { labelKey: 'act_custom_field_create',         icon: '✚', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
+  'custom_field.update':        { labelKey: 'act_custom_field_update',         icon: '✎', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' },
+  'custom_field.delete':        { labelKey: 'act_custom_field_delete',         icon: '✕', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
+  'business_hours.update':      { labelKey: 'act_business_hours_update',       icon: '🕐', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' },
+  'holiday.add':                { labelKey: 'act_holiday_add',                 icon: '✚', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
+  'holiday.delete':             { labelKey: 'act_holiday_delete',              icon: '✕', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
+  'update':                     { labelKey: 'act_update',                      icon: '✎', color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' },
 }
 
-const ROLE_META: Record<string, { label: string; color: string }> = {
-  admin:     { label: '관리자',   color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
-  agent:     { label: 'IT담당자', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' },
-  developer: { label: '개발자',   color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' },
-  user:      { label: '사용자',   color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' },
+const ROLE_META: Record<string, { labelKey: string; color: string }> = {
+  admin:     { labelKey: 'role_admin',     color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
+  agent:     { labelKey: 'role_agent',     color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' },
+  developer: { labelKey: 'role_developer', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' },
+  user:      { labelKey: 'role_user',      color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' },
 }
 
 function resourceHref(type: string, id: string): string | null {
@@ -67,6 +68,7 @@ function ResourceLink({ type, id }: { type: string; id: string }) {
 const LIMIT = 50
 
 function AuditContent() {
+  const t = useTranslations('admin.audit')
   const { isAgent } = useAuth()
 
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
@@ -108,7 +110,7 @@ function AuditContent() {
       setHasMore(data.has_more)
       setLoadedCount(prev => reset ? data.items.length : prev + data.items.length)
     } catch (e: unknown) {
-      setError(errorMessage(e, '불러오기 실패'))
+      setError(errorMessage(e, t('loading')))
     } finally {
       setLoading(false)
       setInitialLoading(false)
@@ -166,7 +168,7 @@ function AuditContent() {
     try {
       await downloadAuditLogs({ action: actionFilter || undefined })
     } catch {
-      setError('CSV 다운로드에 실패했습니다.')
+      setError(t('download_failed'))
     } finally {
       setDownloading(false)
     }
@@ -179,7 +181,7 @@ function AuditContent() {
   }
 
   function formatTimestamp(iso: string) {
-    return new Date(iso).toLocaleString('ko-KR', {
+    return new Date(iso).toLocaleString(undefined, {
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       hour12: false,
@@ -193,7 +195,7 @@ function AuditContent() {
           <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          감사 로그
+          {t('title')}
         </h1>
       </div>
 
@@ -202,7 +204,7 @@ function AuditContent() {
         <div className="flex items-center gap-1.5 border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 dark:bg-gray-700">
           <span className="text-gray-400 text-xs">🔍</span>
           <input
-            type="text" placeholder="행위자 검색…" value={actorSearch}
+            type="text" placeholder={t('actor_search')} value={actorSearch}
             onChange={e => setActorSearch(e.target.value)}
             className="text-xs focus:outline-none text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500 w-28 dark:bg-gray-700"
           />
@@ -213,9 +215,9 @@ function AuditContent() {
           onChange={e => setActionFilter(e.target.value)}
           className="border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
         >
-          <option value="">전체 액션</option>
+          <option value="">{t('all_actions')}</option>
           {Object.entries(ACTION_META).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
+            <option key={k} value={k}>{t(v.labelKey as 'act_ticket_create')}</option>
           ))}
         </select>
 
@@ -224,40 +226,40 @@ function AuditContent() {
           onChange={e => setResourceTypeFilter(e.target.value)}
           className="border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
         >
-          <option value="">전체 리소스</option>
-          <option value="ticket">티켓</option>
-          <option value="comment">댓글</option>
-          <option value="user">사용자</option>
-          <option value="kb_article">KB 문서</option>
-          <option value="custom_field">커스텀 필드</option>
-          <option value="assignment_rule">자동 배정</option>
+          <option value="">{t('all_resources')}</option>
+          <option value="ticket">{t('res_ticket')}</option>
+          <option value="comment">{t('res_comment')}</option>
+          <option value="user">{t('res_user')}</option>
+          <option value="kb_article">{t('res_kb_article')}</option>
+          <option value="custom_field">{t('res_custom_field')}</option>
+          <option value="assignment_rule">{t('res_assignment_rule')}</option>
           <option value="sla">SLA</option>
-          <option value="auth">인증</option>
-          <option value="announcement">공지사항</option>
-          <option value="email_template">이메일 템플릿</option>
-          <option value="outbound_webhook">웹훅</option>
-          <option value="api_key">API 키</option>
-          <option value="service_type">서비스 유형</option>
-          <option value="escalation_policy">에스컬레이션</option>
-          <option value="label">라벨</option>
-          <option value="quick_reply">빠른 답변</option>
-          <option value="template">템플릿</option>
-          <option value="system">시스템</option>
+          <option value="auth">{t('res_auth')}</option>
+          <option value="announcement">{t('res_announcement')}</option>
+          <option value="email_template">{t('res_email_template')}</option>
+          <option value="outbound_webhook">{t('res_outbound_webhook')}</option>
+          <option value="api_key">{t('res_api_key')}</option>
+          <option value="service_type">{t('res_service_type')}</option>
+          <option value="escalation_policy">{t('res_escalation_policy')}</option>
+          <option value="label">{t('res_label')}</option>
+          <option value="quick_reply">{t('res_quick_reply')}</option>
+          <option value="template">{t('res_template')}</option>
+          <option value="system">{t('res_system')}</option>
         </select>
 
         {hasFilter && (
-          <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800">초기화</button>
+          <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800">{t('reset')}</button>
         )}
 
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-gray-400 dark:text-gray-500">
-            {loadedCount}건 로드됨{hasMore ? ' (더 있음)' : ' (전체)'}
+            {t('loaded_count', { n: loadedCount })}{hasMore ? t('has_more_suffix') : t('all_suffix')}
           </span>
           <button
             onClick={handleDownload} disabled={downloading}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
-            ⬇ {downloading ? '다운로드 중…' : 'CSV 다운로드'}
+            ⬇ {downloading ? t('downloading') : t('download_csv')}
           </button>
         </div>
       </div>
@@ -265,24 +267,24 @@ function AuditContent() {
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg px-4 py-3 text-sm flex items-center justify-between">
           <span>⚠️ {error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-3" aria-label="닫기">✕</button>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-3" aria-label={t('close')}>✕</button>
         </div>
       )}
 
       {/* 테이블 */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         {initialLoading ? (
-          <div className="text-center py-16 text-gray-400">불러오는 중...</div>
+          <div className="text-center py-16 text-gray-400">{t('loading')}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
                 <tr>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">시간</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">행위자</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">역할</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">액션</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">대상</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">{t('col_time')}</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('col_actor')}</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('col_role')}</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('col_action')}</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('col_resource')}</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">IP</th>
                 </tr>
               </thead>
@@ -335,13 +337,13 @@ function AuditContent() {
                         </td>
                         <td className="px-4 py-2.5">
                           <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${role.color}`}>
-                            {role.label}
+                            {t(role.labelKey as 'role_admin')}
                           </span>
                         </td>
                         <td className="px-4 py-2.5">
                           <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${meta?.color ?? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
                             <span className="leading-none">{meta?.icon}</span>
-                            {meta?.label ?? log.action}
+                            {meta ? t(meta.labelKey as 'act_ticket_create') : log.action}
                           </span>
                         </td>
                         <td className="px-4 py-2.5">
@@ -363,7 +365,7 @@ function AuditContent() {
                             <div className="grid grid-cols-2 gap-3">
                               {log.old_value && (
                                 <div>
-                                  <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">변경 전</div>
+                                  <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">{t('changed_before')}</div>
                                   <pre className="text-xs font-mono bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 overflow-x-auto max-h-40 text-gray-600 dark:text-gray-300">
                                     {JSON.stringify(log.old_value, null, 2)}
                                   </pre>
@@ -371,7 +373,7 @@ function AuditContent() {
                               )}
                               {log.new_value && (
                                 <div>
-                                  <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">변경 후</div>
+                                  <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">{t('changed_after')}</div>
                                   <pre className="text-xs font-mono bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 overflow-x-auto max-h-40 text-gray-600 dark:text-gray-300">
                                     {JSON.stringify(log.new_value, null, 2)}
                                   </pre>
@@ -389,7 +391,7 @@ function AuditContent() {
                   <tr>
                     <td colSpan={6} className="px-4 py-14 text-center text-gray-400">
                       <div className="text-3xl mb-2">📋</div>
-                      감사 로그가 없습니다.
+                      {t('empty')}
                     </td>
                   </tr>
                 )}
@@ -406,7 +408,7 @@ function AuditContent() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
-                불러오는 중…
+                {t('loading_more')}
               </div>
             )}
 
@@ -414,7 +416,7 @@ function AuditContent() {
             {!hasMore && logs.length > 0 && (
               <div className="flex items-center justify-center py-4 text-xs text-gray-400 dark:text-gray-500 gap-2">
                 <span className="w-12 h-px bg-gray-200 dark:bg-gray-700" />
-                전체 {loadedCount}건 로드 완료
+                {t('all_loaded', { n: loadedCount })}
                 <span className="w-12 h-px bg-gray-200 dark:bg-gray-700" />
               </div>
             )}
