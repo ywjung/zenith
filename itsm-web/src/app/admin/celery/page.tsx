@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchCeleryFlowerStats,
@@ -64,6 +65,7 @@ function StatCard({
 }
 
 function WorkerBadge({ status }: { status: 'online' | 'offline' }) {
+  const t = useTranslations('admin.celery')
   if (status === 'online') {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400">
@@ -81,6 +83,7 @@ function WorkerBadge({ status }: { status: 'online' | 'offline' }) {
 }
 
 function TaskStateBadge({ state }: { state: string }) {
+  const t = useTranslations('admin.celery')
   const map: Record<string, string> = {
     SUCCESS: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
     FAILURE: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
@@ -102,6 +105,7 @@ function TaskStateBadge({ state }: { state: string }) {
 // ---------------------------------------------------------------------------
 
 export default function CeleryMonitorPage() {
+  const t = useTranslations('admin.celery')
   const [stats, setStats] = useState<CeleryFlowerStats | null>(null)
   const [workers, setWorkers] = useState<CeleryWorker[]>([])
   const [tasks, setTasks] = useState<CeleryTask[]>([])
@@ -116,7 +120,7 @@ export default function CeleryMonitorPage() {
     setLoading(true)
     setError(null)
     try {
-      const [s, w, t, f] = await Promise.allSettled([
+      const [s, w, tk, f] = await Promise.allSettled([
         fetchCeleryFlowerStats(),
         fetchCeleryFlowerWorkers(),
         fetchCeleryFlowerTasks('ALL', 20),
@@ -124,10 +128,10 @@ export default function CeleryMonitorPage() {
       ])
 
       if (s.status === 'fulfilled') setStats(s.value)
-      else setError(s.reason?.message ?? 'Flower 서비스에 연결할 수 없습니다.')
+      else setError(s.reason?.message ?? t('flower_unreachable'))
 
       if (w.status === 'fulfilled') setWorkers(w.value)
-      if (t.status === 'fulfilled') setTasks(t.value)
+      if (tk.status === 'fulfilled') setTasks(tk.value)
       if (f.status === 'fulfilled') setFailedTasks(f.value)
     } finally {
       setLoading(false)
@@ -161,11 +165,11 @@ export default function CeleryMonitorPage() {
           <span className="text-2xl shrink-0">⚠️</span>
           <div>
             <div className="font-semibold text-amber-800 dark:text-amber-300 text-sm">
-              Flower 서비스에 연결할 수 없습니다
+              {t('flower_unreachable').replace('.','')}
             </div>
             <div className="text-sm text-amber-700 dark:text-amber-400 mt-1">{error}</div>
             <div className="text-xs text-amber-600 dark:text-amber-500 mt-2">
-              Flower 컨테이너(itsm-flower-1)가 실행 중인지 확인하세요.
+              {t('flower_hint')}
             </div>
           </div>
         </div>
@@ -184,23 +188,23 @@ export default function CeleryMonitorPage() {
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard
-            label="활성 태스크"
+            label={t('stat_active')}
             value={stats.total_active}
             color="blue"
           />
           <StatCard
-            label="온라인 워커"
+            label={t('stat_workers')}
             value={stats.workers.filter(w => w.status === 'online').length}
             color="green"
-            sub={`전체 ${stats.workers.length}개`}
+            sub={t('stat_total_workers', { n: stats.workers.length })}
           />
           <StatCard
-            label="누적 처리"
+            label={t('stat_processed')}
             value={stats.total_processed.toLocaleString()}
             color="purple"
           />
           <StatCard
-            label="최근 실패"
+            label={t('stat_failures')}
             value={stats.total_failed_recent}
             color={stats.total_failed_recent > 0 ? 'red' : 'green'}
           />
@@ -210,21 +214,21 @@ export default function CeleryMonitorPage() {
       {/* 워커 상태 */}
       <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-          워커 상태
+          {t('worker_title')}
         </h2>
         {workers.length === 0 ? (
-          <p className="text-sm text-gray-400">워커 정보가 없습니다.</p>
+          <p className="text-sm text-gray-400">{t('worker_empty')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-700">
-                  <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">워커</th>
-                  <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">상태</th>
-                  <th className="text-right py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">활성</th>
-                  <th className="text-right py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">예약</th>
-                  <th className="text-right py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">동시성</th>
-                  <th className="text-right py-2 text-xs font-medium text-gray-500 dark:text-gray-400">누적 처리</th>
+                  <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_worker')}</th>
+                  <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_status')}</th>
+                  <th className="text-right py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_active_count')}</th>
+                  <th className="text-right py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_reserved')}</th>
+                  <th className="text-right py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_concurrency')}</th>
+                  <th className="text-right py-2 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_processed')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -252,7 +256,7 @@ export default function CeleryMonitorPage() {
       {stats && Object.keys(stats.queues).length > 0 && (
         <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-            큐 현황
+            {t('queue_title')}
           </h2>
           <div className="space-y-2.5">
             {Object.entries(stats.queues).map(([name, count]) => (
@@ -265,7 +269,7 @@ export default function CeleryMonitorPage() {
                   />
                 </div>
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300 w-12 text-right tabular-nums">
-                  {count}건
+                  {t('queue_count', { n: count })}
                 </span>
               </div>
             ))}
@@ -277,15 +281,15 @@ export default function CeleryMonitorPage() {
       {failedTasks.length > 0 && (
         <section className="bg-white dark:bg-gray-900 rounded-xl border border-red-200 dark:border-red-800 p-5">
           <h2 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-4">
-            최근 실패 태스크 (최근 10건)
+            {t('failures_title')}
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-700">
-                  <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">태스크명</th>
-                  <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">실패 시각</th>
-                  <th className="text-left py-2 text-xs font-medium text-gray-500 dark:text-gray-400">예외 메시지</th>
+                  <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_task_name')}</th>
+                  <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_failed_at')}</th>
+                  <th className="text-left py-2 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_exception')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -313,7 +317,7 @@ export default function CeleryMonitorPage() {
       {/* 태스크 목록 */}
       <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">태스크 목록</h2>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('tasks_title')}</h2>
           <div className="flex gap-1.5">
             {(['ALL', 'SUCCESS', 'FAILURE', 'STARTED', 'PENDING', 'RETRY'] as const).map(s => (
               <button
@@ -331,17 +335,17 @@ export default function CeleryMonitorPage() {
           </div>
         </div>
         {tasks.length === 0 ? (
-          <p className="text-sm text-gray-400">태스크 기록이 없습니다.</p>
+          <p className="text-sm text-gray-400">{t('tasks_empty')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-700">
-                  <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">태스크명</th>
-                  <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">상태</th>
-                  <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">워커</th>
-                  <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">수신</th>
-                  <th className="text-right py-2 text-xs font-medium text-gray-500 dark:text-gray-400">실행 시간</th>
+                  <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_task_name')}</th>
+                  <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_status')}</th>
+                  <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_worker')}</th>
+                  <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_received')}</th>
+                  <th className="text-right py-2 text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_runtime')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -398,6 +402,7 @@ function PageHeader({
   onRefresh: () => void
   lastRefresh: Date
 }) {
+  const t = useTranslations('admin.celery')
   return (
     <div className="flex items-center justify-between">
       <div>
@@ -405,22 +410,22 @@ function PageHeader({
           <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
           </svg>
-          Celery 모니터링
+          {t('title')}
         </h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-          Flower API를 통해 워커·큐·태스크 상태를 실시간으로 확인합니다. 30초마다 자동 갱신.
+          {t('subtitle')}
         </p>
       </div>
       <div className="flex items-center gap-3">
         <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:block">
-          갱신: {lastRefresh.toLocaleTimeString('ko-KR')}
+          {t('refresh_label', { time: lastRefresh.toLocaleTimeString() })}
         </span>
         <button
           onClick={onRefresh}
           disabled={loading}
           className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg font-medium transition-colors"
         >
-          {loading ? '갱신 중…' : '↻ 새로고침'}
+          {loading ? t('refreshing') : t('refresh')}
         </button>
       </div>
     </div>
