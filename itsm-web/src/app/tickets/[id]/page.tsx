@@ -2,6 +2,7 @@
 
 import { toast } from 'sonner'
 import { useEffect, useState, useRef, Suspense } from 'react'
+import { useTranslations } from 'next-intl'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { fetchTicket, fetchComments, getMyRating, updateTicket, addComment, updateComment, deleteComment, deleteTicket, fetchProjectMembers, fetchMilestones, fetchTicketCustomFields, setTicketCustomFields, uploadFile, fetchTicketLinks, createTicketLink, deleteTicketLink, fetchDevProjects, fetchForwards, createForward, deleteForward, fetchTicketSLA, updateTicketSLA, fetchLinkedMRs, subscribeTicketEvents, fetchWatchers, watchTicket, unwatchTicket, fetchQuickReplies, suggestKBArticles, fetchSLAPrediction, pauseTicketSLA, resumeTicketSLA, extendTicketSLA, fetchTicketAISummary } from '@/lib/api'
@@ -53,15 +54,15 @@ function StarDisplay({ score }: { score: number }) {
 
 // 워크플로우 단계 정의
 const WORKFLOW_STEPS = [
-  { key: 'open',              label: '접수됨' },
-  { key: 'approved',          label: '승인완료' },
-  { key: 'in_progress',       label: '처리중' },
-  { key: 'resolved',          label: '처리완료' },
-  { key: 'testing',           label: '테스트중' },
-  { key: 'ready_for_release', label: '운영배포전' },
-  { key: 'released',          label: '운영반영완료' },
-  { key: 'closed',            label: '종료' },
-]
+  { key: 'open',              labelKey: 'step_open' },
+  { key: 'approved',          labelKey: 'step_approved' },
+  { key: 'in_progress',       labelKey: 'step_in_progress' },
+  { key: 'resolved',          labelKey: 'step_resolved' },
+  { key: 'testing',           labelKey: 'step_testing' },
+  { key: 'ready_for_release', labelKey: 'step_ready_for_release' },
+  { key: 'released',          labelKey: 'step_released' },
+  { key: 'closed',            labelKey: 'step_closed' },
+] as const
 
 const STEP_INDEX: Record<string, number> = {
   open:              0,
@@ -76,6 +77,7 @@ const STEP_INDEX: Record<string, number> = {
 }
 
 function WorkflowStepper({ status, state }: { status: string | undefined; state: string }) {
+  const t = useTranslations('ticket_detail')
   const effectiveStatus = state === 'closed' ? 'closed' : (status ?? 'open')
   const currentIdx = STEP_INDEX[effectiveStatus] ?? 0
   const isWaiting = effectiveStatus === 'waiting'
@@ -86,7 +88,7 @@ function WorkflowStepper({ status, state }: { status: string | undefined; state:
         const isDone = i < currentIdx
         const isCurrent = i === currentIdx
         const isCurrentWaiting = isCurrent && isWaiting && i === 2
-        const label = isWaiting && i === 2 ? '대기중' : step.label
+        const label = isWaiting && i === 2 ? t('step_waiting') : t(step.labelKey as 'step_open')
         const isLast = i === WORKFLOW_STEPS.length - 1
 
         return (
@@ -125,7 +127,7 @@ function WorkflowStepper({ status, state }: { status: string | undefined; state:
               {isCurrent && (
                 <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                   isCurrentWaiting ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-500' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
-                }`}>현재</span>
+                }`}>{t('step_current_badge')}</span>
               )}
             </div>
           </div>
@@ -228,6 +230,7 @@ interface ApprovalRequest {
 }
 
 function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketStatus }: { ticketIid: number; projectId: string; isAgent: boolean; currentUsername?: string; ticketStatus?: string }) {
+  const t = useTranslations('ticket_detail')
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -270,9 +273,9 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
       if (res.ok) { await load() }
       else {
         const data = await res.json().catch(() => ({}))
-        setCreateError(data.detail || `요청 실패 (${res.status})`)
+        setCreateError(data.detail || t('approval_request_failed', { status: res.status }))
       }
-    } catch { setCreateError('네트워크 오류가 발생했습니다.') }
+    } catch { setCreateError(t('approval_network_error')) }
     finally { setCreating(false) }
   }
 
@@ -288,9 +291,9 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
       if (res.ok) await load()
       else {
         const data = await res.json().catch(() => ({}))
-        setActionError(data.detail || `승인 실패 (${res.status})`)
+        setActionError(data.detail || t('approval_approve_failed', { status: res.status }))
       }
-    } catch { setActionError('네트워크 오류가 발생했습니다.') }
+    } catch { setActionError(t('approval_network_error')) }
     finally { setActionId(null) }
   }
 
@@ -306,15 +309,15 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
       if (res.ok) { setShowRejectForm(null); setReason(''); await load() }
       else {
         const data = await res.json().catch(() => ({}))
-        setActionError(data.detail || `거절 실패 (${res.status})`)
+        setActionError(data.detail || t('approval_reject_failed', { status: res.status }))
       }
-    } catch { setActionError('네트워크 오류가 발생했습니다.') }
+    } catch { setActionError(t('approval_network_error')) }
     finally { setActionId(null) }
   }
 
   if (loading) return null
   if (noAccess) return null
-  if (loadError) return <p className="text-xs text-red-500 py-2">승인 요청을 불러오지 못했습니다.</p>
+  if (loadError) return <p className="text-xs text-red-500 py-2">{t('approval_load_failed')}</p>
 
   const latest = approvals[0]
   // 승인 요청 버튼: 이미 승인·종료·배포 상태이면 숨김
@@ -323,13 +326,13 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
     if (noRequestNeeded) return null
     return (
       <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">승인</h3>
+        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{t('approval_header')}</h3>
         <button
           onClick={handleCreate}
           disabled={creating}
           className="w-full text-xs bg-purple-600 hover:bg-purple-700 text-white py-1.5 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {creating ? '요청 중...' : '승인 요청'}
+          {creating ? t('approval_creating') : t('approval_request')}
         </button>
         {createError && (
           <p className="text-xs text-red-500 dark:text-red-400 mt-1.5">{createError}</p>
@@ -340,7 +343,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
 
   return (
     <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-      <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">승인</h3>
+      <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{t('approval_header')}</h3>
       {approvals.slice(0, 3).map(req => (
         <div key={req.id} className="mb-2 last:mb-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -349,7 +352,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
               req.status === 'rejected' ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' :
               'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
             }`}>
-              {req.status === 'approved' ? '✅ 승인됨' : req.status === 'rejected' ? '❌ 거절됨' : '⏳ 대기중'}
+              {req.status === 'approved' ? t('approval_status_approved') : req.status === 'rejected' ? t('approval_status_rejected') : t('approval_status_pending')}
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400">{req.requester_name || req.requester_username}</span>
           </div>
@@ -365,7 +368,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
                     type="text"
                     value={reason}
                     onChange={e => setReason(e.target.value)}
-                    placeholder="거절 사유 (선택)"
+                    placeholder={t('approval_reject_reason_placeholder')}
                     className="text-xs border dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-red-400"
                   />
                   <div className="flex gap-1">
@@ -374,9 +377,9 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
                       disabled={actionId === req.id}
                       className="flex-1 text-xs bg-red-500 hover:bg-red-600 text-white py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {actionId === req.id ? '...' : '거절 확인'}
+                      {actionId === req.id ? '...' : t('approval_reject_confirm')}
                     </button>
-                    <button onClick={() => { setShowRejectForm(null); setActionError(null) }} className="text-xs px-2 py-1 border dark:border-gray-600 rounded text-gray-500 dark:text-gray-400">취소</button>
+                    <button onClick={() => { setShowRejectForm(null); setActionError(null) }} className="text-xs px-2 py-1 border dark:border-gray-600 rounded text-gray-500 dark:text-gray-400">{t('approval_cancel')}</button>
                   </div>
                 </>
               ) : (
@@ -386,13 +389,13 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
                     disabled={actionId === req.id}
                     className="flex-1 text-xs bg-green-500 hover:bg-green-600 text-white py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {actionId === req.id ? '...' : '승인'}
+                    {actionId === req.id ? '...' : t('approval_approve')}
                   </button>
                   <button
                     onClick={() => { setActionError(null); setShowRejectForm(req.id) }}
                     className="flex-1 text-xs bg-red-100 dark:bg-red-900/30 hover:bg-red-200 text-red-600 dark:text-red-400 py-1 rounded"
                   >
-                    {req.requester_username === currentUsername ? '취소' : '거절'}
+                    {req.requester_username === currentUsername ? t('approval_cancel_own') : t('approval_reject')}
                   </button>
                 </div>
               )}
@@ -410,7 +413,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
             disabled={creating}
             className="w-full text-xs text-purple-600 dark:text-purple-400 hover:underline mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {creating ? '요청 중...' : '+ 재승인 요청'}
+            {creating ? t('approval_creating') : t('approval_re_request')}
           </button>
           {createError && (
             <p className="text-xs text-red-500 dark:text-red-400 mt-1">{createError}</p>
@@ -426,15 +429,16 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
 // ---------------------------------------------------------------------------
 
 const TICKET_TYPES = [
-  { value: 'incident',        label: '티켓',    color: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' },
-  { value: 'service_request', label: '서비스 요청', color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' },
-  { value: 'change',          label: '변경 요청',   color: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300' },
-  { value: 'problem',         label: '문제',        color: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' },
+  { value: 'incident',        labelKey: 'type_incident',        color: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' },
+  { value: 'service_request', labelKey: 'type_service_request', color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' },
+  { value: 'change',          labelKey: 'type_change',          color: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300' },
+  { value: 'problem',         labelKey: 'type_problem',         color: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' },
 ]
 
 function TicketTypePanel({
   ticketIid, projectId, isAgent,
 }: { ticketIid: number; projectId: string; isAgent: boolean }) {
+  const t = useTranslations('ticket_detail')
   const [ticketType, setTicketType] = useState('incident')
   const [updatedBy, setUpdatedBy] = useState<string | null>(null)
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
@@ -520,13 +524,13 @@ function TicketTypePanel({
   return (
     <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">티켓 유형</h3>
+        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('type_title')}</h3>
         {isAgent && !editing && (
           <button
             onClick={() => setEditing(true)}
             className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-300"
           >
-            변경
+            {t('type_change_btn')}
           </button>
         )}
       </div>
@@ -534,34 +538,33 @@ function TicketTypePanel({
       {/* 현재 유형 배지 */}
       {!editing && (
         <span className={`inline-block text-xs px-2.5 py-1 rounded-full font-medium ${typeMeta?.color || ''}`}>
-          {typeMeta?.label || ticketType}
+          {typeMeta ? t(typeMeta.labelKey as 'type_incident') : ticketType}
         </span>
       )}
 
       {/* 에이전트: 편집 모드 */}
       {isAgent && editing && (
         <div className="space-y-2">
-          {TICKET_TYPES.map(t => (
+          {TICKET_TYPES.map(tp => (
             <button
-              key={t.value}
-              onClick={() => handleTypeChange(t.value)}
+              key={tp.value}
+              onClick={() => handleTypeChange(tp.value)}
               disabled={saving}
               className={`w-full text-left text-xs px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                ticketType === t.value
-                  ? `${t.color} border-current font-semibold`
+                ticketType === tp.value
+                  ? `${tp.color} border-current font-semibold`
                   : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
               }`}
             >
-              {saving && ticketType !== t.value ? '' : ''}
-              {t.label}
-              {ticketType === t.value && <span className="float-right">✓</span>}
+              {t(tp.labelKey as 'type_incident')}
+              {ticketType === tp.value && <span className="float-right">✓</span>}
             </button>
           ))}
           <button
             onClick={() => setEditing(false)}
             className="w-full text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 py-1"
           >
-            취소
+            {t('type_cancel_btn')}
           </button>
         </div>
       )}
@@ -579,9 +582,9 @@ function TicketTypePanel({
       {/* 문제 유형: 연결된 티켓/변경 관리 */}
       {isAgent && isProblem && (
         <div className="pt-1">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">연결된 티켓 (problem_of)</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">{t('linked_problem_tickets')}</p>
           {problemLinks.length === 0 ? (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">없음</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{t('none_label')}</p>
           ) : (
             <ul className="space-y-1 mb-2">
               {problemLinks.map(l => {
@@ -594,7 +597,7 @@ function TicketTypePanel({
                     <button
                       onClick={() => handleRemoveProblemLink(l.id)}
                       className="text-gray-400 hover:text-red-500 ml-2"
-                     aria-label="제거">✕</button>
+                     aria-label={t('remove_aria')}>✕</button>
                   </li>
                 )
               })}
@@ -603,7 +606,7 @@ function TicketTypePanel({
           <div className="flex gap-1">
             <input
               type="number"
-              placeholder="티켓 번호"
+              placeholder={t('iid_placeholder')}
               value={linkInput}
               onChange={e => setLinkInput(e.target.value)}
               className="flex-1 text-xs border dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -613,7 +616,7 @@ function TicketTypePanel({
               disabled={linking || !linkInput}
               className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {linking ? '...' : '연결'}
+              {linking ? t('linking_in_progress') : t('link_btn')}
             </button>
           </div>
         </div>
@@ -622,14 +625,14 @@ function TicketTypePanel({
       {/* 일반/변경 유형: 연결된 문제 */}
       {isAgent && !isProblem && problemLinks.length > 0 && (
         <div className="pt-1">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">연결된 문제</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('linked_problems_label')}</p>
           <ul className="space-y-1">
             {problemLinks.map(l => {
               const linked = l.source_iid === ticketIid ? l.target_iid : l.source_iid
               return (
                 <li key={l.id} className="text-xs">
                   <a href={`/tickets/${linked}`} className="text-orange-600 dark:text-orange-400 hover:underline">
-                    #{linked} 문제
+                    {t('linked_problem_item', { iid: linked })}
                   </a>
                 </li>
               )
@@ -714,6 +717,7 @@ function AttachmentFileItem({
   name: string
   onImageClick?: (url: string, name: string) => void
 }) {
+  const t = useTranslations('ticket_detail')
   const isImg = isImageFile(name)
   if (isImg) {
     return (
@@ -732,12 +736,12 @@ function AttachmentFileItem({
           }}
         />
         <div style={{ display: 'none' }} className="bg-gray-100 dark:bg-gray-700 px-3 py-4 text-center text-gray-400 text-sm">
-          이미지를 불러올 수 없습니다 —{' '}
+          {t('img_load_failed')}{' '}
           <a href={`${url}&download=true`} download className="text-blue-500 hover:underline">{name}</a>
         </div>
         <div className="bg-gray-50 dark:bg-gray-800 border-t dark:border-gray-700 px-3 py-2 flex items-center justify-between gap-2">
           <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{name}</span>
-          <a href={`${url}&download=true`} download className="text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0">⬇️ 다운로드</a>
+          <a href={`${url}&download=true`} download className="text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0">{t('download_btn')}</a>
         </div>
       </div>
     )
@@ -755,7 +759,7 @@ function AttachmentFileItem({
       <span className="text-lg shrink-0">{getFileIcon(name)}</span>
       <span className="text-sm text-gray-700 dark:text-gray-200 flex-1 truncate">{name}</span>
       <a href={`${url}&download=true`} download className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 px-2.5 py-1 rounded shrink-0">
-        ⬇️ 다운로드
+        {t('download_btn')}
       </a>
     </div>
   )
@@ -770,6 +774,7 @@ function DescriptionWithAttachments({
   projectPath?: string
   onImageClick?: (url: string, name: string) => void
 }) {
+  const t = useTranslations('ticket_detail')
   const isHtml = /^\s*<[a-zA-Z]/.test(description)
 
   if (isHtml) {
@@ -780,7 +785,7 @@ function DescriptionWithAttachments({
         <div className="prose prose-sm max-w-none text-gray-800 dark:text-gray-200 dark:prose-invert" dangerouslySetInnerHTML={{ __html: _sanitizeHtml(body) }} />
         {attachments.length > 0 && (
           <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-1.5">
-            <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">첨부 파일</p>
+            <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">{t('attachments_label')}</p>
             {attachments.map((att, i) => (
               <AttachmentFileItem key={i} url={att.url} name={att.name} onImageClick={onImageClick} />
             ))}
@@ -819,6 +824,7 @@ function DescriptionWithAttachments({
 }
 
 function Lightbox({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  const t = useTranslations('ticket_detail')
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -838,7 +844,7 @@ function Lightbox({ url, name, onClose }: { url: string; name: string; onClose: 
           onClick={onClose}
           className="absolute -top-8 right-0 text-white/70 hover:text-white text-sm"
         >
-          ✕ 닫기 (ESC)
+          {t('close_esc')}
         </button>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={url} alt={name} className="max-w-full max-h-[80vh] object-contain rounded shadow-2xl" />
@@ -850,7 +856,7 @@ function Lightbox({ url, name, onClose }: { url: string; name: string; onClose: 
             onClick={(e) => e.stopPropagation()}
             className="text-sm bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded transition-colors"
           >
-            ⬇️ 다운로드
+            {t('download_btn')}
           </a>
         </div>
       </div>
@@ -869,6 +875,7 @@ const BUILTIN_QUICK_REPLIES: QuickReply[] = [
 ]
 
 function TicketDetailContent() {
+  const t = useTranslations('ticket_detail')
   const confirm = useConfirm()
   const params = useParams()
   const router = useRouter()
@@ -1137,19 +1144,19 @@ function TicketDetailContent() {
       setComments(updatedComments)
       // UX2 #4: 처리완료 전환 시 만족도 평가 안내
       if (newStatus === 'resolved') {
-        toast('처리 완료 — 요청자에게 만족도 평가가 안내됩니다', {
-          description: '이메일로 평가 링크가 발송됩니다.',
+        toast(t('resolved_toast_title'), {
+          description: t('resolved_toast_desc'),
           action: {
-            label: '평가 페이지 보기',
+            label: t('resolved_toast_action'),
             onClick: () => window.open(`/tickets/${iid}/rate`, '_blank'),
           },
           duration: 6000,
         })
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '상태 변경 실패'
+      const msg = err instanceof Error ? err.message : t('err_status_change')
       // 409 Conflict = 동시 편집 충돌
-      if (msg.includes('다른 사용자')) {
+      if (msg.includes(t('conflict_message'))) {
         setActionError('⚠️ ' + msg)
       } else {
         setActionError(msg)
@@ -1167,7 +1174,7 @@ function TicketDetailContent() {
       const updated = await updateTicket(iid, { priority: newPriority }, projectId)
       setTicket(updated)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : '우선순위 변경 실패')
+      setActionError(err instanceof Error ? err.message : t('err_priority_change'))
     } finally {
       setUpdating(false)
     }
@@ -1181,7 +1188,7 @@ function TicketDetailContent() {
       const updated = await updateTicket(iid, { category: newCategory }, projectId)
       setTicket(updated)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : '서비스 유형 변경 실패')
+      setActionError(err instanceof Error ? err.message : t('err_service_type_change'))
     } finally {
       setUpdating(false)
     }
@@ -1197,7 +1204,7 @@ function TicketDetailContent() {
       const updated = await updateTicket(iid, { assignee_id: id }, projectId)
       setTicket(updated)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : '담당자 변경 실패')
+      setActionError(err instanceof Error ? err.message : t('err_assignee_change'))
     } finally {
       setUpdating(false)
     }
@@ -1210,7 +1217,7 @@ function TicketDetailContent() {
       const updated = await setTicketCustomFields(iid, customFieldEdits, projectId)
       setCustomFields(updated)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : '커스텀 필드 저장 실패')
+      setActionError(err instanceof Error ? err.message : t('err_custom_fields_save'))
     } finally {
       setSavingCustomFields(false)
     }
@@ -1226,7 +1233,7 @@ function TicketDetailContent() {
       const updated = await updateTicket(iid, { milestone_id: id }, projectId)
       setTicket(updated)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : '마일스톤 변경 실패')
+      setActionError(err instanceof Error ? err.message : t('err_milestone_change'))
     } finally {
       setUpdating(false)
     }
@@ -1294,7 +1301,7 @@ function TicketDetailContent() {
       setEditAttachments([])
       setEditNewFiles([])
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : '수정 실패')
+      setActionError(err instanceof Error ? err.message : t('err_edit_save'))
     } finally {
       setEditSaving(false)
     }
@@ -1307,7 +1314,7 @@ function TicketDetailContent() {
       await deleteTicket(iid, projectId)
       router.push('/')
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : '티켓 삭제 실패')
+      setActionError(err instanceof Error ? err.message : t('err_ticket_delete'))
       setDeleting(false)
       setConfirmDelete(false)
     }
@@ -1325,7 +1332,7 @@ function TicketDetailContent() {
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        setCloneError(d.detail ?? '복제 실패')
+        setCloneError(d.detail ?? t('err_clone_failed'))
         return
       }
       const newTicket = await res.json()
@@ -1334,7 +1341,7 @@ function TicketDetailContent() {
         : `/tickets/${newTicket.iid}`
       router.push(href)
     } catch {
-      setCloneError('네트워크 오류')
+      setCloneError(t('err_network'))
     } finally {
       setCloning(false)
     }
@@ -1355,14 +1362,14 @@ function TicketDetailContent() {
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        setMergeError(d.detail ?? '병합 실패')
+        setMergeError(d.detail ?? t('err_merge_failed'))
         return
       }
       setMergeSuccess(true)
       // Refresh ticket (will show as closed after merge)
       setTimeout(() => window.location.reload(), 1500)
     } catch {
-      setMergeError('네트워크 오류')
+      setMergeError(t('err_network'))
     } finally {
       setMerging(false)
     }
@@ -1378,14 +1385,14 @@ function TicketDetailContent() {
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        setKbConvertError(d.detail ?? 'KB 변환 실패')
+        setKbConvertError(d.detail ?? t('err_kb_convert_failed'))
         return
       }
       const kb = await res.json()
       setResolutionNote(prev => prev ? { ...prev, kb_article_id: kb.id } : prev)
       router.push(`/kb/${kb.id}`)
     } catch {
-      setKbConvertError('네트워크 오류')
+      setKbConvertError(t('err_network'))
     } finally {
       setConvertingToKb(false)
     }
@@ -1433,7 +1440,7 @@ function TicketDetailContent() {
     // 클라이언트 파일 크기 사전 검증 (10MB = nginx 통과 후 FastAPI 한도)
     const oversized = commentFiles.find((f) => f.size > 10 * 1024 * 1024)
     if (oversized) {
-      setCommentError(`파일 크기는 10MB를 초과할 수 없습니다. (${oversized.name})`)
+      setCommentError(t('err_file_too_large', { name: oversized.name }))
       return
     }
     setCommenting(true)
@@ -1477,7 +1484,7 @@ function TicketDetailContent() {
       setCommentFiles([])
       setIsInternal(false)
     } catch (err) {
-      setCommentError(err instanceof Error ? err.message : '코멘트 추가 실패')
+      setCommentError(err instanceof Error ? err.message : t('err_comment_add'))
     } finally {
       setCommenting(false)
       setCommentUploading(false)
@@ -1492,23 +1499,23 @@ function TicketDetailContent() {
       setComments((prev) => prev.map((c) => c.id === noteId ? { ...c, body: updated.body } : c))
       setEditingCommentId(null)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '수정 실패')
+      toast.error(err instanceof Error ? err.message : t('err_edit_save'))
     } finally {
       setSavingComment(false)
     }
   }
 
   async function handleDeleteCommentConfirm(noteId: number) {
-    if (!(await confirm({ title: '이 댓글을 삭제하시겠습니까?', variant: 'danger', confirmLabel: '확인' }))) return
+    if (!(await confirm({ title: t('err_comment_delete_confirm'), variant: 'danger' }))) return
     // 낙관적 제거 + 5초 동안 undo 가능
     const removed = comments.find((c) => c.id === noteId)
     if (!removed) return
     setComments((prev) => prev.filter((c) => c.id !== noteId))
     let cancelled = false
-    toast('댓글이 삭제됩니다', {
-      description: '5초 안에 실행취소할 수 있습니다.',
+    toast(t('err_comment_delete_toast'), {
+      description: t('err_comment_delete_toast_hint'),
       action: {
-        label: '실행취소',
+        label: t('err_comment_undo'),
         onClick: () => {
           cancelled = true
           setComments((prev) => [...prev, removed].sort((a, b) => a.id - b.id))
@@ -1523,7 +1530,7 @@ function TicketDetailContent() {
       } catch (err) {
         // 서버 삭제 실패 시 복원
         setComments((prev) => [...prev, removed].sort((a, b) => a.id - b.id))
-        toast.error(err instanceof Error ? err.message : '삭제 실패')
+        toast.error(err instanceof Error ? err.message : t('err_delete_failed'))
       }
     }, 5100)
   }
@@ -1541,7 +1548,7 @@ function TicketDetailContent() {
       setLinks((prev) => [...prev, link])
       setLinkTargetIid('')
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '링크 추가 실패')
+      toast.error(err instanceof Error ? err.message : t('err_link_add_failed'))
     } finally {
       setAddingLink(false)
     }
@@ -1553,7 +1560,7 @@ function TicketDetailContent() {
       await deleteTicketLink(iid, linkId)
       setLinks((prev) => prev.filter((l) => l.id !== linkId))
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '링크 삭제 실패')
+      toast.error(err instanceof Error ? err.message : t('err_link_delete_failed'))
     }
   }
 
@@ -1579,19 +1586,19 @@ function TicketDetailContent() {
       setSelectedDevProject('')
       setForwardNote('')
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '전달 실패')
+      toast.error(err instanceof Error ? err.message : t('err_forward_failed'))
     } finally {
       setForwarding(false)
     }
   }
 
   async function handleDeleteForward(forwardId: number) {
-    if (!(await confirm({ title: '전달 기록을 삭제하시겠습니까?', variant: 'danger', confirmLabel: '확인' }))) return
+    if (!(await confirm({ title: t('err_forward_delete_confirm'), variant: 'danger' }))) return
     try {
       await deleteForward(iid, forwardId)
       setForwards((prev) => prev.filter((f) => f.id !== forwardId))
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '삭제 실패')
+      toast.error(err instanceof Error ? err.message : t('err_delete_failed'))
     }
   }
 
@@ -1607,7 +1614,7 @@ function TicketDetailContent() {
         setSlaEditDate(updated.sla_deadline.split('T')[0])
       }
     } catch (err: unknown) {
-      setSlaError(err instanceof Error ? err.message : 'SLA 기한 변경 실패')
+      setSlaError(err instanceof Error ? err.message : t('err_sla_deadline_failed'))
     } finally {
       setSlaSaving(false)
     }
@@ -1620,7 +1627,7 @@ function TicketDetailContent() {
       const updated = await pauseTicketSLA(iid, ticket?.project_id)
       setSlaRecord(updated)
     } catch (err: unknown) {
-      setSlaError(err instanceof Error ? err.message : 'SLA 일시정지 실패')
+      setSlaError(err instanceof Error ? err.message : t('err_sla_pause_failed'))
     } finally {
       setSlaPausing(false)
     }
@@ -1633,7 +1640,7 @@ function TicketDetailContent() {
       const updated = await resumeTicketSLA(iid, ticket?.project_id)
       setSlaRecord(updated)
     } catch (err: unknown) {
-      setSlaError(err instanceof Error ? err.message : 'SLA 재개 실패')
+      setSlaError(err instanceof Error ? err.message : t('err_sla_resume_failed'))
     } finally {
       setSlaResuming(false)
     }
@@ -1650,7 +1657,7 @@ function TicketDetailContent() {
       setSlaRecord(updated)
       if (updated.sla_deadline) setSlaEditDate(updated.sla_deadline.split('T')[0])
     } catch (err: unknown) {
-      setSlaError(err instanceof Error ? err.message : 'SLA 연장 실패')
+      setSlaError(err instanceof Error ? err.message : t('err_sla_extend_failed'))
     } finally {
       setSlaExtending(false)
     }
@@ -1663,7 +1670,7 @@ function TicketDetailContent() {
       const result = await fetchTicketAISummary(iid, ticket?.project_id)
       setAiSummary(result)
     } catch (err: unknown) {
-      setAiSummaryError(err instanceof Error ? err.message : 'AI 요약 실패')
+      setAiSummaryError(err instanceof Error ? err.message : t('err_ai_summary_failed'))
     } finally {
       setAiSummaryLoading(false)
     }
@@ -1673,29 +1680,29 @@ function TicketDetailContent() {
     return (
       <div className="text-center py-16 text-gray-500">
         <div className="text-4xl mb-3">⏳</div>
-        <p>불러오는 중...</p>
+        <p>{t('loading')}</p>
       </div>
     )
   }
 
   if (error || !ticket) {
     // 404 상태로 판단되면 Next.js notFound 페이지로 (브레드크럼/SEO/HTTP 시맨틱)
-    const is404 = !!error && /404|not.?found|찾을 수 없/i.test(error)
+    const is404 = !!error && /404|not.?found|찾을 수 없/i.test(error)  // keep regex
     return (
       <div className="text-center py-16 animate-fadeIn">
         <div className="text-7xl mb-4 select-none" aria-hidden="true">{is404 ? '🔍' : '⚠️'}</div>
         <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-          {is404 ? '티켓을 찾을 수 없습니다' : '티켓을 불러오지 못했습니다'}
+          {is404 ? t('not_found_title') : t('load_failed_title')}
         </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          {is404 ? '삭제되었거나 권한이 없는 티켓일 수 있습니다.' : (error || '잠시 후 다시 시도해주세요.')}
+          {is404 ? t('not_found_desc') : (error || t('retry_later'))}
         </p>
         <div className="flex items-center justify-center gap-3">
           <Link
             href="/"
             className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-sm font-semibold transition-all"
           >
-            🏠 목록으로
+            {t('home_btn')}
           </Link>
           {!is404 && (
             <button
@@ -1703,7 +1710,7 @@ function TicketDetailContent() {
               onClick={() => window.location.reload()}
               className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 text-sm font-medium text-gray-700 dark:text-gray-300 transition-all"
             >
-              🔄 다시 시도
+              {t('retry_btn')}
             </button>
           )}
         </div>
@@ -1719,28 +1726,28 @@ function TicketDetailContent() {
   const statusActions: { label: string; status: string; color: string }[] = []
   if (!isClosed) {
     if (ticket.status === 'open') {
-      if (isAgent) statusActions.push({ label: '✅ 승인', status: 'approved', color: 'bg-emerald-500 hover:bg-emerald-600 text-white' })
-      statusActions.push({ label: '⚙️ 처리 시작', status: 'in_progress', color: 'bg-blue-500 hover:bg-blue-600 text-white' })
-      statusActions.push({ label: '⏳ 추가정보 요청', status: 'waiting', color: 'bg-orange-400 hover:bg-orange-500 text-white' })
+      if (isAgent) statusActions.push({ label: t('action_approve'), status: 'approved', color: 'bg-emerald-500 hover:bg-emerald-600 text-white' })
+      statusActions.push({ label: t('action_start_processing'), status: 'in_progress', color: 'bg-blue-500 hover:bg-blue-600 text-white' })
+      statusActions.push({ label: t('action_request_info'), status: 'waiting', color: 'bg-orange-400 hover:bg-orange-500 text-white' })
     }
     if (ticket.status === 'approved') {
-      statusActions.push({ label: '⚙️ 처리 시작', status: 'in_progress', color: 'bg-blue-500 hover:bg-blue-600 text-white' })
-      statusActions.push({ label: '⏳ 추가정보 요청', status: 'waiting', color: 'bg-orange-400 hover:bg-orange-500 text-white' })
+      statusActions.push({ label: t('action_start_processing'), status: 'in_progress', color: 'bg-blue-500 hover:bg-blue-600 text-white' })
+      statusActions.push({ label: t('action_request_info'), status: 'waiting', color: 'bg-orange-400 hover:bg-orange-500 text-white' })
     }
     if (ticket.status === 'in_progress') {
-      statusActions.push({ label: '✅ 처리 완료', status: 'resolved', color: 'bg-green-500 hover:bg-green-600 text-white' })
-      statusActions.push({ label: '⏳ 추가정보 요청', status: 'waiting', color: 'bg-orange-400 hover:bg-orange-500 text-white' })
+      statusActions.push({ label: t('action_mark_resolved'), status: 'resolved', color: 'bg-green-500 hover:bg-green-600 text-white' })
+      statusActions.push({ label: t('action_request_info'), status: 'waiting', color: 'bg-orange-400 hover:bg-orange-500 text-white' })
     }
     if (ticket.status === 'waiting') {
-      statusActions.push({ label: '⚙️ 처리 재개', status: 'in_progress', color: 'bg-blue-500 hover:bg-blue-600 text-white' })
+      statusActions.push({ label: t('action_resume_processing'), status: 'in_progress', color: 'bg-blue-500 hover:bg-blue-600 text-white' })
     }
     if (ticket.status === 'resolved') {
-      statusActions.push({ label: '🔁 재처리', status: 'in_progress', color: 'bg-orange-400 hover:bg-orange-500 text-white' })
+      statusActions.push({ label: t('action_reopen_processing'), status: 'in_progress', color: 'bg-orange-400 hover:bg-orange-500 text-white' })
     }
     // 강제 종료는 모든 미종료 상태에서 허용
-    statusActions.push({ label: '🔒 티켓 종료', status: 'closed', color: 'bg-gray-500 hover:bg-gray-600 text-white' })
+    statusActions.push({ label: t('action_close_ticket'), status: 'closed', color: 'bg-gray-500 hover:bg-gray-600 text-white' })
   } else {
-    statusActions.push({ label: '🔓 티켓 재개', status: 'reopened', color: 'bg-yellow-500 hover:bg-yellow-600 text-white' })
+    statusActions.push({ label: t('action_reopen_ticket'), status: 'reopened', color: 'bg-yellow-500 hover:bg-yellow-600 text-white' })
   }
 
   const rateHref = projectId
@@ -1748,9 +1755,9 @@ function TicketDetailContent() {
     : `/tickets/${ticket.iid}/rate`
 
   const sideTabs = [
-    { key: 'links' as const, label: '링크' },
-    { key: 'time' as const, label: '시간' },
-    { key: 'forward' as const, label: '전달' },
+    { key: 'links' as const, label: t('tab_links') },
+    { key: 'time' as const, label: t('tab_time') },
+    { key: 'forward' as const, label: t('tab_forward') },
     ...(isAgent ? [{ key: 'mr' as const, label: 'MR' }] : []),
     ...(isAgent ? [{ key: 'pipeline' as const, label: 'CI/CD' }] : []),
   ]
@@ -1762,12 +1769,12 @@ function TicketDetailContent() {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-fadeIn backdrop-blur-sm p-4">
         <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-scaleIn">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
-            {pendingReasonStatus === 'reopened' ? '티켓 재개 사유' : '추가정보 요청 사유'}
+            {pendingReasonStatus === 'reopened' ? t('reason_modal_reopen_title') : t('reason_modal_waiting_title')}
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
             {pendingReasonStatus === 'reopened'
-              ? '재개 사유를 작성해주세요. 티켓 타임라인에 기록됩니다.'
-              : '어떤 추가 정보가 필요한지 작성해주세요. 티켓 타임라인에 기록됩니다.'}
+              ? t('reason_modal_reopen_hint')
+              : t('reason_modal_waiting_hint')}
           </p>
           <textarea
             autoFocus
@@ -1775,8 +1782,8 @@ function TicketDetailContent() {
             onChange={e => setWaitingReasonInput(e.target.value)}
             rows={3}
             placeholder={pendingReasonStatus === 'reopened'
-              ? '예: 문제가 재발하여 추가 조치가 필요합니다.'
-              : '예: 오류 발생 스크린샷과 정확한 발생 시각을 알려주세요.'}
+              ? t('reason_modal_reopen_placeholder')
+              : t('reason_modal_waiting_placeholder')}
             className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
           />
           <div className="flex gap-2 mt-4 justify-end">
@@ -1784,7 +1791,7 @@ function TicketDetailContent() {
               onClick={() => setWaitingReasonModal(false)}
               className="px-4 py-2 rounded-lg text-sm border dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
-              취소
+              {t('reason_modal_cancel')}
             </button>
             <button
               disabled={!waitingReasonInput.trim()}
@@ -1798,7 +1805,7 @@ function TicketDetailContent() {
                   : 'bg-orange-500 hover:bg-orange-600'
               }`}
             >
-              확인
+              {t('reason_modal_confirm')}
             </button>
           </div>
         </div>
@@ -1825,7 +1832,7 @@ function TicketDetailContent() {
         {/* Header: breadcrumb + title + badges */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-5 sticky top-0 z-30 backdrop-blur-sm bg-white/95 dark:bg-gray-900/95 print-hidden-sticky">
           <div className="mb-3">
-            <Link href="/" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">← 목록으로</Link>
+            <Link href="/" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">{t('back_to_list')}</Link>
           </div>
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <a
@@ -1833,15 +1840,15 @@ function TicketDetailContent() {
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-gray-400 dark:text-gray-500 text-sm hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-              title="GitLab에서 열기"
+              title={t('open_in_gitlab')}
             >
               #{ticket.iid}
             </a>
             <CopyButton
               value={`#${ticket.iid}`}
-              successMessage={`#${ticket.iid} 복사됨`}
+              successMessage={t('copied_suffix', { iid: ticket.iid })}
               iconOnly
-              label="티켓 번호 복사"
+              label={t('copy_ticket_number')}
               className="text-gray-400 dark:text-gray-500"
             />
             <StarToggle iid={ticket.iid} size="md" />
@@ -1866,9 +1873,9 @@ function TicketDetailContent() {
           <div className="flex items-start gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
             <span className="text-red-500 text-base shrink-0 mt-0.5">🚫</span>
             <div className="text-sm text-red-700 dark:text-red-300">
-              <strong>이 티켓은 다른 티켓에 의해 차단되어 있습니다.</strong>
+              <strong>{t('blocked_warning_strong')}</strong>
               <span className="block text-xs mt-0.5 text-red-600 dark:text-red-400">
-                차단 티켓: {links.filter(l => l.link_type === 'is_blocked_by').map(l => `#${l.target_iid}`).join(', ')}
+                {t('blocked_warning_detail', { list: links.filter(l => l.link_type === 'is_blocked_by').map(l => `#${l.target_iid}`).join(', ') })}
               </span>
             </div>
           </div>
@@ -1877,16 +1884,16 @@ function TicketDetailContent() {
         {/* 상세 내용 */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">상세 내용</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('detail_heading')}</h2>
             {canEdit && !isEditing && (
-              <button data-ticket-edit-btn onClick={startEdit} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">✏️ 수정 <kbd className="ml-1 text-[9px] bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-1 py-px font-mono">E</kbd></button>
+              <button data-ticket-edit-btn onClick={startEdit} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">{t('edit_btn')} <kbd className="ml-1 text-[9px] bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-1 py-px font-mono">E</kbd></button>
             )}
           </div>
 
         {isEditing ? (
           <form onSubmit={handleEditSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">제목</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('field_title_label')}</label>
               <input
                 value={editForm.title}
                 onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
@@ -1897,7 +1904,7 @@ function TicketDetailContent() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">카테고리</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('field_category_label')}</label>
               <select
                 value={editForm.category}
                 onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
@@ -1911,15 +1918,15 @@ function TicketDetailContent() {
 
             {/* 본문 에디터 */}
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">본문</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('field_body_label')}</label>
               <RichTextEditor
                 value={editForm.description}
                 onChange={(v) => setEditForm((f) => ({ ...f, description: v }))}
-                placeholder="내용을 입력하세요."
+                placeholder={t('body_placeholder')}
                 minHeight="280px"
                 onImageUpload={handleEditImageUpload}
               />
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">이미지는 툴바 🖼 버튼으로 직접 삽입하세요.</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('image_toolbar_hint')}</p>
             </div>
 
             {/* 이미지 관리 패널 — 본문 내 인라인 이미지 목록 */}
@@ -1930,9 +1937,9 @@ function TicketDetailContent() {
                 <div className="border dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50 space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                      본문 이미지 ({inlineImages.length})
+                      {t('body_images_count', { n: inlineImages.length })}
                     </p>
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500">썸네일 위에 마우스를 올려 삭제 또는 변경</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500">{t('image_hover_hint')}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {inlineImages.map((img, i) => (
@@ -1943,13 +1950,13 @@ function TicketDetailContent() {
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={img.src}
-                          alt={img.alt || `이미지 ${i + 1}`}
+                          alt={img.alt || t('image_alt_fallback', { n: i + 1 })}
                           className="w-full h-full object-cover"
                         />
                         {/* 하단 파일명 */}
                         <div className="absolute bottom-0 left-0 right-0 bg-black/40 px-1 py-0.5">
                           <span className="text-[10px] text-white truncate block">
-                            {img.alt || `이미지 ${i + 1}`}
+                            {img.alt || t('image_alt_fallback', { n: i + 1 })}
                           </span>
                         </div>
                         {/* 호버 오버레이: 삭제 / 변경 */}
@@ -1962,7 +1969,7 @@ function TicketDetailContent() {
                             }}
                             className="text-[11px] font-medium bg-white text-blue-600 hover:bg-blue-50 px-2.5 py-0.5 rounded shadow-sm w-14 text-center"
                           >
-                            변경
+                            {t('image_change')}
                           </button>
                           <button
                             type="button"
@@ -1974,7 +1981,7 @@ function TicketDetailContent() {
                             }
                             className="text-[11px] font-medium bg-white text-red-500 hover:bg-red-50 px-2.5 py-0.5 rounded shadow-sm w-14 text-center"
                           >
-                            삭제
+                            {t('image_delete')}
                           </button>
                         </div>
                       </div>
@@ -2009,7 +2016,7 @@ function TicketDetailContent() {
 
             {/* 첨부 파일 패널 — 본문과 별도 관리 (Jira/ServiceNow 방식) */}
             <div className="border dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50 space-y-2">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">첨부 파일</p>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('attachments_label')}</p>
 
               {/* 기존 첨부 목록 */}
               {editAttachments.length > 0 ? (
@@ -2026,17 +2033,17 @@ function TicketDetailContent() {
                       </a>
                       <button
                         type="button"
-                        title="첨부 파일 삭제"
+                        title={t('attachment_delete_title')}
                         onClick={() => setEditAttachments((prev) => prev.filter((_, j) => j !== i))}
                         className="shrink-0 text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors text-base leading-none"
-                       aria-label="제거">
+                       aria-label={t('remove_aria')}>
                         ✕
                       </button>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-gray-400 dark:text-gray-500">첨부된 파일이 없습니다.</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">{t('no_attachments')}</p>
               )}
 
               {/* 새 파일 추가 영역 */}
@@ -2052,7 +2059,7 @@ function TicketDetailContent() {
                 onDrop={handleEditFileDrop}
               >
                 <span>📎</span>
-                <span>{editIsDragging ? '여기에 놓으세요' : '파일 선택 또는 드래그 앤 드롭'}</span>
+                <span>{editIsDragging ? t('drop_here') : t('select_or_drop')}</span>
                 <input
                   type="file"
                   multiple
@@ -2074,7 +2081,7 @@ function TicketDetailContent() {
                         type="button"
                         onClick={() => setEditNewFiles((prev) => prev.filter((_, j) => j !== i))}
                         className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
-                       aria-label="제거">
+                       aria-label={t('remove_aria')}>
                         ✕
                       </button>
                     </li>
@@ -2089,21 +2096,21 @@ function TicketDetailContent() {
                 disabled={editSaving}
                 className="bg-blue-600 text-white px-4 py-1.5 rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editSaving ? '저장 중...' : '저장'}
+                {editSaving ? t('edit_saving') : t('edit_save')}
               </button>
               <button
                 type="button"
                 onClick={() => { setIsEditing(false); setEditAttachments([]); setEditNewFiles([]); changingImageSrcRef.current = null }}
                 className="border dark:border-gray-600 px-4 py-1.5 rounded-md text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
-                취소
+                {t('edit_cancel')}
               </button>
             </div>
           </form>
         ) : (
           ticket.description
             ? <DescriptionWithAttachments description={ticket.description} projectPath={ticket.project_path} onImageClick={(url, name) => setLightbox({ url, name })} />
-            : <p className="text-gray-400 dark:text-gray-500 text-sm">내용 없음</p>
+            : <p className="text-gray-400 dark:text-gray-500 text-sm">{t('no_content')}</p>
         )}
       </div>
 
@@ -2119,7 +2126,7 @@ function TicketDetailContent() {
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
           >
-            처리 내역 ({comments.length})
+            {t('tab_comments', { n: comments.length })}
           </button>
           <button
             onClick={() => setCommentTab('timeline')}
@@ -2129,7 +2136,7 @@ function TicketDetailContent() {
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
           >
-            타임라인
+            {t('tab_timeline')}
           </button>
         </div>
 
@@ -2144,7 +2151,7 @@ function TicketDetailContent() {
         {commentTab === 'comments' && (
         <div className="p-6">
         {comments.length === 0 ? (
-          <p className="text-gray-400 dark:text-gray-500 text-sm">아직 처리 내역이 없습니다.</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm">{t('no_comments')}</p>
         ) : (
           <div className="relative space-y-4 mb-4">
             {/* Timeline rail — 댓글들을 연결하는 좌측 vertical line */}
@@ -2163,16 +2170,16 @@ function TicketDetailContent() {
                     <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{formatName(c.author_name)}</span>
                     {c.internal && (
                       <span className="text-xs bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border border-yellow-300 dark:border-yellow-700/50 px-1.5 py-0.5 rounded">
-                        🔒 내부 메모
+                        {t('internal_memo_badge')}
                       </span>
                     )}
                     <span className="text-xs text-gray-400 dark:text-gray-500" title={new Date(c.created_at).toLocaleString('ko-KR')}>{formatSmartDate(c.created_at)}</span>
                     {c.updated_at && c.updated_at !== c.created_at && (
                       <span
                         className="text-[10px] text-gray-400 dark:text-gray-500 italic"
-                        title={`수정됨: ${new Date(c.updated_at).toLocaleString('ko-KR')}`}
+                        title={t('edited_at_title', { date: new Date(c.updated_at).toLocaleString() })}
                       >
-                        (수정됨)
+                        {t('edited_suffix')}
                       </span>
                     )}
                     {/* 수정/삭제 버튼 — 작성자 본인 또는 관리자 */}
@@ -2181,13 +2188,13 @@ function TicketDetailContent() {
                         <button
                           onClick={() => { setEditingCommentId(c.id); setEditingCommentBody(c.body) }}
                           className="text-xs text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors px-1"
-                          title="댓글 수정"
-                        >수정</button>
+                          title={t('comment_edit_title')}
+                        >{t('edit_comment')}</button>
                         <button
                           onClick={() => handleDeleteCommentConfirm(c.id)}
                           className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors px-1"
-                          title="댓글 삭제"
-                        >삭제</button>
+                          title={t('comment_delete_title')}
+                        >{t('delete_comment')}</button>
                       </span>
                     )}
                   </div>
@@ -2209,11 +2216,11 @@ function TicketDetailContent() {
                           onClick={() => handleSaveCommentEdit(c.id)}
                           disabled={savingComment || !editingCommentBody.trim()}
                           className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >{savingComment ? '저장 중…' : '저장'}</button>
+                        >{savingComment ? t('saving_comment') : t('save_comment')}</button>
                         <button
                           onClick={() => setEditingCommentId(null)}
                           className="px-3 py-1 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                        >취소</button>
+                        >{t('cancel_comment')}</button>
                       </div>
                     </div>
                   ) : (
@@ -2242,7 +2249,7 @@ function TicketDetailContent() {
               }}
               className="text-sm border dark:border-gray-600 rounded-md px-2 py-1.5 text-gray-600 dark:text-gray-300 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
             >
-              <option value="">빠른 답변 선택...</option>
+              <option value="">{t('quick_reply_select')}</option>
               {(() => {
                 const cat = ticket?.category
                 const matched = cat ? quickReplies.filter(r => r.category === cat) : []
@@ -2250,14 +2257,14 @@ function TicketDetailContent() {
                 return (
                   <>
                     {matched.length > 0 && (
-                      <optgroup label={`📌 이 티켓에 추천 (${cat})`}>
+                      <optgroup label={t('quick_reply_recommended', { cat: cat ?? '' })}>
                         {matched.map(r => (
                           <option key={r.id} value={r.name}>{r.name}</option>
                         ))}
                       </optgroup>
                     )}
                     {others.length > 0 && (
-                      <optgroup label={matched.length > 0 ? '기타 빠른 답변' : '빠른 답변'}>
+                      <optgroup label={matched.length > 0 ? t('quick_reply_other') : t('quick_reply_all')}>
                         {others.map(r => (
                           <option key={r.id} value={r.name}>{r.name}{r.category ? ` (${r.category})` : ''}</option>
                         ))}
@@ -2286,7 +2293,7 @@ function TicketDetailContent() {
                 setNewComment(val)
                 sendTyping(val.replace(/<[^>]*>/g, '').trim().length > 0)
               }}
-              placeholder="처리 내용을 입력하세요... (@로 멘션 · ⌘+Enter로 등록)"
+              placeholder={t('comment_placeholder')}
               minHeight="160px"
               mentionUsers={members.map(m => ({ id: m.username, label: m.name }))}
             />
@@ -2295,7 +2302,7 @@ function TicketDetailContent() {
           {/* 타이핑 인디케이터 */}
           {typingUsers.length > 0 && (
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 italic">
-              {typingUsers.join(', ')} 님이 입력 중...
+              {t('typing_indicator', { users: typingUsers.join(', ') })}
             </p>
           )}
 
