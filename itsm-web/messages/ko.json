@@ -1620,5 +1620,29 @@
     "tool_image": "이미지 삽입",
     "tool_undo": "실행 취소",
     "tool_redo": "다시 실행"
+  },
+  "resolution_modal": {
+    "title": "✅ 티켓 #{iid} — {label} 처리",
+    "subtitle": "해결 방법을 기록하면 유사 문제 재발 시 빠르게 대응할 수 있습니다.",
+    "status_resolved": "처리완료",
+    "status_closed": "종료",
+    "type_label": "해결 유형",
+    "type_permanent_fix_label": "🔧 영구 해결",
+    "type_permanent_fix_desc": "근본 원인이 제거됨",
+    "type_workaround_label": "🔄 임시 해결",
+    "type_workaround_desc": "재발 가능, 모니터링 필요",
+    "type_no_action_label": "⏭️ 조치 불필요",
+    "type_no_action_desc": "오인 신고 또는 자동 복구",
+    "type_duplicate_label": "♻️ 중복 티켓",
+    "type_duplicate_desc": "다른 티켓과 동일한 문제",
+    "type_by_mr_label": "🔀 MR 머지로 해결",
+    "type_by_mr_desc": "GitLab MR 배포로 해결",
+    "note_label": "해결 방법 요약",
+    "optional": "(선택)",
+    "note_placeholder": "어떻게 해결했는지 간략히 기술하세요. 추후 KB 아티클로 변환할 수 있습니다.",
+    "reason_label": "변경 이유",
+    "reason_placeholder": "예: 현장 방문 후 장치 교체 완료",
+    "cancel": "취소",
+    "confirm": "{label}로 변경"
   }
 }

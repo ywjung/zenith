@@ -1620,5 +1620,29 @@
     "tool_image": "Insert image",
     "tool_undo": "Undo",
     "tool_redo": "Redo"
+  },
+  "resolution_modal": {
+    "title": "✅ Ticket #{iid} — {label}",
+    "subtitle": "Recording resolution helps similar issues recur faster response.",
+    "status_resolved": "Resolved",
+    "status_closed": "Closed",
+    "type_label": "Resolution type",
+    "type_permanent_fix_label": "🔧 Permanent fix",
+    "type_permanent_fix_desc": "Root cause removed",
+    "type_workaround_label": "🔄 Workaround",
+    "type_workaround_desc": "May recur, monitoring needed",
+    "type_no_action_label": "⏭️ No action",
+    "type_no_action_desc": "Misreport or auto-recovered",
+    "type_duplicate_label": "♻️ Duplicate",
+    "type_duplicate_desc": "Same issue as another ticket",
+    "type_by_mr_label": "🔀 Resolved by MR",
+    "type_by_mr_desc": "Resolved via GitLab MR deployment",
+    "note_label": "Resolution summary",
+    "optional": "(optional)",
+    "note_placeholder": "Briefly describe how it was resolved. Can be converted to a KB article later.",
+    "reason_label": "Reason for change",
+    "reason_placeholder": "e.g., On-site device replacement completed",
+    "cancel": "Cancel",
+    "confirm": "Change to {label}"
   }
 }
