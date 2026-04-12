@@ -43,7 +43,15 @@
     "export_csv": "📊 Download CSV",
     "export_no_data": "No data to export.",
     "export_csv_success": "Downloaded CSV ({rows} rows)",
-    "report_print_title": "ZENITH ITSM Report ({from} ~ {to})"
+    "report_print_title": "ZENITH ITSM Report ({from} ~ {to})",
+    "code_copy": "📋 Copy",
+    "code_copied": "✓ Copied",
+    "code_copy_aria": "Copy code",
+    "code_copy_success": "Code copied.",
+    "code_copy_failed": "Copy failed",
+    "skip_to_main": "Skip to main content",
+    "tagline": "IT Service Management",
+    "toast_region": "Notification area"
   },
   "nav": {
     "home": "Home",

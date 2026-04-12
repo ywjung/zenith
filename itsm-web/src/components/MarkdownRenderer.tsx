@@ -1,14 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import FilePreview from './FilePreview'
 import DOMPurify from 'dompurify'
+import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 
-// M-6: 허용된 URL 스킴 — http, https, mailto, / (상대경로), # (앵커)만 허용
-const ALLOWED_URL_PATTERN = /^(https?:|mailto:|\/|#)/i
+// SEC: 허용된 URL 스킴 — http, https, mailto, / (단일 상대경로, // protocol-relative 차단), # (앵커)
+// 이전: /^(https?:|mailto:|\/|#)/i 는 //evil.com 같은 protocol-relative URL을 통과시킴 → reverse-tabnabbing
+const ALLOWED_URL_PATTERN = /^(https?:|mailto:|\/(?!\/)|#)/i
 
 interface Props {
   content: string
@@ -19,8 +22,32 @@ function isHtml(text: string): boolean {
   return /^\s*<\/?[a-zA-Z]/.test(text) || /<[a-zA-Z][^>]*>/.test(text)
 }
 
+// SEC: DOMPurify hook — 모든 외부 링크에 rel="noopener noreferrer" 강제 (reverse-tabnabbing 방지)
+let dompurifyHookInstalled = false
+function ensureDompurifyHook() {
+  if (dompurifyHookInstalled) return
+  if (typeof window === 'undefined') return
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A') {
+      const href = node.getAttribute('href') || ''
+      // protocol-relative (//evil.com) 추가 방어
+      if (/^\/\//.test(href)) {
+        node.removeAttribute('href')
+        return
+      }
+      // 외부 링크: target="_blank" 강제 + rel="noopener noreferrer"
+      if (/^https?:/i.test(href)) {
+        node.setAttribute('target', '_blank')
+        node.setAttribute('rel', 'noopener noreferrer')
+      }
+    }
+  })
+  dompurifyHookInstalled = true
+}
+
 // C-1: 커스텀 정규식 sanitizer를 isomorphic-dompurify로 교체
 function sanitizeHtml(html: string): string {
+  ensureDompurifyHook()
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
       'p', 'br', 'b', 'i', 'strong', 'em', 'u', 's', 'strike',
@@ -31,8 +58,8 @@ function sanitizeHtml(html: string): string {
     ],
     ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'rel'],
     ALLOW_DATA_ATTR: false,
-    // M-6: 허용되지 않는 URL 스킴 차단 (javascript:, data: 등)
-    ALLOWED_URI_REGEXP: /^(https?:|mailto:|\/|#)/i,
+    // SEC: 허용 URI — protocol-relative (//) 차단
+    ALLOWED_URI_REGEXP: /^(https?:|mailto:|\/(?!\/)|#)/i,
   })
 }
 
@@ -74,8 +101,89 @@ function extractFilename(href: string, linkText: string): string {
   }
 }
 
+/** 코드 children에서 언어 감지 (className="language-XXX") */
+function detectLanguage(children: React.ReactNode): string | null {
+  if (children && typeof children === 'object' && 'props' in children) {
+    const props = (children as { props?: { className?: string } }).props
+    const cls = props?.className || ''
+    const m = cls.match(/language-(\w+)/)
+    if (m) return m[1]
+  }
+  return null
+}
+
+/** 코드블록 + 복사 버튼 + 언어 라벨 + 자동 syntax highlight */
+function CodeBlockWithCopy({ children }: { children: React.ReactNode }) {
+  const t = useTranslations('common')
+  const [copied, setCopied] = useState(false)
+  const codeRef = useRef<HTMLPreElement>(null)
+  const language = detectLanguage(children)
+
+  // 마운트 시 highlight.js로 syntax highlighting (동적 import — bundle 영향 최소화)
+  useEffect(() => {
+    let cancelled = false
+    if (!codeRef.current) return
+    const codeEl = codeRef.current.querySelector('code')
+    if (!codeEl) return
+    import('highlight.js/lib/common')
+      .then((hljs) => {
+        if (cancelled || !codeEl) return
+        try {
+          hljs.default.highlightElement(codeEl as HTMLElement)
+        } catch {
+          // ignore
+        }
+      })
+      .catch(() => { /* highlight.js not installed; gracefully degrade */ })
+    return () => { cancelled = true }
+  }, [children])
+
+  const handleCopy = async () => {
+    let text = ''
+    const extract = (node: React.ReactNode): void => {
+      if (typeof node === 'string') text += node
+      else if (Array.isArray(node)) node.forEach(extract)
+      else if (node && typeof node === 'object' && 'props' in node) {
+        const props = (node as { props?: { children?: React.ReactNode } }).props
+        if (props?.children !== undefined) extract(props.children)
+      }
+    }
+    extract(children)
+    try {
+      await navigator.clipboard.writeText(text.trim())
+      setCopied(true)
+      toast.success(t('code_copy_success'))
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error(t('code_copy_failed'))
+    }
+  }
+
+  return (
+    <div className="relative group/code my-3">
+      <pre ref={codeRef} className="overflow-x-auto rounded-lg bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 text-xs">{children}</pre>
+      {language && (
+        <span className="absolute top-2 left-3 text-[10px] uppercase font-mono tracking-wider text-gray-500 select-none">
+          {language}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-600 text-gray-100 opacity-0 group-hover/code:opacity-100 transition-opacity"
+        aria-label={t('code_copy_aria')}
+      >
+        {copied ? t('code_copied') : t('code_copy')}
+      </button>
+    </div>
+  )
+}
+
 /** ReactMarkdown 커스텀 컴포넌트 */
 const markdownComponents: Components = {
+  pre({ children }) {
+    return <CodeBlockWithCopy>{children}</CodeBlockWithCopy>
+  },
   // 인라인 이미지 — GitLab 업로드 경로를 프록시로 변환 후 FilePreview로 렌더링
   img({ src, alt }) {
     if (!src) return null

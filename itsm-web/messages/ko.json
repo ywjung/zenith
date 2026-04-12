@@ -43,7 +43,15 @@
     "export_csv": "📊 CSV 다운로드",
     "export_no_data": "내보낼 데이터가 없습니다.",
     "export_csv_success": "CSV 파일을 다운로드했습니다 ({rows}행)",
-    "report_print_title": "ZENITH ITSM 리포트 ({from} ~ {to})"
+    "report_print_title": "ZENITH ITSM 리포트 ({from} ~ {to})",
+    "code_copy": "📋 복사",
+    "code_copied": "✓ 복사됨",
+    "code_copy_aria": "코드 복사",
+    "code_copy_success": "코드를 복사했습니다.",
+    "code_copy_failed": "복사 실패",
+    "skip_to_main": "본문으로 건너뛰기",
+    "tagline": "IT 서비스 관리 플랫폼",
+    "toast_region": "알림 영역"
   },
   "nav": {
     "home": "홈",
