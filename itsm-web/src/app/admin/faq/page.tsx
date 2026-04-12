@@ -1,6 +1,7 @@
 'use client'
 
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 import { useEffect, useState, useRef } from 'react'
 import { useConfirm } from '@/components/ConfirmProvider'
 import { useAuth } from '@/context/AuthContext'
@@ -36,6 +37,7 @@ type FormState = {
 const EMPTY: FormState = { question: '', answer: '', category: '', order_num: '0', is_active: true }
 
 export default function FaqAdminPage() {
+  const t = useTranslations('admin.faq')
   const confirm = useConfirm()
   const { isAgent } = useAuth()
   const [items, setItems] = useState<FaqItem[]>([])
@@ -64,7 +66,7 @@ export default function FaqAdminPage() {
     return (
       <div className="text-center py-20">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500 dark:text-gray-400">에이전트 이상 권한이 필요합니다.</p>
+        <p className="text-gray-500 dark:text-gray-400">{t('no_permission')}</p>
       </div>
     )
   }
@@ -116,20 +118,20 @@ export default function FaqAdminPage() {
       }
       closeForm()
     } catch (e) {
-      setError(errorMessage(e, '저장에 실패했습니다.'))
+      setError(errorMessage(e, t('save_failed')))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id: number) {
-    if (!(await confirm({ title: '이 FAQ 항목을 삭제하시겠습니까?', variant: 'danger', confirmLabel: '확인' }))) return
+    if (!(await confirm({ title: t('delete_confirm'), variant: 'danger' }))) return
     setError(null)
     try {
       await deleteFaqItem(id)
       setItems(prev => prev.filter(r => r.id !== id))
     } catch (e) {
-      setError(errorMessage(e, '삭제에 실패했습니다.'))
+      setError(errorMessage(e, t('delete_failed')))
     }
   }
 
@@ -138,22 +140,22 @@ export default function FaqAdminPage() {
       const updated = await updateFaqItem(item.id, { is_active: !item.is_active })
       setItems(prev => prev.map(r => r.id === item.id ? updated : r))
     } catch (e) {
-      setError(errorMessage(e, '변경에 실패했습니다.'))
+      setError(errorMessage(e, t('toggle_failed')))
     }
   }
 
   async function handleImportStatic() {
-    if (!(await confirm({ title: `기존 정적 FAQ ${STATIC_FAQ.length}건을 DB에 가져옵니다.\n이미 등록된 항목은 건너뜁니다. 계속하시겠습니까?`, variant: 'danger', confirmLabel: '확인' }))) return
+    if (!(await confirm({ title: t('import_confirm', { n: STATIC_FAQ.length }), variant: 'danger' }))) return
     setImporting(true)
     setError(null)
     try {
       const result = await bulkCreateFaqItems(
         STATIC_FAQ.map((item, i) => ({ ...item, order_num: i, is_active: true }))
       )
-      toast.success(`완료: ${result.created}건 추가, ${result.skipped}건 건너뜀`)
+      toast.success(t('import_success', { created: result.created, skipped: result.skipped }))
       load()
     } catch (e) {
-      setError(errorMessage(e, '가져오기에 실패했습니다.'))
+      setError(errorMessage(e, t('import_failed')))
     } finally {
       setImporting(false)
     }
@@ -177,10 +179,10 @@ export default function FaqAdminPage() {
             <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            FAQ 관리
+            {t('title')}
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            자주 묻는 질문을 DB에서 관리합니다. 활성 항목만 도움말 FAQ 탭에 표시됩니다.
+            {t('subtitle')}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -190,14 +192,14 @@ export default function FaqAdminPage() {
               disabled={importing}
               className="text-sm px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {importing ? '가져오는 중...' : '📥 기존 FAQ 가져오기'}
+              {importing ? t('importing') : t('import_button')}
             </button>
           )}
           <button
             onClick={openCreate}
             className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
-            + 새 FAQ 추가
+            {t('new_item')}
           </button>
         </div>
       </div>
@@ -205,9 +207,9 @@ export default function FaqAdminPage() {
       {/* 통계 */}
       {items.length > 0 && (
         <div className="flex gap-3 flex-wrap text-xs text-gray-500 dark:text-gray-400">
-          <span>전체 <strong className="text-gray-700 dark:text-gray-200">{items.length}</strong>건</span>
-          <span>활성 <strong className="text-green-600 dark:text-green-400">{activeCount}</strong>건</span>
-          <span>비활성 <strong className="text-gray-400">{items.length - activeCount}</strong>건</span>
+          <span>{t('stat_total', { n: items.length })}</span>
+          <span>{t('stat_active', { n: activeCount })}</span>
+          <span>{t('stat_inactive', { n: items.length - activeCount })}</span>
         </div>
       )}
 
@@ -215,7 +217,7 @@ export default function FaqAdminPage() {
       {error && (
         <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
           <span>⚠️</span><span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto text-xs opacity-60 hover:opacity-100" aria-label="닫기">✕</button>
+          <button onClick={() => setError(null)} className="ml-auto text-xs opacity-60 hover:opacity-100" aria-label={t('close_aria')}>✕</button>
         </div>
       )}
 
@@ -224,36 +226,36 @@ export default function FaqAdminPage() {
         <div ref={formRef} className="bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded-xl shadow-sm p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-              {editing ? `FAQ 수정 — #${editing.id}` : '새 FAQ 항목'}
+              {editing ? t('form_edit_title', { id: editing.id }) : t('form_new_title')}
             </h3>
-            <button onClick={closeForm} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm" aria-label="닫기">✕</button>
+            <button onClick={closeForm} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm" aria-label={t('close_aria')}>✕</button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">질문 <span className="text-red-500">*</span></label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('field_question')} <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={form.question}
                 onChange={e => setForm(f => ({ ...f, question: e.target.value }))}
-                placeholder="예: 티켓을 등록한 후 얼마나 기다려야 하나요?"
+                placeholder={t('question_placeholder')}
                 maxLength={500}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">카테고리</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('field_category')}</label>
               <select
                 value={form.category}
                 onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
               >
-                <option value="">미분류</option>
+                <option value="">{t('category_uncategorized')}</option>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">정렬 순서</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('field_order')}</label>
               <input
                 type="number"
                 value={form.order_num}
@@ -264,14 +266,14 @@ export default function FaqAdminPage() {
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                답변 <span className="text-red-500">*</span>
-                <span className="font-normal text-gray-400 ml-1">(줄바꿈: Enter, 불릿: • 로 시작, 번호: ①②③④ 로 시작)</span>
+                {t('field_answer')} <span className="text-red-500">*</span>
+                <span className="font-normal text-gray-400 ml-1">{t('answer_hint')}</span>
               </label>
               <textarea
                 value={form.answer}
                 onChange={e => setForm(f => ({ ...f, answer: e.target.value }))}
                 rows={8}
-                placeholder="답변 내용을 입력하세요..."
+                placeholder={t('answer_placeholder')}
                 maxLength={20000}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y dark:bg-gray-800 dark:text-gray-100 font-mono"
               />
@@ -285,7 +287,7 @@ export default function FaqAdminPage() {
                 onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
                 className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              <label htmlFor="is_active" className="text-sm text-gray-700 dark:text-gray-300">활성화 (도움말 탭에 표시)</label>
+              <label htmlFor="is_active" className="text-sm text-gray-700 dark:text-gray-300">{t('enable_active')}</label>
             </div>
           </div>
 
@@ -294,14 +296,14 @@ export default function FaqAdminPage() {
               onClick={closeForm}
               className="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
-              취소
+              {t('cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={saving || !form.question.trim() || !form.answer.trim()}
               className="text-sm px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {saving ? '저장 중...' : (editing ? '수정 저장' : '추가')}
+              {saving ? t('saving') : (editing ? t('update_save') : t('add'))}
             </button>
           </div>
         </div>
@@ -316,7 +318,7 @@ export default function FaqAdminPage() {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="질문 검색..."
+              placeholder={t('search_placeholder')}
               className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-100 placeholder:text-gray-400"
             />
           </div>
@@ -325,7 +327,7 @@ export default function FaqAdminPage() {
             onChange={e => setFilterCat(e.target.value)}
             className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">전체 카테고리</option>
+            <option value="">{t('all_categories')}</option>
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
@@ -335,17 +337,17 @@ export default function FaqAdminPage() {
       {loading ? (
         <div className="text-center py-16 text-gray-400 dark:text-gray-500">
           <div className="text-3xl mb-2 animate-pulse">⏳</div>
-          <p className="text-sm">불러오는 중...</p>
+          <p className="text-sm">{t('loading')}</p>
         </div>
       ) : items.length === 0 ? (
         <div className="text-center py-16 text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
           <div className="text-4xl mb-3">❓</div>
-          <p className="text-sm font-medium">등록된 FAQ가 없습니다.</p>
-          <p className="text-xs mt-1">기존 FAQ를 가져오거나 새 항목을 추가하세요.</p>
+          <p className="text-sm font-medium">{t('empty_title')}</p>
+          <p className="text-xs mt-1">{t('empty_hint')}</p>
         </div>
       ) : displayed.length === 0 ? (
         <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-          <p className="text-sm">검색 결과가 없습니다.</p>
+          <p className="text-sm">{t('no_search_results')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -373,7 +375,7 @@ export default function FaqAdminPage() {
                       )}
                       {!item.is_active && (
                         <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full">
-                          비활성
+                          {t('inactive_badge')}
                         </span>
                       )}
                     </div>
@@ -385,26 +387,26 @@ export default function FaqAdminPage() {
                   {/* 메타 + 액션 */}
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-xs text-gray-400 dark:text-gray-600">
-                      #{item.id} · 순서 {item.order_num} · {item.created_at ? new Date(item.created_at).toLocaleDateString('ko') : ''}
+                      {t('meta_format', { id: item.id, order: item.order_num, date: item.created_at ? new Date(item.created_at).toLocaleDateString() : '' })}
                     </span>
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => handleToggleActive(item)}
                         className={`text-xs font-medium ${item.is_active ? 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' : 'text-green-600 hover:text-green-700 dark:text-green-400'}`}
                       >
-                        {item.is_active ? '비활성화' : '활성화'}
+                        {item.is_active ? t('disable') : t('enable')}
                       </button>
                       <button
                         onClick={() => openEdit(item)}
                         className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
                       >
-                        수정
+                        {t('edit')}
                       </button>
                       <button
                         onClick={() => handleDelete(item.id)}
                         className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium"
                       >
-                        삭제
+                        {t('delete')}
                       </button>
                     </div>
                   </div>
