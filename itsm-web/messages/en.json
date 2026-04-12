@@ -35,7 +35,15 @@
     "offline": {
       "banner": "You are offline. Some features may not work.",
       "sse_reconnecting": "Reconnecting to live updates... (attempt {attempt})"
-    }
+    },
+    "star_add": "Add to favorites",
+    "star_remove": "Remove from favorites",
+    "export_button": "Export",
+    "export_pdf": "🖨 Print PDF",
+    "export_csv": "📊 Download CSV",
+    "export_no_data": "No data to export.",
+    "export_csv_success": "Downloaded CSV ({rows} rows)",
+    "report_print_title": "ZENITH ITSM Report ({from} ~ {to})"
   },
   "nav": {
     "home": "Home",
