@@ -984,6 +984,28 @@
       "how_1": "If environment variables (NOTIFICATION_ENABLED / TELEGRAM_ENABLED / SLACK_ENABLED) are disabled, notifications will not be sent regardless of this setting.",
       "how_2": "If environment variables are enabled, this toggle controls sending at runtime.",
       "how_3": "Changes take effect immediately and propagate to all servers within 60 seconds."
+    },
+    "role_labels": {
+      "title": "Role Display Names",
+      "subtitle": "Customize the display names of user roles. Changes are reflected across the UI immediately.",
+      "section_title": "Role display names",
+      "reset_all": "Reset all",
+      "reset": "Reset",
+      "reset_title": "Reset to default",
+      "changed": "Changed",
+      "preview": "Preview",
+      "note": "Role codes (admin, agent, etc.) are not changed. Only display names are updated.",
+      "save": "Save",
+      "saving": "Saving…",
+      "loading": "Loading…",
+      "load_failed": "Failed to load settings.",
+      "save_success": "Role names saved.",
+      "save_failed": "Save failed",
+      "desc_admin": "All admin features, system settings, user role changes",
+      "desc_agent": "Ticket handling, SLA management, internal reports",
+      "desc_pl": "View/edit all tickets, KB authoring, reassignment, bulk actions",
+      "desc_developer": "Handle own tickets, view KB, trigger GitLab pipelines",
+      "desc_user": "Create/view own tickets, read KB, request service catalog"
     }
   }
 }
