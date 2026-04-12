@@ -5,6 +5,7 @@ import { API_BASE } from '@/lib/constants'
 import { adminFetch } from '@/lib/adminFetch'
 import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
+import { errorMessage } from '@/lib/utils'
 
 interface EmailTemplate {
   id: number
@@ -72,7 +73,7 @@ function EmailTemplatesContent() {
       setSelected(data); setEditing(false)
       setSuccess('저장됐습니다.'); setTimeout(() => setSuccess(null), 3000)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장 실패')
+      setError(errorMessage(e, '저장 실패'))
     } finally { setSaving(false) }
   }
 
@@ -85,7 +86,7 @@ function EmailTemplatesContent() {
       })
       setPreview(data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '미리보기 실패')
+      setError(errorMessage(e, '미리보기 실패'))
     } finally { setPreviewLoading(false) }
   }
 

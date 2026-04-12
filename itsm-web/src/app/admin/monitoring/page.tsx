@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { API_BASE } from '@/lib/constants'
 
 interface HealthStatus {
@@ -50,6 +51,7 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export default function MonitoringPage() {
+  const confirm = useConfirm()
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [celery, setCelery] = useState<CeleryStats | null>(null)
   const [redis, setRedis] = useState<RedisStats | null>(null)
@@ -58,7 +60,7 @@ export default function MonitoringPage() {
   const [flushingCache, setFlushingCache] = useState(false)
 
   async function flushCache() {
-    if (!confirm('ITSM 캐시를 초기화하시겠습니까? 일시적으로 응답이 느려질 수 있습니다.')) return
+    if (!(await confirm({ title: 'ITSM 캐시를 초기화하시겠습니까? 일시적으로 응답이 느려질 수 있습니다.', variant: 'danger', confirmLabel: '확인' }))) return
     setFlushingCache(true)
     try {
       await fetch(`${API_BASE}/admin/redis/cache`, { method: 'DELETE', credentials: 'include' })
@@ -190,7 +192,7 @@ export default function MonitoringPage() {
             <button
               onClick={flushCache}
               disabled={flushingCache}
-              className="text-xs bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-700 dark:text-red-400 px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 transition-colors"
+              className="text-xs bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-700 dark:text-red-400 px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {flushingCache ? '초기화 중…' : '🗑️ ITSM 캐시 초기화'}
             </button>

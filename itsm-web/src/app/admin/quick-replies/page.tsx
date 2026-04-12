@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { fetchQuickReplies, createQuickReply, updateQuickReply, deleteQuickReply } from '@/lib/api'
 import type { QuickReply } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
@@ -10,6 +11,7 @@ type FormData = { name: string; content: string; category: string }
 const EMPTY_FORM: FormData = { name: '', content: '', category: '' }
 
 export default function QuickRepliesPage() {
+  const confirm = useConfirm()
   const { isAgent } = useAuth()
   const t = useTranslations('admin')
   const [items, setItems] = useState<QuickReply[]>([])
@@ -75,7 +77,7 @@ export default function QuickRepliesPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm(t('quick_replies.delete_confirm'))) return
+    if (!(await confirm({ title: t('quick_replies.delete_confirm'), variant: 'danger', confirmLabel: '확인' }))) return
     try {
       await deleteQuickReply(id)
       setItems((prev) => prev.filter((r) => r.id !== id))
@@ -146,7 +148,7 @@ export default function QuickRepliesPage() {
             <button
               onClick={handleSave}
               disabled={saving || !form.name.trim() || !form.content.trim()}
-              className="text-sm px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium disabled:opacity-50"
+              className="text-sm px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? t('common.saving') : t('common.save')}
             </button>

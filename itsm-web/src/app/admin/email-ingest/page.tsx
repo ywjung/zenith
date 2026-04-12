@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
 import { adminFetch } from '@/lib/adminFetch'
+import { errorMessage } from '@/lib/utils'
 
 interface IngestStatus {
   enabled: boolean
@@ -27,7 +28,7 @@ export default function EmailIngestPage() {
       const data = await adminFetch('/admin/email-ingest/status')
       setStatus(data)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '불러오기 실패')
+      setError(errorMessage(e, '불러오기 실패'))
     } finally {
       setLoading(false)
     }
@@ -42,7 +43,7 @@ export default function EmailIngestPage() {
       const res = await adminFetch('/admin/email-ingest/trigger', { method: 'POST' })
       setTriggerResult(`태스크 큐에 등록됨 (ID: ${(res as { task_id: string }).task_id})`)
     } catch (e: unknown) {
-      setTriggerResult(`오류: ${e instanceof Error ? e.message : '실행 실패'}`)
+      setTriggerResult(`오류: ${errorMessage(e, '실행 실패')}`)
     } finally {
       setTriggering(false)
     }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
 import { adminFetch } from '@/lib/adminFetch'
+import { errorMessage } from '@/lib/utils'
 
 interface PreviewData {
   old_audit_logs: number
@@ -79,7 +80,7 @@ export default function DbCleanupPage() {
       const data = await adminFetch<PreviewData>('/admin/db-cleanup/preview')
       setPreview(data)
     } catch (e: unknown) {
-      setPreviewError(e instanceof Error ? e.message : '불러오기 실패')
+      setPreviewError(errorMessage(e, '불러오기 실패'))
     } finally {
       setPreviewLoading(false)
     }
@@ -118,7 +119,7 @@ export default function DbCleanupPage() {
           timestamp: new Date().toISOString(),
           label,
           duration_ms: Date.now() - started,
-          error: e instanceof Error ? e.message : '실행 실패',
+          error: errorMessage(e, '실행 실패'),
         },
         ...prev,
       ])
@@ -146,7 +147,7 @@ export default function DbCleanupPage() {
           timestamp: new Date().toISOString(),
           label: 'VACUUM ANALYZE',
           duration_ms: Date.now() - started,
-          error: e instanceof Error ? e.message : '실행 실패',
+          error: errorMessage(e, '실행 실패'),
         },
         ...prev,
       ])

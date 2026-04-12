@@ -7,6 +7,7 @@ import { adminFetch } from '@/lib/adminFetch'
 import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
 import { useConfirm } from '@/components/ConfirmProvider'
+import { errorMessage } from '@/lib/utils'
 
 interface ApiKey {
   id: number
@@ -68,7 +69,7 @@ function ApiKeysContent() {
       setNewKey(res.key)
       setShowForm(false)
       load()
-    } catch (e) { setError(e instanceof Error ? e.message : '생성 실패') }
+    } catch (e) { setError(errorMessage(e, '생성 실패')) }
     finally { setSaving(false) }
   }
 

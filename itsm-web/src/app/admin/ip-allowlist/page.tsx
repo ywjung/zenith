@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { useAuth } from '@/context/AuthContext'
 import { API_BASE } from '@/lib/constants'
+import { errorMessage } from '@/lib/utils'
 
 interface Entry {
   id: number
@@ -14,6 +16,7 @@ interface Entry {
 }
 
 export default function IpAllowlistPage() {
+  const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const [entries, setEntries] = useState<Entry[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,7 +71,7 @@ export default function IpAllowlistPage() {
       setNewLabel('')
       setMsg({ type: 'ok', text: `${added.cidr} 이(가) 추가되었습니다.` })
     } catch (e: unknown) {
-      setMsg({ type: 'err', text: e instanceof Error ? e.message : '추가 실패' })
+      setMsg({ type: 'err', text: errorMessage(e, '추가 실패') })
     } finally {
       setAdding(false)
     }
@@ -91,7 +94,7 @@ export default function IpAllowlistPage() {
   }
 
   async function deleteEntry(id: number, cidr: string) {
-    if (!confirm(`${cidr} 을(를) 삭제하시겠습니까?`)) return
+    if (!(await confirm({ title: `${cidr} 을(를) 삭제하시겠습니까?`, variant: 'danger', confirmLabel: '확인' }))) return
     try {
       const r = await fetch(`${API_BASE}/admin/ip-allowlist/${id}`, {
         method: 'DELETE',
@@ -206,7 +209,7 @@ export default function IpAllowlistPage() {
             <button
               onClick={addEntry}
               disabled={adding || !newCidr.trim()}
-              className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+              className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
             >
               {adding ? '추가 중…' : '+ 추가'}
             </button>
@@ -295,7 +298,7 @@ export default function IpAllowlistPage() {
                   onClick={() => deleteEntry(entry.id, entry.cidr)}
                   className="shrink-0 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors text-lg leading-none"
                   title="삭제"
-                >
+                 aria-label="제거">
                   ×
                 </button>
               </div>

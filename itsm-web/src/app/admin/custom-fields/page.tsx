@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { fetchCustomFieldDefs, createCustomFieldDef, updateCustomFieldDef, deleteCustomFieldDef } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import type { CustomFieldDef } from '@/types'
+import { errorMessage } from '@/lib/utils'
 
 const FIELD_TYPES = [
   { value: 'text',     label: '텍스트' },
@@ -22,6 +24,7 @@ const EMPTY_FORM = {
 }
 
 export default function CustomFieldsPage() {
+  const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const [fields, setFields] = useState<CustomFieldDef[]>([])
   const [loading, setLoading] = useState(true)
@@ -105,7 +108,7 @@ export default function CustomFieldsPage() {
       setShowForm(false)
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '저장에 실패했습니다.')
+      setError(errorMessage(err, '저장에 실패했습니다.'))
     } finally {
       setSaving(false)
     }
@@ -121,7 +124,7 @@ export default function CustomFieldsPage() {
   }
 
   async function handleDelete(f: CustomFieldDef) {
-    if (!confirm(`'${f.label}' 필드를 삭제하면 모든 티켓의 해당 값도 삭제됩니다. 계속하시겠습니까?`)) return
+    if (!(await confirm({ title: `'${f.label}' 필드를 삭제하면 모든 티켓의 해당 값도 삭제됩니다. 계속하시겠습니까?`, variant: 'danger', confirmLabel: '확인' }))) return
     try {
       await deleteCustomFieldDef(f.id)
       await load()
@@ -216,7 +219,7 @@ export default function CustomFieldsPage() {
                   {form.options.map(opt => (
                     <span key={opt} className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs px-2 py-1 rounded-full">
                       {opt}
-                      <button onClick={() => removeOption(opt)} className="text-blue-400 hover:text-blue-600 leading-none">×</button>
+                      <button onClick={() => removeOption(opt)} className="text-blue-400 hover:text-blue-600 leading-none" aria-label="삭제">×</button>
                     </span>
                   ))}
                 </div>
@@ -253,7 +256,7 @@ export default function CustomFieldsPage() {
             <button
               onClick={handleSave}
               disabled={saving || !form.label.trim() || (editId === null && !form.name.trim())}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-colors"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg font-medium transition-colors"
             >
               {saving ? '저장 중...' : '저장'}
             </button>

@@ -6,6 +6,7 @@ import { adminFetch } from '@/lib/adminFetch'
 import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
 import { useConfirm } from '@/components/ConfirmProvider'
+import { errorMessage } from '@/lib/utils'
 
 interface OutboundWebhook {
   id: number
@@ -78,7 +79,7 @@ function WebhooksContent() {
       setShowForm(false); load()
       setSuccess(editId ? '수정됐습니다.' : '웹훅이 등록됐습니다.')
       setTimeout(() => setSuccess(null), 3000)
-    } catch (e) { setError(e instanceof Error ? e.message : '저장 실패') }
+    } catch (e) { setError(errorMessage(e, '저장 실패')) }
     finally { setSaving(false) }
   }
 
@@ -88,7 +89,7 @@ function WebhooksContent() {
       await adminFetch(`/admin/outbound-webhooks/${id}`, { method: 'DELETE' })
       load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+      setError(errorMessage(e, '삭제에 실패했습니다.'))
     }
   }
 
@@ -98,7 +99,7 @@ function WebhooksContent() {
       const res = await adminFetch(`/admin/outbound-webhooks/${id}/test`, { method: 'POST' })
       setSuccess(res?.success ? `테스트 발송 성공 (HTTP ${res.status})` : `테스트 발송 실패 (HTTP ${res?.status})`)
       setTimeout(() => setSuccess(null), 4000)
-    } catch (e) { setError(e instanceof Error ? e.message : '테스트 실패') }
+    } catch (e) { setError(errorMessage(e, '테스트 실패')) }
     finally { setTesting(null) }
   }
 

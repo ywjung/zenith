@@ -1,8 +1,10 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
+import { useConfirm } from '@/components/ConfirmProvider'
 
 // cron 프리셋
 const CRON_PRESETS = [
@@ -45,6 +47,7 @@ interface RecurringTicket {
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
 
 function RecurringTicketsContent() {
+  const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const [items, setItems] = useState<RecurringTicket[]>([])
   const [loading, setLoading] = useState(true)
@@ -88,7 +91,7 @@ function RecurringTicketsContent() {
       setForm({ title: '', description: '', category: 'other', priority: 'medium', project_id: '', cron_expr: '0 9 1 * *', cron_label: '', is_active: true })
       await load()
     } catch (e) {
-      alert(String(e))
+      toast.error(String(e))
     } finally {
       setSubmitting(false)
     }
@@ -105,14 +108,14 @@ function RecurringTicketsContent() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('삭제하시겠습니까?')) return
+    if (!(await confirm({ title: '삭제하시겠습니까?', variant: 'danger', confirmLabel: '확인' }))) return
     await fetch(`${API}/admin/recurring-tickets/${id}`, { method: 'DELETE', credentials: 'include' })
     await load()
   }
 
   async function handleRunNow(id: number) {
     await fetch(`${API}/admin/recurring-tickets/${id}/run-now`, { method: 'POST', credentials: 'include' })
-    alert('태스크가 큐에 추가되었습니다.')
+    toast.success('태스크가 큐에 추가되었습니다.')
   }
 
   if (!isAdmin) return <p className="p-6 text-red-600">관리자 권한이 필요합니다.</p>
@@ -197,7 +200,7 @@ function RecurringTicketsContent() {
             </div>
           </div>
           <div className="flex gap-2 pt-2">
-            <button type="submit" disabled={submitting} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={submitting} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
               {submitting ? '저장 중...' : '저장'}
             </button>
             <button type="button" onClick={() => setShowForm(false)} className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-4 py-2 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-600">

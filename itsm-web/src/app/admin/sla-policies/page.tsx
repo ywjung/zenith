@@ -160,7 +160,7 @@ function SLAPoliciesContent() {
                       <button
                         onClick={() => handleSave(policy.priority)}
                         disabled={saving}
-                        className="flex-1 text-sm bg-blue-600 text-white py-1.5 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                        className="flex-1 text-sm bg-blue-600 text-white py-1.5 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {saving ? t('sla.saving') : t('common.save')}
                       </button>

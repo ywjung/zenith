@@ -43,7 +43,7 @@ function PreviewBanner({ title, content, type }: { title: string; content: strin
         {title && <span className="font-semibold">{title}</span>}
         {content && <span className="ml-2 opacity-80">{content}</span>}
       </div>
-      <button className="shrink-0 opacity-50 text-lg leading-none" disabled>×</button>
+      <button className="shrink-0 opacity-50 text-lg leading-none" disabled aria-label="제거">×</button>
     </div>
   )
 }
@@ -220,7 +220,7 @@ export default function AnnouncementsPage() {
             <button
               onClick={() => setShowForm(false)}
               className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none"
-            >×</button>
+             aria-label="닫기">×</button>
           </div>
 
           <div className="p-6 space-y-5">
@@ -330,7 +330,7 @@ export default function AnnouncementsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-xl disabled:opacity-50 transition-colors"
+                className="px-5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {saving ? t('common.saving') : editId !== null ? t('announcements.update_btn') : t('announcements.save_btn')}
               </button>
@@ -352,7 +352,8 @@ export default function AnnouncementsPage() {
             </button>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-700/50 border-b dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                 <th className="px-5 py-3 text-left w-20">{t('announcements.col_type')}</th>
@@ -458,6 +459,7 @@ export default function AnnouncementsPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

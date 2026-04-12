@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { errorMessage } from '@/lib/utils'
 
 interface FieldDef {
   name: string
@@ -66,7 +67,7 @@ function FieldEditor({ fields, onChange }: { fields: FieldDef[]; onChange: (fiel
               <input type="checkbox" checked={f.required} onChange={e => update(i, { required: e.target.checked })} />
               필수
             </label>
-            <button onClick={() => remove(i)} className="text-xs text-red-500 hover:text-red-700 px-1">✕</button>
+            <button onClick={() => remove(i)} className="text-xs text-red-500 hover:text-red-700 px-1" aria-label="삭제">✕</button>
           </div>
           {f.type === 'select' && (
             <input
@@ -125,7 +126,7 @@ export default function ServiceCatalogAdminPage() {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '목록 조회 실패')
       setItems(await res.json())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '목록 조회 실패')
+      setError(errorMessage(e, '목록 조회 실패'))
     } finally { setLoading(false) }
   }
 
@@ -185,7 +186,7 @@ export default function ServiceCatalogAdminPage() {
       setShowModal(false)
       await load()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
+      setError(errorMessage(err, '오류가 발생했습니다.'))
     } finally { setSaving(false) }
   }
 
@@ -202,7 +203,7 @@ export default function ServiceCatalogAdminPage() {
       }
       await load()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '상태 변경에 실패했습니다.')
+      setError(errorMessage(e, '상태 변경에 실패했습니다.'))
     }
   }
 
@@ -216,7 +217,7 @@ export default function ServiceCatalogAdminPage() {
       setDeleteId(null)
       await load()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+      setError(errorMessage(e, '삭제에 실패했습니다.'))
     }
   }
 
@@ -311,8 +312,8 @@ export default function ServiceCatalogAdminPage() {
 
       {/* 생성/편집 모달 */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-scaleIn">
             <div className="p-5 border-b dark:border-gray-700">
               <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
                 {editId ? '카탈로그 항목 편집' : '새 카탈로그 항목'}
@@ -433,7 +434,7 @@ export default function ServiceCatalogAdminPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+                className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? '저장 중...' : '저장'}
               </button>
@@ -444,8 +445,8 @@ export default function ServiceCatalogAdminPage() {
 
       {/* 삭제 확인 모달 */}
       {deleteId !== null && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 max-w-sm w-full">
+        <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 max-w-sm w-full animate-scaleIn">
             <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">항목 삭제</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">이 카탈로그 항목을 삭제할까요?</p>
             <div className="flex justify-end gap-2">

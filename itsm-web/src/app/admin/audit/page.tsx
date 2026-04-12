@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { fetchAuditLogsCursor, downloadAuditLogs } from '@/lib/api'
 import type { AuditLogEntry } from '@/types'
 import { useAuth } from '@/context/AuthContext'
+import { errorMessage } from '@/lib/utils'
 
 const ACTION_META: Record<string, { label: string; icon: string; color: string }> = {
   'ticket.create':              { label: '티켓 생성',       icon: '✚', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
@@ -107,7 +108,7 @@ function AuditContent() {
       setHasMore(data.has_more)
       setLoadedCount(prev => reset ? data.items.length : prev + data.items.length)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '불러오기 실패')
+      setError(errorMessage(e, '불러오기 실패'))
     } finally {
       setLoading(false)
       setInitialLoading(false)
@@ -254,7 +255,7 @@ function AuditContent() {
           </span>
           <button
             onClick={handleDownload} disabled={downloading}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 whitespace-nowrap"
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
             ⬇ {downloading ? '다운로드 중…' : 'CSV 다운로드'}
           </button>
@@ -264,7 +265,7 @@ function AuditContent() {
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg px-4 py-3 text-sm flex items-center justify-between">
           <span>⚠️ {error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-3">✕</button>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-3" aria-label="닫기">✕</button>
         </div>
       )}
 
@@ -293,10 +294,23 @@ function AuditContent() {
                   const hasDetail = !!(log.old_value || log.new_value)
                   const initial = ((log.actor_name ?? log.actor_username)[0] ?? '?').toUpperCase()
 
+                  // 액션 카테고리별 좌측 rail 색상
+                  const railColor = log.action.startsWith('ticket.delete') || log.action.endsWith('.delete')
+                    ? 'border-l-red-400 dark:border-l-red-600'
+                    : log.action.startsWith('ticket.create') || log.action.endsWith('.add') || log.action.endsWith('.create')
+                      ? 'border-l-green-400 dark:border-l-green-600'
+                      : log.action.startsWith('ticket.bulk')
+                        ? 'border-l-purple-400 dark:border-l-purple-600'
+                        : log.action.startsWith('kb.')
+                          ? 'border-l-teal-400 dark:border-l-teal-600'
+                          : log.action.startsWith('user.')
+                            ? 'border-l-yellow-400 dark:border-l-yellow-600'
+                            : 'border-l-blue-400 dark:border-l-blue-600'
+
                   return (
                     <Fragment key={log.id}>
                       <tr
-                        className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${hasDetail ? 'cursor-pointer' : ''}`}
+                        className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-l-4 ${railColor} ${hasDetail ? 'cursor-pointer' : ''}`}
                         onClick={() => hasDetail && setExpanded(isExpanded ? null : log.id)}
                       >
                         <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap font-mono">

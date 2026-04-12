@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
 import { adminFetch } from '@/lib/adminFetch'
+import { errorMessage } from '@/lib/utils'
 
 interface GinIndex {
   name: string
@@ -31,7 +32,7 @@ export default function SearchIndexPage() {
       const data = await adminFetch('/admin/search-index/status')
       setStatus(data as IndexStatus)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '불러오기 실패')
+      setError(errorMessage(e, '불러오기 실패'))
     } finally {
       setLoading(false)
     }
@@ -47,7 +48,7 @@ export default function SearchIndexPage() {
       setSyncResult({ ok: true, message: `동기화 태스크 등록됨 (ID: ${(res as { task_id: string }).task_id})` })
       setTimeout(load, 3000)
     } catch (e: unknown) {
-      setSyncResult({ ok: false, message: e instanceof Error ? e.message : '실행 실패' })
+      setSyncResult({ ok: false, message: errorMessage(e, '실행 실패') })
     } finally {
       setSyncing(false)
     }

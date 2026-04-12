@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { createServiceType, updateServiceType, deleteServiceType } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
@@ -141,7 +142,7 @@ function OptionsEditor({
             {contextOptions.map((opt) => (
               <span key={opt} className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full px-2.5 py-1 text-gray-700 dark:text-gray-300">
                 {opt}
-                <button type="button" onClick={() => remove(opt)} className="hover:text-red-500 ml-0.5 leading-none">×</button>
+                <button type="button" onClick={() => remove(opt)} className="hover:text-red-500 ml-0.5 leading-none" aria-label="삭제">×</button>
               </span>
             ))}
           </div>
@@ -155,6 +156,7 @@ function OptionsEditor({
 }
 
 export default function ServiceTypesPage() {
+  const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const { serviceTypes, reload } = useServiceTypes()
   const t = useTranslations('admin')
@@ -241,7 +243,7 @@ export default function ServiceTypesPage() {
   }
 
   const handleDelete = async (st: ServiceType) => {
-    if (!confirm(t('service_types.delete_confirm', { emoji: st.emoji, label: st.label }))) return
+    if (!(await confirm({ title: t('service_types.delete_confirm', { emoji: st.emoji, label: st.label }), variant: 'danger', confirmLabel: '확인' }))) return
     try {
       await deleteServiceType(st.id)
       reload()
@@ -332,7 +334,7 @@ export default function ServiceTypesPage() {
             onOptionsChange={(v) => setCreateForm(f => ({ ...f, context_options: v }))}
           />
           <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={saving} className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
               {saving ? t('service_types.saving') : t('common.save')}
             </button>
             <button type="button" onClick={() => setShowCreate(false)} className="border border-gray-300 dark:border-gray-600 px-5 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -407,7 +409,7 @@ export default function ServiceTypesPage() {
                   onOptionsChange={(v) => setEditForm(f => ({ ...f, context_options: v }))}
                 />
                 <div className="flex gap-2">
-                  <button onClick={() => handleUpdate(st.id)} disabled={saving} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                  <button onClick={() => handleUpdate(st.id)} disabled={saving} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     {saving ? t('service_types.saving') : t('common.save')}
                   </button>
                   <button onClick={() => setEditingId(null)} className="border border-gray-300 dark:border-gray-600 px-4 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -475,7 +477,7 @@ export default function ServiceTypesPage() {
                       disabled={usageLoading}
                       className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors text-lg leading-none disabled:cursor-not-allowed"
                       title={t('common.delete')}
-                    >✕</button>
+                     aria-label="삭제">✕</button>
                   )}
                 </div>
               </div>

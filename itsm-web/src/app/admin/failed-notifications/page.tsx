@@ -1,6 +1,8 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { API_BASE } from '@/lib/constants'
 import { logger } from '@/lib/logger'
 
@@ -23,6 +25,7 @@ interface ListResponse {
 }
 
 export default function FailedNotificationsPage() {
+  const confirm = useConfirm()
   const [data, setData] = useState<ListResponse | null>(null)
   const [showResolved, setShowResolved] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -69,14 +72,14 @@ export default function FailedNotificationsPage() {
       await fetchData(showResolved, page * LIMIT)
     } catch (err) {
       logger.error('Resolve failed:', err)
-      alert('처리 중 오류가 발생했습니다.')
+      toast.error('처리 중 오류가 발생했습니다.')
     } finally {
       setActionLoading(null)
     }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('이 항목을 영구 삭제하시겠습니까?')) return
+    if (!(await confirm({ title: '이 항목을 영구 삭제하시겠습니까?', variant: 'danger', confirmLabel: '확인' }))) return
     setActionLoading(id)
     try {
       const res = await fetch(`${API_BASE}/admin/failed-notifications/${id}`, {
@@ -87,7 +90,7 @@ export default function FailedNotificationsPage() {
       await fetchData(showResolved, page * LIMIT)
     } catch (err) {
       logger.error('Delete failed:', err)
-      alert('삭제 중 오류가 발생했습니다.')
+      toast.error('삭제 중 오류가 발생했습니다.')
     } finally {
       setActionLoading(null)
     }

@@ -41,6 +41,42 @@ export function formatDate(
   return `${Math.floor(days / 7)}주 전`
 }
 
+/**
+ * 한국어 사용자에게 자연스러운 스마트 상대 날짜 표시.
+ *  - 1분 미만: "방금 전"
+ *  - 같은 날: "오늘 14:30"
+ *  - 어제: "어제 14:30"
+ *  - 7일 이내: "N일 전"
+ *  - 같은 해: "M월 D일"
+ *  - 그 외: "YYYY-MM-DD"
+ */
+export function formatSmartDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60_000)
+  if (diffMin < 1) return '방금 전'
+  if (diffMin < 60) return `${diffMin}분 전`
+
+  const sameDay = d.toDateString() === now.toDateString()
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  const isYesterday = d.toDateString() === yesterday.toDateString()
+  const time = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+  if (sameDay) return `오늘 ${time}`
+  if (isYesterday) return `어제 ${time}`
+
+  const diffDay = Math.floor(diffMs / 86_400_000)
+  if (diffDay < 7) return `${diffDay}일 전`
+  if (d.getFullYear() === now.getFullYear()) {
+    return d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+  }
+  return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
 /** 파일 크기를 사람이 읽기 쉬운 단위로 변환. */
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`
@@ -122,4 +158,19 @@ export function markdownToHtml(md: string): string {
   })
 
   return html
+}
+
+/**
+ * catch 블록의 에러를 사람이 읽을 수 있는 메시지로 변환.
+ * Error 인스턴스의 message를 우선하고, 그 외엔 fallback을 사용.
+ *
+ * 전에는 22곳에서 `e instanceof Error ? e.message : '...'` 패턴이 중복됨.
+ * 사용 예:
+ *   catch (e) { toast.error(errorMessage(e, '삭제 실패')) }
+ *   catch (e) { setError(errorMessage(e, '로드 실패')) }
+ */
+export function errorMessage(err: unknown, fallback = '오류가 발생했습니다.'): string {
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'string' && err) return err
+  return fallback
 }

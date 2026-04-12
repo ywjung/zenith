@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { API_BASE, ROLE_LABELS, ROLES } from '@/lib/constants'
 import { useRoleLabelsContext } from '@/context/RoleLabelsContext'
+import { errorMessage } from '@/lib/utils'
 
 const ROLE_ICONS: Record<string, string> = {
   admin:     '🔑',
@@ -62,7 +63,7 @@ export default function RoleLabelsPage() {
       setMsg({ type: 'ok', text: '역할 명칭이 저장되었습니다.' })
       setTimeout(() => setMsg(null), 3000)
     } catch (e: unknown) {
-      setMsg({ type: 'err', text: e instanceof Error ? e.message : '저장 실패' })
+      setMsg({ type: 'err', text: errorMessage(e, '저장 실패') })
     } finally {
       setSaving(false)
     }

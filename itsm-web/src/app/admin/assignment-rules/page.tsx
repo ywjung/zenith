@@ -1,6 +1,8 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import {
   fetchAssignmentRules,
   createAssignmentRule,
@@ -146,6 +148,7 @@ function RuleFormPanel({
 }
 
 function AssignmentRulesContent() {
+  const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const { serviceTypes, getEmoji, getLabel } = useServiceTypes()
   const t = useTranslations('admin')
@@ -187,7 +190,7 @@ function AssignmentRulesContent() {
       setShowCreateForm(false)
       setCreateForm(EMPTY_FORM)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('assignment_rules.create_failed'))
+      toast.error(e instanceof Error ? e.message : t('assignment_rules.create_failed'))
     }
   }
 
@@ -221,7 +224,7 @@ function AssignmentRulesContent() {
       )
       setEditingId(null)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('assignment_rules.edit_failed'))
+      toast.error(e instanceof Error ? e.message : t('assignment_rules.edit_failed'))
     }
   }
 
@@ -230,18 +233,18 @@ function AssignmentRulesContent() {
       const updated = await updateAssignmentRule(rule.id, { enabled: !rule.enabled })
       setRules((prev) => prev.map((r) => (r.id === rule.id ? updated : r)))
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('assignment_rules.toggle_failed'))
+      toast.error(e instanceof Error ? e.message : t('assignment_rules.toggle_failed'))
     }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t('assignment_rules.delete_confirm'))) return
+    if (!(await confirm({ title: t('assignment_rules.delete_confirm'), variant: 'danger', confirmLabel: '확인' }))) return
     try {
       await deleteAssignmentRule(id)
       setRules((prev) => prev.filter((r) => r.id !== id))
       if (editingId === id) setEditingId(null)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('assignment_rules.delete_failed'))
+      toast.error(e instanceof Error ? e.message : t('assignment_rules.delete_failed'))
     }
   }
 
@@ -378,7 +381,7 @@ function AssignmentRulesContent() {
                       onClick={() => handleDelete(rule.id)}
                       className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors text-lg leading-none"
                       title={t('common.delete')}
-                    >
+                     aria-label="삭제">
                       ✕
                     </button>
                   </div>

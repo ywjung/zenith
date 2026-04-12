@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { API_BASE } from '@/lib/constants'
+import { errorMessage } from '@/lib/utils'
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
@@ -126,7 +127,7 @@ export default function BusinessHoursPage() {
       if (!r.ok) throw new Error((await r.json()).detail ?? '저장 실패')
       setMsg({ type: 'ok', text: '업무 시간 설정이 저장되었습니다.' })
     } catch (e: unknown) {
-      setMsg({ type: 'err', text: e instanceof Error ? e.message : '저장 실패' })
+      setMsg({ type: 'err', text: errorMessage(e, '저장 실패') })
     } finally {
       setSaving(false)
     }
@@ -149,7 +150,7 @@ export default function BusinessHoursPage() {
       setNewDate('')
       setNewName('')
     } catch (e: unknown) {
-      setMsg({ type: 'err', text: e instanceof Error ? e.message : '추가 실패' })
+      setMsg({ type: 'err', text: errorMessage(e, '추가 실패') })
     } finally {
       setAddingHoliday(false)
     }
@@ -165,7 +166,7 @@ export default function BusinessHoursPage() {
       if (!r.ok && r.status !== 204) throw new Error('삭제 실패')
       setHolidays(prev => prev.filter(h => h.id !== id))
     } catch (e: unknown) {
-      setMsg({ type: 'err', text: e instanceof Error ? e.message : '삭제 실패' })
+      setMsg({ type: 'err', text: errorMessage(e, '삭제 실패') })
     }
   }
 
@@ -222,7 +223,7 @@ export default function BusinessHoursPage() {
           <button
             onClick={saveSchedule}
             disabled={saving}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
           >
             {saving ? '저장 중…' : '저장'}
           </button>
@@ -330,7 +331,7 @@ export default function BusinessHoursPage() {
                     }}
                     title={`${year}년 탭 삭제`}
                     className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs leading-none"
-                  >
+                   aria-label="삭제">
                     ×
                   </button>
                 )}
@@ -407,7 +408,7 @@ export default function BusinessHoursPage() {
             <button
               onClick={addHoliday}
               disabled={addingHoliday || !newDate}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
             >
               {addingHoliday ? '추가 중…' : '+ 추가'}
             </button>

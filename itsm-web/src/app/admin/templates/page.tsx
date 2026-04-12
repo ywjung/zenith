@@ -1,6 +1,8 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { fetchTemplates, createTemplate, updateTemplate, deleteTemplate } from '@/lib/api'
 import type { TicketTemplate } from '@/types'
 import { useAuth } from '@/context/AuthContext'
@@ -11,6 +13,7 @@ type FormData = { name: string; category: string; description: string; enabled: 
 const EMPTY_FORM: FormData = { name: '', category: '', description: '', enabled: true }
 
 function TemplatesContent() {
+  const confirm = useConfirm()
   const { isAgent } = useAuth()
   const { serviceTypes, getEmoji, getLabel } = useServiceTypes()
   const t = useTranslations('admin')
@@ -72,17 +75,17 @@ function TemplatesContent() {
       }
       setShowForm(false)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('templates.save_failed'))
+      toast.error(e instanceof Error ? e.message : t('templates.save_failed'))
     }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t('templates.delete_confirm'))) return
+    if (!(await confirm({ title: t('templates.delete_confirm'), variant: 'danger', confirmLabel: '확인' }))) return
     try {
       await deleteTemplate(id)
       setTemplates((prev) => prev.filter((tmpl) => tmpl.id !== id))
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('templates.delete_failed'))
+      toast.error(e instanceof Error ? e.message : t('templates.delete_failed'))
     }
   }
 
@@ -96,7 +99,7 @@ function TemplatesContent() {
       })
       setTemplates((prev) => prev.map((x) => (x.id === tmpl.id ? updated : x)))
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('templates.toggle_failed'))
+      toast.error(e instanceof Error ? e.message : t('templates.toggle_failed'))
     }
   }
 
@@ -255,7 +258,7 @@ function TemplatesContent() {
                     onClick={() => handleDelete(tmpl.id)}
                     className="text-gray-300 hover:text-red-500 transition-colors text-lg leading-none"
                     title={t('common.delete')}
-                  >
+                   aria-label="삭제">
                     ✕
                   </button>
                 </div>

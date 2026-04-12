@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { errorMessage } from '@/lib/utils'
 
 interface UserWorkload {
   username: string
@@ -62,24 +63,10 @@ function fmtHours(h: number | null): string {
   return `${(h / 24).toFixed(1)}일`
 }
 
-// ── 서브 컴포넌트 ───────────────────────────────────────────────────────────
+// AIRGAP: 외부 avatar_url(gravatar) 대신 로컬 Avatar 컴포넌트(hash 색상 이니셜) 사용
+import AvatarComponent from '@/components/Avatar'
 function Avatar({ row }: { row: UserWorkload }) {
-  const [imgFailed, setImgFailed] = useState(false)
-  if (row.avatar_url && !imgFailed) {
-    return (
-      <img
-        src={row.avatar_url}
-        alt=""
-        className="w-8 h-8 rounded-full object-cover shrink-0"
-        onError={() => setImgFailed(true)}
-      />
-    )
-  }
-  return (
-    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-white text-sm font-bold flex items-center justify-center shrink-0">
-      {row.name.charAt(0)}
-    </div>
-  )
+  return <AvatarComponent name={row.name} username={row.username} size="md" />
 }
 
 function SlaBar({ rate, met, total }: { rate: number | null; met: number; total: number }) {
@@ -194,7 +181,7 @@ export default function WorkloadPage() {
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText)
       setRows(await res.json())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '불러오기 실패')
+      setError(errorMessage(e, '불러오기 실패'))
     } finally {
       setLoading(false)
     }
@@ -321,7 +308,7 @@ export default function WorkloadPage() {
           ))}
         </select>
         {selectedUser && (
-          <button onClick={() => setSelectedUser('')} className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500">✕</button>
+          <button onClick={() => setSelectedUser('')} className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500" aria-label="제거">✕</button>
         )}
         <div className="ml-auto">
           <input

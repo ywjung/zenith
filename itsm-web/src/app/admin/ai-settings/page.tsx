@@ -5,6 +5,8 @@ import {
   fetchAISettings, updateAISettings, testAIConnection, fetchOllamaModels,
   type AISettingsData, type OllamaModel,
 } from '@/lib/api'
+import { errorMessage } from '@/lib/utils'
+import SpinnerIcon from '@/components/SpinnerIcon'
 
 const OPENAI_MODELS = [
   { value: 'gpt-4o-mini', label: 'GPT-4o Mini (빠름·저렴)' },
@@ -87,7 +89,7 @@ export default function AISettingsPage() {
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '저장 중 오류가 발생했습니다.')
+      setError(errorMessage(e, '저장 중 오류가 발생했습니다.'))
     } finally {
       setSaving(false)
     }
@@ -122,7 +124,7 @@ export default function AISettingsPage() {
         msg: `연결 성공! 모델: ${model} · 추론: ${inferSec} · 분류: ${res.sample_result.category}/${res.sample_result.priority}`,
       })
     } catch (e: unknown) {
-      setTestResult({ ok: false, msg: e instanceof Error ? e.message : '연결 실패' })
+      setTestResult({ ok: false, msg: errorMessage(e, '연결 실패') })
     } finally {
       setTesting(false)
       if (testTimerRef.current) { clearInterval(testTimerRef.current); testTimerRef.current = null }
@@ -144,7 +146,7 @@ export default function AISettingsPage() {
         set('ollama_model', res.models[0].name)
       }
     } catch (e: unknown) {
-      setOllamaFetchError(e instanceof Error ? e.message : 'Ollama 서버에 연결할 수 없습니다.')
+      setOllamaFetchError(errorMessage(e, 'Ollama 서버에 연결할 수 없습니다.'))
       setOllamaModels([])
     } finally {
       setOllamaFetching(false)
@@ -169,8 +171,9 @@ export default function AISettingsPage() {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors flex items-center gap-2"
         >
+          {saving && <SpinnerIcon className="w-4 h-4" />}
           {saving ? '저장 중...' : saved ? '✅ 저장됨' : '저장'}
         </button>
       </div>
@@ -208,10 +211,13 @@ export default function AISettingsPage() {
       {/* Provider 선택 */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
         <p className="font-semibold text-gray-900 dark:text-white">AI 제공자</p>
+        <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+          💡 폐쇄망(내부망) 환경에서는 <strong>Ollama</strong>만 사용 가능합니다. OpenAI는 외부 인터넷 연결이 필요합니다.
+        </p>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { value: 'openai', label: 'OpenAI', icon: '🟢', desc: 'GPT-4o 계열 — 클라우드' },
-            { value: 'ollama', label: 'Ollama', icon: '🦙', desc: '로컬 LLM — 인터넷 불필요' },
+            { value: 'openai', label: 'OpenAI', icon: '🟢', desc: 'GPT-4o 계열 — 외부 인터넷 필요' },
+            { value: 'ollama', label: 'Ollama', icon: '🦙', desc: '로컬 LLM — 인터넷 불필요 ✅' },
           ].map(p => (
             <button
               key={p.value}
@@ -446,8 +452,9 @@ export default function AISettingsPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
+          className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
         >
+          {saving && <SpinnerIcon className="w-4 h-4" />}
           {saving ? '저장 중...' : saved ? '✅ 저장됨' : '저장'}
         </button>
         <button

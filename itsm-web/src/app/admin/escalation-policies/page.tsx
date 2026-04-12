@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useRoleLabels } from '@/context/RoleLabelsContext'
 import RequireAuth from '@/components/RequireAuth'
 import { useConfirm } from '@/components/ConfirmProvider'
+import { errorMessage } from '@/lib/utils'
 
 interface EscalationPolicy {
   id: number
@@ -219,7 +220,7 @@ function EscalationContent() {
       else await adminFetch('/admin/escalation-policies', { method: 'POST', body: JSON.stringify(body) })
       setShowForm(false); loadPolicies()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장 실패')
+      setError(errorMessage(e, '저장 실패'))
     } finally { setSaving(false) }
   }
 

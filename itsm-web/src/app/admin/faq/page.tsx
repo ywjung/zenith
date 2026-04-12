@@ -1,11 +1,14 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState, useRef } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { useAuth } from '@/context/AuthContext'
 import {
   fetchFaqItems, createFaqItem, updateFaqItem, deleteFaqItem, bulkCreateFaqItems,
   type FaqItem,
 } from '@/lib/api'
+import { errorMessage } from '@/lib/utils'
 
 /* ─── 정적 FAQ 데이터 (일괄 가져오기 용) ─────────────────────────────── */
 const STATIC_FAQ: Array<{ question: string; answer: string; category: string }> = [
@@ -33,6 +36,7 @@ type FormState = {
 const EMPTY: FormState = { question: '', answer: '', category: '', order_num: '0', is_active: true }
 
 export default function FaqAdminPage() {
+  const confirm = useConfirm()
   const { isAgent } = useAuth()
   const [items, setItems] = useState<FaqItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,20 +116,20 @@ export default function FaqAdminPage() {
       }
       closeForm()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장에 실패했습니다.')
+      setError(errorMessage(e, '저장에 실패했습니다.'))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('이 FAQ 항목을 삭제하시겠습니까?')) return
+    if (!(await confirm({ title: '이 FAQ 항목을 삭제하시겠습니까?', variant: 'danger', confirmLabel: '확인' }))) return
     setError(null)
     try {
       await deleteFaqItem(id)
       setItems(prev => prev.filter(r => r.id !== id))
     } catch (e) {
-      setError(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+      setError(errorMessage(e, '삭제에 실패했습니다.'))
     }
   }
 
@@ -134,22 +138,22 @@ export default function FaqAdminPage() {
       const updated = await updateFaqItem(item.id, { is_active: !item.is_active })
       setItems(prev => prev.map(r => r.id === item.id ? updated : r))
     } catch (e) {
-      setError(e instanceof Error ? e.message : '변경에 실패했습니다.')
+      setError(errorMessage(e, '변경에 실패했습니다.'))
     }
   }
 
   async function handleImportStatic() {
-    if (!confirm(`기존 정적 FAQ ${STATIC_FAQ.length}건을 DB에 가져옵니다.\n이미 등록된 항목은 건너뜁니다. 계속하시겠습니까?`)) return
+    if (!(await confirm({ title: `기존 정적 FAQ ${STATIC_FAQ.length}건을 DB에 가져옵니다.\n이미 등록된 항목은 건너뜁니다. 계속하시겠습니까?`, variant: 'danger', confirmLabel: '확인' }))) return
     setImporting(true)
     setError(null)
     try {
       const result = await bulkCreateFaqItems(
         STATIC_FAQ.map((item, i) => ({ ...item, order_num: i, is_active: true }))
       )
-      alert(`완료: ${result.created}건 추가, ${result.skipped}건 건너뜀`)
+      toast.success(`완료: ${result.created}건 추가, ${result.skipped}건 건너뜀`)
       load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '가져오기에 실패했습니다.')
+      setError(errorMessage(e, '가져오기에 실패했습니다.'))
     } finally {
       setImporting(false)
     }
@@ -184,7 +188,7 @@ export default function FaqAdminPage() {
             <button
               onClick={handleImportStatic}
               disabled={importing}
-              className="text-sm px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+              className="text-sm px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {importing ? '가져오는 중...' : '📥 기존 FAQ 가져오기'}
             </button>
@@ -211,7 +215,7 @@ export default function FaqAdminPage() {
       {error && (
         <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
           <span>⚠️</span><span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto text-xs opacity-60 hover:opacity-100">✕</button>
+          <button onClick={() => setError(null)} className="ml-auto text-xs opacity-60 hover:opacity-100" aria-label="닫기">✕</button>
         </div>
       )}
 
@@ -222,7 +226,7 @@ export default function FaqAdminPage() {
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
               {editing ? `FAQ 수정 — #${editing.id}` : '새 FAQ 항목'}
             </h3>
-            <button onClick={closeForm} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
+            <button onClick={closeForm} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm" aria-label="닫기">✕</button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -295,7 +299,7 @@ export default function FaqAdminPage() {
             <button
               onClick={handleSave}
               disabled={saving || !form.question.trim() || !form.answer.trim()}
-              className="text-sm px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 transition-colors"
+              className="text-sm px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {saving ? '저장 중...' : (editing ? '수정 저장' : '추가')}
             </button>

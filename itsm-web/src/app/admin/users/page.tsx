@@ -1,5 +1,6 @@
 'use client'
 
+import { toast } from 'sonner'
 import React, { useEffect, useState } from 'react'
 import { fetchAdminUsers, updateUserRole, triggerSudo } from '@/lib/api'
 import type { UserRole } from '@/types'
@@ -94,7 +95,7 @@ function AdminUsersContent() {
         prev.map((u) => u.gitlab_user_id === gitlabUserId ? { ...u, role: newRole as UserRole['role'] } : u)
       )
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('users.role_change_failed'))
+      toast.error(e instanceof Error ? e.message : t('users.role_change_failed'))
     } finally {
       setSaving(null)
     }
@@ -114,10 +115,10 @@ function AdminUsersContent() {
         setExpandedUserId(gitlabUserId)
       } else {
         const err = await r.json().catch(() => ({}))
-        alert((err as { detail?: string }).detail || t('users.session_load_error', { status: r.status }))
+        toast.error((err as { detail?: string }).detail || t('users.session_load_error', { status: r.status }))
       }
     } catch {
-      alert(t('users.session_load_failed'))
+      toast.error(t('users.session_load_failed'))
     } finally {
       setSessionsLoading(null)
     }
@@ -136,10 +137,10 @@ function AdminUsersContent() {
         }))
       } else {
         const err = await r.json().catch(() => ({}))
-        alert(err.detail || t('users.session_revoke_failed'))
+        toast.error(err.detail || t('users.session_revoke_failed'))
       }
     } catch {
-      alert(t('users.session_revoke_error'))
+      toast.error(t('users.session_revoke_error'))
     }
   }
 
@@ -223,7 +224,8 @@ function AdminUsersContent() {
         {loading ? (
           <div className="text-center py-16 text-gray-400">{t('common.loading')}</div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <table className="w-full text-sm min-w-[700px]">
             <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">{t('users.col_user')}</th>
@@ -339,6 +341,7 @@ function AdminUsersContent() {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
