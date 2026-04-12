@@ -1604,5 +1604,21 @@
     "copy": "Copy",
     "remove_title": "Remove from list",
     "remove_aria": "Remove"
+  },
+  "rich_editor": {
+    "no_members": "No members",
+    "default_placeholder": "Enter content...",
+    "alt_prompt": "Image alt text (for screen readers — blank = filename):",
+    "tool_bold": "Bold (⌘B / Ctrl+B)",
+    "tool_italic": "Italic (⌘I / Ctrl+I)",
+    "tool_inline_code": "Inline code (⌘E / Ctrl+E)",
+    "tool_bullet_list": "Bullet list (⌘⇧8)",
+    "tool_ordered_list": "Numbered list (⌘⇧7)",
+    "tool_quote": "Quote (⌘⇧B)",
+    "tool_code_block": "Code block (⌘⌥C)",
+    "tool_table": "Insert table",
+    "tool_image": "Insert image",
+    "tool_undo": "Undo",
+    "tool_redo": "Redo"
   }
 }

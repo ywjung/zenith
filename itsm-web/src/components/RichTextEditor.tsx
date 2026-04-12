@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
+import { useTranslations } from 'next-intl'
 import { markdownToHtml } from '@/lib/utils'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -68,6 +69,7 @@ interface MentionListProps extends SuggestionProps {
 }
 
 function MentionList({ items, command }: MentionListProps) {
+  const t = useTranslations('rich_editor')
   const [selectedIndex, setSelectedIndex] = useState(0)
 
   const selectItem = useCallback((index: number) => {
@@ -81,7 +83,7 @@ function MentionList({ items, command }: MentionListProps) {
   return (
     <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-lg shadow-lg overflow-hidden text-sm z-50 min-w-[160px]">
       {items.length === 0 ? (
-        <div className="px-3 py-2 text-gray-400 text-xs">멤버 없음</div>
+        <div className="px-3 py-2 text-gray-400 text-xs">{t('no_members')}</div>
       ) : items.map((item, index) => (
         <button
           key={item.id}
@@ -102,13 +104,15 @@ function MentionList({ items, command }: MentionListProps) {
 export default function RichTextEditor({
   value,
   onChange,
-  placeholder = '내용을 입력하세요...',
+  placeholder,
   minHeight = '200px',
   onImageUpload,
   onInsertRef,
   mentionUsers = [],
 }: RichTextEditorProps) {
+  const t = useTranslations('rich_editor')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const resolvedPlaceholder = placeholder ?? t('default_placeholder')
 
   function toHtml(v: string): string {
     if (!v) return ''
@@ -124,7 +128,7 @@ export default function RichTextEditor({
       StarterKit.configure({
         codeBlock: false,
       }),
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder: resolvedPlaceholder }),
       Image.configure({ inline: false }),
       Table.configure({ resizable: false }),
       TableRow,
@@ -238,7 +242,10 @@ export default function RichTextEditor({
     if (!onImageUpload) return
     try {
       const url = await onImageUpload(file)
-      editor.chain().focus().setImage({ src: url }).run()
+      // 접근성을 위한 alt text 입력 (선택) — 파일명을 기본값으로
+      const defaultAlt = file.name.replace(/\.[^.]+$/, '')
+      const alt = window.prompt(t('alt_prompt'), defaultAlt) ?? defaultAlt
+      editor.chain().focus().setImage({ src: url, alt: alt || defaultAlt }).run()
     } catch {
       // silently ignore image upload errors
     }
@@ -259,21 +266,21 @@ export default function RichTextEditor({
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           active={editor.isActive('bold')}
-          title="굵게 (Ctrl+B)"
+          title={t('tool_bold')}
         >
           <strong>B</strong>
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleItalic().run()}
           active={editor.isActive('italic')}
-          title="기울임 (Ctrl+I)"
+          title={t('tool_italic')}
         >
           <em>I</em>
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleCode().run()}
           active={editor.isActive('code')}
-          title="인라인 코드"
+          title={t('tool_inline_code')}
         >
           <span className="font-mono">`·`</span>
         </ToolbarButton>
@@ -281,28 +288,28 @@ export default function RichTextEditor({
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           active={editor.isActive('bulletList')}
-          title="글머리 목록"
+          title={t('tool_bullet_list')}
         >
           ≡
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           active={editor.isActive('orderedList')}
-          title="번호 목록"
+          title={t('tool_ordered_list')}
         >
           1.
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           active={editor.isActive('blockquote')}
-          title="인용"
+          title={t('tool_quote')}
         >
           &ldquo;
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
           active={editor.isActive('codeBlock')}
-          title="코드 블록"
+          title={t('tool_code_block')}
         >
           <span className="font-mono">{'{ }'}</span>
         </ToolbarButton>
@@ -315,7 +322,7 @@ export default function RichTextEditor({
               .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
               .run()
           }
-          title="표 삽입"
+          title={t('tool_table')}
         >
           ⊞
         </ToolbarButton>
@@ -323,7 +330,7 @@ export default function RichTextEditor({
           <>
             <ToolbarButton
               onClick={() => fileInputRef.current?.click()}
-              title="이미지 삽입"
+              title={t('tool_image')}
             >
               🖼
             </ToolbarButton>
@@ -331,7 +338,7 @@ export default function RichTextEditor({
               ref={fileInputRef}
               type="file"
               accept="image/*"
-              aria-label="이미지 삽입"
+              aria-label={t('tool_image')}
               className="sr-only"
               onChange={handleImageInputChange}
             />
@@ -340,13 +347,13 @@ export default function RichTextEditor({
         <span className="w-px bg-gray-300 dark:bg-gray-600 mx-1 self-stretch" />
         <ToolbarButton
           onClick={() => editor.chain().focus().undo().run()}
-          title="실행 취소"
+          title={t('tool_undo')}
         >
           ↩
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().redo().run()}
-          title="다시 실행"
+          title={t('tool_redo')}
         >
           ↪
         </ToolbarButton>

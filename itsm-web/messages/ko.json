@@ -1604,5 +1604,21 @@
     "copy": "복사",
     "remove_title": "목록에서 제거",
     "remove_aria": "삭제"
+  },
+  "rich_editor": {
+    "no_members": "멤버 없음",
+    "default_placeholder": "내용을 입력하세요...",
+    "alt_prompt": "이미지 설명 (스크린리더용 — 비워두면 파일명 사용):",
+    "tool_bold": "굵게 (⌘B / Ctrl+B)",
+    "tool_italic": "기울임 (⌘I / Ctrl+I)",
+    "tool_inline_code": "인라인 코드 (⌘E / Ctrl+E)",
+    "tool_bullet_list": "글머리 목록 (⌘⇧8)",
+    "tool_ordered_list": "번호 목록 (⌘⇧7)",
+    "tool_quote": "인용 (⌘⇧B)",
+    "tool_code_block": "코드 블록 (⌘⌥C)",
+    "tool_table": "표 삽입",
+    "tool_image": "이미지 삽입",
+    "tool_undo": "실행 취소",
+    "tool_redo": "다시 실행"
   }
 }
