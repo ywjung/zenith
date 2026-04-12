@@ -114,7 +114,7 @@ def _fetch_incident_summaries(incident_iids: list[int], pid: str) -> list[dict]:
 def list_problems(
     state: str = Query(default="all", description="all | open | closed"),
     search: Optional[str] = Query(default=None),
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10000),
     per_page: int = Query(default=20, ge=1, le=100),
     project_id: Optional[str] = Query(default=None),
     _user: dict = Depends(get_current_user),

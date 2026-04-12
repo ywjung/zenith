@@ -140,7 +140,7 @@ def list_changes(
     change_type: Optional[str] = None,
     risk_level: Optional[str] = None,
     requester_username: Optional[str] = None,
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10000),
     per_page: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),

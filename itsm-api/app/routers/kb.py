@@ -131,7 +131,7 @@ def list_articles(
     q: Optional[str] = None,
     category: Optional[str] = None,
     tags: Optional[str] = Query(default=None, description="쉼표로 구분된 태그 (F-8)"),
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10000),
     per_page: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     user: dict = Depends(require_scope("kb:read")),

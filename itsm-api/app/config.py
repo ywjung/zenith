@@ -216,6 +216,24 @@ class Settings(BaseSettings):
                     "생성: python -c \"import secrets; print(secrets.token_hex(32))\""
                 )
 
+            # DATABASE_URL / REDIS_URL에 기본(취약) 패스워드 포함 여부 — 프로덕션 거부
+            if "changeme" in self.DATABASE_URL:
+                raise ValueError(
+                    "DATABASE_URL에 기본 패스워드('changeme')가 포함되어 있습니다. "
+                    "프로덕션에서는 강력한 패스워드로 교체하세요."
+                )
+            if "change_me_redis_password" in self.REDIS_URL:
+                raise ValueError(
+                    "REDIS_URL에 기본 패스워드가 포함되어 있습니다. "
+                    "프로덕션에서는 강력한 패스워드로 교체하세요."
+                )
+
+            # GitLab 연동이 이 앱의 핵심이므로 프로덕션에서는 토큰 필수
+            if not self.GITLAB_PROJECT_TOKEN:
+                raise ValueError(
+                    "GITLAB_PROJECT_TOKEN이 설정되지 않았습니다. 프로덕션에서는 필수입니다."
+                )
+
         # 환경 무관: 기본 시크릿 사용 시 WARNING 로그
         # 각 필드를 개별 비교 — 시크릿을 하나의 문자열로 합치면 스택트레이스 노출 위험
         _field_values = {

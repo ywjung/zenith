@@ -12,3 +12,13 @@ venv
 .env
 tests/
 *.db
+.git
+.gitignore
+.vscode
+.idea
+*.log
+*.md
+Dockerfile*
+.dockerignore
+htmlcov
+.coverage

@@ -11,6 +11,9 @@ interface SearchResult {
   status: string
   priority: string
   category: string
+  _type?: 'ticket' | 'kb' | 'change'
+  _id?: number  // KB article id
+  _slug?: string // KB slug
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -47,9 +50,18 @@ export default function GlobalSearch() {
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const resultsListRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
   const abortRef = useRef<AbortController>()
+
+  // 선택된 항목이 viewport 밖으로 나가면 자동 스크롤
+  useEffect(() => {
+    if (selectedIndex < 0 || !resultsListRef.current) return
+    const list = resultsListRef.current
+    const item = list.querySelector<HTMLElement>(`[data-search-index="${selectedIndex}"]`)
+    if (item) item.scrollIntoView({ block: 'nearest' })
+  }, [selectedIndex])
 
   useEffect(() => { setHistory(loadHistory()) }, [])
   useEffect(() => () => { abortRef.current?.abort() }, [])
@@ -61,12 +73,40 @@ export default function GlobalSearch() {
     setLoading(true)
     setSearchError(false)
     try {
-      const res = await fetch(
-        `${API_BASE}/tickets/search?q=${encodeURIComponent(q)}&per_page=8`,
-        { credentials: 'include', cache: 'no-store', signal: abortRef.current.signal },
-      )
-      if (res.ok) { setResults(await res.json()); setSelectedIndex(-1) }
-      else { setResults([]); setSearchError(true) }
+      const signal = abortRef.current.signal
+      const opts = { credentials: 'include' as const, cache: 'no-store' as const, signal }
+      // 병렬 검색 — 티켓 + KB + 변경
+      const [ticketRes, kbRes, changeRes] = await Promise.allSettled([
+        fetch(`${API_BASE}/tickets/search?q=${encodeURIComponent(q)}&per_page=5`, opts),
+        fetch(`${API_BASE}/kb?q=${encodeURIComponent(q)}&per_page=3`, opts),
+        fetch(`${API_BASE}/changes?q=${encodeURIComponent(q)}&per_page=3`, opts),
+      ])
+      const all: SearchResult[] = []
+      // 티켓 결과
+      if (ticketRes.status === 'fulfilled' && ticketRes.value.ok) {
+        const tickets = await ticketRes.value.json()
+        const arr = Array.isArray(tickets) ? tickets : (tickets.tickets ?? tickets.items ?? [])
+        arr.forEach((t: SearchResult) => all.push({ ...t, _type: 'ticket' }))
+      }
+      // KB 결과
+      if (kbRes.status === 'fulfilled' && kbRes.value.ok) {
+        const kb = await kbRes.value.json()
+        const articles = Array.isArray(kb) ? kb : (kb.articles ?? [])
+        articles.forEach((a: { id: number; title: string; slug?: string; category?: string }) => {
+          all.push({ iid: a.id, title: a.title, status: '', priority: '', category: a.category ?? '', _type: 'kb', _id: a.id, _slug: a.slug })
+        })
+      }
+      // 변경 결과
+      if (changeRes.status === 'fulfilled' && changeRes.value.ok) {
+        const changes = await changeRes.value.json()
+        const items = Array.isArray(changes) ? changes : (changes.items ?? [])
+        items.forEach((c: { id: number; title: string; status?: string }) => {
+          all.push({ iid: c.id, title: c.title, status: c.status ?? '', priority: '', category: '', _type: 'change' })
+        })
+      }
+      setResults(all)
+      setSelectedIndex(-1)
+      if (all.length === 0 && ticketRes.status === 'rejected') setSearchError(true)
     } catch (err) {
       if ((err as Error).name !== 'AbortError') { setResults([]); setSearchError(true) }
     }
@@ -83,13 +123,22 @@ export default function GlobalSearch() {
     debounceRef.current = setTimeout(() => search(q), 300)
   }
 
-  const navigateToTicket = (iid: number, title: string) => {
+  const navigateToResult = (r: SearchResult) => {
     if (query.trim().length >= 2) {
       saveHistory(query.trim())
       setHistory(loadHistory())
     }
     setOpen(false); setQuery(''); setResults([])
-    router.push(`/tickets/${iid}`)
+    if (r._type === 'kb') router.push(`/kb/${r._slug || r._id}`)
+    else if (r._type === 'change') router.push(`/changes/${r.iid}`)
+    else router.push(`/tickets/${r.iid}`)
+  }
+
+  // backwards compat
+  const navigateToTicket = (iid: number, _title: string) => {
+    const match = results.find(r => r.iid === iid)
+    if (match) navigateToResult(match)
+    else { setOpen(false); setQuery(''); setResults([]); router.push(`/tickets/${iid}`) }
   }
 
   const applyHistory = (h: string) => {
@@ -149,13 +198,22 @@ export default function GlobalSearch() {
       <div className="relative">
         <input
           ref={inputRef}
-          type="text"
+          type="search"
           value={query}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onFocus={() => setOpen(true)}
           data-global-search
+          autoComplete="off"
+          aria-label={t('search.placeholder')}
           placeholder={t('search.placeholder')}
+          role="combobox"
+          aria-expanded={showHistory || showResults}
+          aria-controls="global-search-listbox"
+          aria-autocomplete="list"
+          aria-activedescendant={
+            selectedIndex >= 0 ? `global-search-option-${selectedIndex}` : undefined
+          }
           className="bg-blue-600 dark:bg-blue-900/60 text-white placeholder-blue-300 dark:placeholder-blue-400 text-sm px-3 py-1.5 pl-8 rounded-md w-52 focus:outline-none focus:ring-2 focus:ring-white/40 focus:w-72 transition-all border-0"
         />
         <svg className="absolute left-2 top-2 w-4 h-4 text-blue-300 dark:text-blue-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -171,7 +229,11 @@ export default function GlobalSearch() {
 
       {/* 드롭다운 */}
       {(showHistory || showResults) && (
-        <div className="absolute top-full mt-1 left-0 w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+        <div
+          ref={resultsListRef}
+          id="global-search-listbox"
+          role="listbox"
+          className="absolute top-full mt-1 left-0 w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden max-h-[70vh] overflow-y-auto">
 
           {/* 최근 검색 히스토리 */}
           {showHistory && (
@@ -188,6 +250,10 @@ export default function GlobalSearch() {
               {history.map((h, i) => (
                 <button
                   key={h}
+                  id={`global-search-option-${i}`}
+                  role="option"
+                  aria-selected={i === selectedIndex}
+                  data-search-index={i}
                   onClick={() => applyHistory(h)}
                   className={`w-full text-left px-4 py-2.5 flex items-center gap-3 border-b border-gray-100 dark:border-gray-700/50 last:border-0 transition-colors ${
                     i === selectedIndex
@@ -207,7 +273,7 @@ export default function GlobalSearch() {
                       setHistory(next)
                     }}
                     className="text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 text-sm px-1"
-                  >
+                   aria-label="제거">
                     ×
                   </button>
                 </button>
@@ -218,26 +284,45 @@ export default function GlobalSearch() {
           {/* 검색 결과 */}
           {showResults && results.length > 0 && (
             <>
-              {results.map((r, i) => (
+              {results.map((r, i) => {
+                const typeBadge = r._type === 'kb'
+                  ? { icon: '📚', label: 'KB', cls: 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300' }
+                  : r._type === 'change'
+                    ? { icon: '🔄', label: '변경', cls: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' }
+                    : { icon: '📋', label: '', cls: '' }
+                return (
                 <button
-                  key={r.iid}
-                  onClick={() => navigateToTicket(r.iid, r.title)}
+                  key={`${r._type}-${r.iid}`}
+                  id={`global-search-option-${i}`}
+                  role="option"
+                  aria-selected={i === selectedIndex}
+                  data-search-index={i}
+                  onClick={() => navigateToResult(r)}
                   className={`w-full text-left px-4 py-3 flex items-start gap-3 border-b border-gray-100 dark:border-gray-700/50 last:border-0 transition-colors ${
                     i === selectedIndex
                       ? 'bg-blue-50 dark:bg-blue-900/30'
                       : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                   }`}
                 >
-                  <span className="text-gray-400 dark:text-gray-500 text-sm font-mono shrink-0">#{r.iid}</span>
+                  <div className="shrink-0 flex flex-col items-center gap-0.5">
+                    {r._type !== 'ticket' && (
+                      <span className={`text-[9px] font-bold px-1 py-px rounded ${typeBadge.cls}`}>{typeBadge.label}</span>
+                    )}
+                    <span className="text-gray-400 dark:text-gray-500 text-sm font-mono">
+                      {r._type === 'ticket' ? `#${r.iid}` : r._type === 'kb' ? '📚' : `#${r.iid}`}
+                    </span>
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{r.title}</div>
                     <div className="flex gap-2 mt-0.5">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">{((): string => { try { return t(`ticket.status.${r.status}`) } catch { return r.status } })()}</span>
-                      <span className={`text-xs ${PRIORITY_COLORS[r.priority] ?? 'text-gray-500 dark:text-gray-400'}`}>{r.priority}</span>
+                      {r.status && <span className="text-xs text-gray-500 dark:text-gray-400">{((): string => { try { return t(`ticket.status.${r.status}`) } catch { return r.status } })()}</span>}
+                      {r.priority && <span className={`text-xs ${PRIORITY_COLORS[r.priority] ?? 'text-gray-500 dark:text-gray-400'}`}>{r.priority}</span>}
+                      {r._type === 'kb' && r.category && <span className="text-xs text-gray-400">{r.category}</span>}
                     </div>
                   </div>
                 </button>
-              ))}
+                )
+              })}
               <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 text-xs text-gray-400 dark:text-gray-500 flex justify-between">
                 <span>{t('search.hint')}</span>
                 <span>{t('search.results', { count: results.length })}</span>

@@ -170,10 +170,10 @@ def get_ticket_stats(
                     elif state_val == "closed":
                         q = q.filter(_TSI.state == "closed")
                     if label:
-                        q = q.filter(_jc(_TSI.labels_json, f'["{label}"]'))
+                        q = q.filter(_jc(_TSI.labels_json, _json.dumps([label])))
                     if not_labels:
                         for nl in not_labels:
-                            q = q.filter(~_jc(_TSI.labels_json, f'["{nl}"]'))
+                            q = q.filter(~_jc(_TSI.labels_json, _json.dumps([nl])))
                     return q.count()
 
                 _result = {
@@ -220,10 +220,10 @@ def get_ticket_stats(
                 elif state_val == "closed":
                     q = q.filter(_TSI.state == "closed")
                 if label:
-                    q = q.filter(_jc2(_TSI.labels_json, f'["{label}"]'))
+                    q = q.filter(_jc2(_TSI.labels_json, _json.dumps([label])))
                 if not_labels:
                     for nl in not_labels:
-                        q = q.filter(~_jc2(_TSI.labels_json, f'["{nl}"]'))
+                        q = q.filter(~_jc2(_TSI.labels_json, _json.dumps([nl])))
                 return q.count()
 
             _result = {
@@ -390,19 +390,54 @@ async def upload_attachment(
 def proxy_upload(
     path: str = Query(..., description="GitLab upload path"),
     download: bool = Query(default=False),
+    iid: int | None = Query(default=None, description="첨부 파일이 속한 티켓 iid (권한 검증용)"),
+    project_id: str | None = Query(default=None, description="티켓 project_id"),
     _user: dict = Depends(get_current_user),
 ):
-    """GitLab 업로드 파일을 파일시스템에서 직접 읽어 인증된 사용자에게 제공."""
+    """GitLab 업로드 파일을 파일시스템에서 직접 읽어 인증된 사용자에게 제공.
+
+    SEC #7: iid가 지정되면 해당 티켓에 대한 view 권한을 검증하여 IDOR-chaining 방지.
+    iid 미지정은 backwards-compat 위해 허용하되 role==user는 차단.
+    """
     import hashlib, os, mimetypes
     settings = get_settings()
 
-    project_id: str | None = None
+    # SEC #7: 티켓 단위 ACL — iid가 주어지면 해당 티켓 view 권한을, 아니면 role 기반 차단
+    role = (_user.get("role") or "user").lower()
+    if iid is not None:
+        try:
+            from .helpers import _can_user_view_issue
+            from ... import gitlab_client as _gl
+            issue = _gl.get_issue(iid, project_id=project_id)
+            if not _can_user_view_issue(issue, _user):
+                logger.warning(
+                    "PROXY_UPLOAD_BLOCKED user=%s tried to access iid=%d path=%s",
+                    _user.get("username"), iid, path,
+                )
+                raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+        except HTTPException:
+            raise
+        except Exception as e:
+            # GitLab 조회 실패 시: admin/agent는 fall-through (가용성 우선), user는 차단
+            if role == "user":
+                raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+            logger.warning("proxy_upload ACL check skipped (gitlab error): %s", e)
+    elif role == "user":
+        # 일반 사용자는 iid 없이 임의 첨부파일 접근 차단 (URL 추측 방지)
+        logger.warning(
+            "PROXY_UPLOAD_BLOCKED user=%s role=user accessed proxy without iid path=%s",
+            _user.get("username"), path,
+        )
+        raise HTTPException(status_code=403, detail="티켓 컨텍스트가 필요합니다.")
+
+    # 파일 경로 파싱 — 함수 파라미터 project_id와 충돌 방지 위해 별도 변수명 사용
+    resolved_pid: str | None = None
     upload_id: str | None = None
     filename: str | None = None
 
     m1 = _re_shared.match(r"^/-/project/(\d+)/uploads/([0-9a-f]+)/([^/]+)$", path)
     if m1:
-        project_id, upload_id, filename = m1.group(1), m1.group(2), m1.group(3)
+        resolved_pid, upload_id, filename = m1.group(1), m1.group(2), m1.group(3)
     else:
         m2 = _re_shared.match(r"^(/[^/]+/[^/]+)/uploads/([0-9a-f]+)/([^/]+)$", path)
         if m2:
@@ -415,18 +450,18 @@ def proxy_upload(
                         headers={"PRIVATE-TOKEN": settings.GITLAB_PROJECT_TOKEN},
                     )
                     if pr.is_success:
-                        project_id = str(pr.json().get("id", ""))
+                        resolved_pid = str(pr.json().get("id", ""))
             except Exception as e:
                 logger.warning("Failed to resolve project namespace for proxy: %s", e)
 
-    if project_id and upload_id and filename:
+    if resolved_pid and upload_id and filename:
         from urllib.parse import unquote as _unquote
         decoded_filename = _unquote(filename)
         safe_filename = os.path.basename(decoded_filename)
         if not safe_filename or safe_filename != decoded_filename:
             raise HTTPException(status_code=400, detail="잘못된 파일명입니다.")
 
-        sha256 = hashlib.sha256(project_id.encode()).hexdigest()
+        sha256 = hashlib.sha256(resolved_pid.encode()).hexdigest()
         base_dir = "/gitlab_data/gitlab-rails/uploads/@hashed"
         fs_path = os.path.normpath(
             os.path.join(base_dir, sha256[:2], sha256[2:4], sha256, upload_id, safe_filename)

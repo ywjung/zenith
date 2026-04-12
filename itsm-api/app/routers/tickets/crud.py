@@ -36,6 +36,7 @@ from .helpers import (
     _apply_automation_actions,
     _attach_sla_deadlines,
     _can_requester_modify,
+    _can_user_view_issue,
     _dispatch_notification,
     _extract_meta,
     _invalidate_ticket_list_cache,
@@ -61,7 +62,7 @@ def list_tickets(
     search: Optional[str] = None,
     created_by_username: Optional[str] = Query(default=None),
     project_id: Optional[str] = Query(default=None),
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10000, description="1~10000 범위. 그 이상은 키셋 페이지네이션 또는 필터 사용 권장."),
     per_page: int = Query(default=20, ge=1, le=100),
     sort_by: str = Query(default="created_at", description="정렬 기준: created_at|updated_at|priority|title"),
     order: str = Query(default="desc", description="정렬 방향: asc|desc"),
@@ -178,12 +179,12 @@ def list_tickets(
             elif gl_state == "closed":
                 q = q.filter(_TSI.state == "closed")
             if status_label:
-                q = q.filter(_jsonb_contains(_TSI.labels_json, f'["{status_label}"]'))
+                q = q.filter(_jsonb_contains(_TSI.labels_json, _json.dumps([status_label])))
             if not_labels:
                 for nl in not_labels.split(","):
                     nl = nl.strip()
                     if nl:
-                        q = q.filter(~_jsonb_contains(_TSI.labels_json, f'["{nl}"]'))
+                        q = q.filter(~_jsonb_contains(_TSI.labels_json, _json.dumps([nl])))
 
             # 프로젝트 필터
             pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
@@ -194,7 +195,7 @@ def list_tickets(
                 for lb in labels.split(","):
                     lb = lb.strip()
                     if lb:
-                        q = q.filter(_jsonb_contains(_TSI.labels_json, f'["{lb}"]'))
+                        q = q.filter(_jsonb_contains(_TSI.labels_json, _json.dumps([lb])))
 
             # 검색
             if search:
@@ -343,12 +344,12 @@ def list_tickets(
             for lb in labels.split(","):
                 lb = lb.strip()
                 if lb:
-                    q = q.filter(_jc(_TSI.labels_json, f'["{lb}"]'))
+                    q = q.filter(_jc(_TSI.labels_json, _json.dumps([lb])))
         if not_labels:
             for nl in not_labels.split(","):
                 nl = nl.strip()
                 if nl:
-                    q = q.filter(~_jc(_TSI.labels_json, f'["{nl}"]'))
+                    q = q.filter(~_jc(_TSI.labels_json, _json.dumps([nl])))
 
         # 검색
         if search:
@@ -742,6 +743,19 @@ def get_ticket(
 ):
     try:
         issue = gitlab_client.get_issue(iid, project_id=project_id)
+
+        # SEC #1 (IDOR): role==user는 본인이 신청한 티켓만, confidential은 pl+ 또는 신청자만 조회 가능.
+        # 이전엔 모든 인증 사용자가 iid 순회로 모든 티켓 열람 가능했음.
+        if not _can_user_view_issue(issue, _user):
+            logger.warning(
+                "IDOR_BLOCKED user=%s role=%s tried to access ticket #%d",
+                _user.get("username"),
+                _user.get("role"),
+                iid,
+            )
+            # 404로 응답해 리소스 존재 여부조차 노출하지 않음 (enumeration 방지)
+            raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+
         ticket = _issue_to_response(issue, mask_pii=(_user.get("role") == "user"))
         creator = ticket.get("created_by_username")
         if creator:
@@ -749,6 +763,8 @@ def get_ticket(
             if creator in name_map:
                 ticket["employee_name"] = name_map[creator]
         return ticket
+    except HTTPException:
+        raise
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
@@ -1171,6 +1187,8 @@ def clone_ticket(
     new_iid = new_issue.get("iid")
     pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
 
+    # 링크 + SLA 레코드 원자적 생성. 실패 시 rollback + 에러 로그로 운영팀 인지 가능하게 함.
+    # (GitLab 이슈는 이미 생성됐으므로 saga 보상은 불가능 — 불일치 시 수동 정리 필요.)
     try:
         from ...models import TicketLink
         link = TicketLink(
@@ -1185,7 +1203,11 @@ def clone_ticket(
         sla_module.create_sla_record(db, new_iid, pid, priority)
         db.commit()
     except Exception as e:
-        logger.warning("Clone ticket post-processing error: %s", e)
+        db.rollback()
+        logger.error(
+            "Clone ticket post-processing FAILED (GitLab issue #%s created but DB link/SLA missing): %s",
+            new_iid, e,
+        )
 
     try:
         gitlab_client.add_note(

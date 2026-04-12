@@ -1,5 +1,6 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -8,19 +9,37 @@ import type { AISummaryResult } from '@/lib/api'
 import type { QuickReply } from '@/lib/api'
 import type { Ticket, Comment, Rating, ProjectMember, Milestone, TicketCustomFieldValue, TicketLink, DevProject, ProjectForward, ForwardsResponse, SLARecord, LinkedMR, SLAPrediction } from '@/types'
 import { StatusBadge, PriorityBadge, CategoryBadge, SlaBadge } from '@/components/StatusBadge'
+import CopyButton from '@/components/CopyButton'
+import Avatar from '@/components/Avatar'
+import CommentReactions from '@/components/CommentReactions'
+import StarToggle from '@/components/StarToggle'
+import { pushRecentTicket } from '@/lib/recentTickets'
+import { markTicketRead } from '@/lib/ticketReadState'
+import { useConfirm } from '@/components/ConfirmProvider'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
-import { formatName, formatDate, formatFileSize, getFileIcon, isImageFile, markdownToHtml } from '@/lib/utils'
+import { formatName, formatDate, formatSmartDate, formatFileSize, getFileIcon, isImageFile, markdownToHtml } from '@/lib/utils'
 import { PRIORITY_OPTIONS, API_BASE } from '@/lib/constants'
 import dynamic from 'next/dynamic'
 import DOMPurify from 'isomorphic-dompurify'
 const MarkdownRenderer = dynamic(() => import('@/components/MarkdownRenderer'), { ssr: false })
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false })
-import ResolutionNoteModal from '@/components/ResolutionNoteModal'
+const ResolutionNoteModal = dynamic(() => import('@/components/ResolutionNoteModal'), { ssr: false })
 import FilePreview from '@/components/FilePreview'
-import TimelineView from '@/components/TimelineView'
-import TimeTracker from '@/components/TimeTracker'
+
+/** 업로드 결과 URL을 표시용 URL로 변환. MinIO URL은 직접 사용, GitLab path는 proxy 래핑. */
+function toDisplayUrl(result: { proxy_path?: string; full_path?: string; url?: string }): string {
+  const raw = result.proxy_path || result.full_path || result.url || ''
+  // MinIO: /api/storage/... → 이미 직접 접근 가능한 URL
+  if (raw.startsWith('/api/storage/') || raw.startsWith('/api/v1/storage/')) return raw
+  // 외부 URL (https:// 등) → 그대로
+  if (/^https?:\/\//.test(raw)) return raw
+  // GitLab 내부 경로 → uploads/proxy로 래핑
+  return `/api/tickets/uploads/proxy?path=${encodeURIComponent(raw)}`
+}
+const TimelineView = dynamic(() => import('@/components/TimelineView'), { ssr: false })
+const TimeTracker = dynamic(() => import('@/components/TimeTracker'), { ssr: false })
 import { useTicketWS } from '@/hooks/useTicketWS'
 
 function StarDisplay({ score }: { score: number }) {
@@ -308,7 +327,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
         <button
           onClick={handleCreate}
           disabled={creating}
-          className="w-full text-xs bg-purple-600 hover:bg-purple-700 text-white py-1.5 rounded-md font-medium disabled:opacity-50"
+          className="w-full text-xs bg-purple-600 hover:bg-purple-700 text-white py-1.5 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {creating ? '요청 중...' : '승인 요청'}
         </button>
@@ -353,7 +372,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
                     <button
                       onClick={() => handleReject(req.id)}
                       disabled={actionId === req.id}
-                      className="flex-1 text-xs bg-red-500 hover:bg-red-600 text-white py-1 rounded disabled:opacity-50"
+                      className="flex-1 text-xs bg-red-500 hover:bg-red-600 text-white py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {actionId === req.id ? '...' : '거절 확인'}
                     </button>
@@ -365,7 +384,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
                   <button
                     onClick={() => { setActionError(null); handleApprove(req.id) }}
                     disabled={actionId === req.id}
-                    className="flex-1 text-xs bg-green-500 hover:bg-green-600 text-white py-1 rounded disabled:opacity-50"
+                    className="flex-1 text-xs bg-green-500 hover:bg-green-600 text-white py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {actionId === req.id ? '...' : '승인'}
                   </button>
@@ -389,7 +408,7 @@ function ApprovalPanel({ ticketIid, projectId, isAgent, currentUsername, ticketS
           <button
             onClick={handleCreate}
             disabled={creating}
-            className="w-full text-xs text-purple-600 dark:text-purple-400 hover:underline mt-1 disabled:opacity-50"
+            className="w-full text-xs text-purple-600 dark:text-purple-400 hover:underline mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {creating ? '요청 중...' : '+ 재승인 요청'}
           </button>
@@ -527,7 +546,7 @@ function TicketTypePanel({
               key={t.value}
               onClick={() => handleTypeChange(t.value)}
               disabled={saving}
-              className={`w-full text-left text-xs px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
+              className={`w-full text-left text-xs px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 ticketType === t.value
                   ? `${t.color} border-current font-semibold`
                   : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
@@ -575,7 +594,7 @@ function TicketTypePanel({
                     <button
                       onClick={() => handleRemoveProblemLink(l.id)}
                       className="text-gray-400 hover:text-red-500 ml-2"
-                    >✕</button>
+                     aria-label="제거">✕</button>
                   </li>
                 )
               })}
@@ -592,7 +611,7 @@ function TicketTypePanel({
             <button
               onClick={handleAddProblemLink}
               disabled={linking || !linkInput}
-              className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded disabled:opacity-50"
+              className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {linking ? '...' : '연결'}
             </button>
@@ -808,7 +827,7 @@ function Lightbox({ url, name, onClose }: { url: string; name: string; onClose: 
 
   return (
     <div
-      className="fixed inset-0 bg-black/85 z-50 flex flex-col items-center justify-center p-4"
+      className="fixed inset-0 bg-black/85 animate-fadeIn backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4"
       onClick={onClose}
     >
       <div
@@ -850,6 +869,7 @@ const BUILTIN_QUICK_REPLIES: QuickReply[] = [
 ]
 
 function TicketDetailContent() {
+  const confirm = useConfirm()
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -874,6 +894,7 @@ function TicketDetailContent() {
   const [resolutionModal, setResolutionModal] = useState<'resolved' | 'closed' | null>(null)
   const [waitingReasonModal, setWaitingReasonModal] = useState(false)
   const [waitingReasonInput, setWaitingReasonInput] = useState('')
+  const [pendingReasonStatus, setPendingReasonStatus] = useState<string>('waiting')
   const ticketEtag = useRef<string>('')
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -962,12 +983,29 @@ function TicketDetailContent() {
 
   useEffect(() => {
     if (!iid) return
+    // Phase 1: 렌더링에 필요한 코어 데이터 + project_id 비의존 보조 데이터 병렬 fetch
+    // (watchers/quickReplies/devProjects는 ticket 응답을 기다릴 필요가 없음)
     Promise.all([fetchTicket(iid, projectId), fetchComments(iid, projectId), getMyRating(iid)])
       .then(([t, c, r]) => {
         ticketEtag.current = t.updated_at ?? ''
         setTicket(t)
         setComments(c)
         setRating(r)
+        // project_id 비의존 호출을 즉시 발사 (ticket 응답 대기 불필요)
+        if (user) {
+          fetchWatchers(iid).then((watchers) => {
+            setIsWatching(watchers.some((w) => w.user_id === user.sub))
+          }).catch(() => {})
+        }
+        if (isAgent) {
+          fetchDevProjects().then(setDevProjects).catch(() => {})
+          fetchQuickReplies().then((replies) => {
+            setQuickReplies(replies.length > 0 ? replies : BUILTIN_QUICK_REPLIES)
+          }).catch(() => {})
+        }
+        // 최근 본 티켓에 추가 + 읽음 처리
+        pushRecentTicket({ iid: t.iid, title: t.title, status: t.status, project_id: t.project_id })
+        markTicketRead(t.iid)
         if (t.project_id) {
           fetchProjectMembers(t.project_id).then(setMembers).catch(() => {})
           fetchMilestones(t.project_id).then(setMilestones).catch(() => {})
@@ -999,17 +1037,7 @@ function TicketDetailContent() {
             }
           }
           if (isAgent) {
-            fetchDevProjects().then(setDevProjects).catch(() => {})
             fetchLinkedMRs(iid, t.project_id).then(setLinkedMRs).catch(() => {})
-            fetchQuickReplies().then((replies) => {
-              setQuickReplies(replies.length > 0 ? replies : BUILTIN_QUICK_REPLIES)
-            }).catch(() => {})
-          }
-          // Load watcher status for current user
-          if (user) {
-            fetchWatchers(iid).then((watchers) => {
-              setIsWatching(watchers.some((w) => w.user_id === user.sub))
-            }).catch(() => {})
           }
         }
       })
@@ -1081,10 +1109,11 @@ function TicketDetailContent() {
       setResolutionModal(newStatus as 'resolved' | 'closed')
       return
     }
-    // waiting/reopened 전환 시 이유 입력 모달 표시
-    if (newStatus === 'waiting') {
+    // waiting/reopened 전환 시 이유 입력 모달 표시 (백엔드 REASON_REQUIRED_TRANSITIONS)
+    if (newStatus === 'waiting' || newStatus === 'reopened') {
       setWaitingReasonInput('')
       setWaitingReasonModal(true)
+      setPendingReasonStatus(newStatus)
       return
     }
     await _doStatusChange(newStatus, '', '', '')
@@ -1106,6 +1135,17 @@ function TicketDetailContent() {
       setTicket(updated)
       const updatedComments = await fetchComments(iid, projectId)
       setComments(updatedComments)
+      // UX2 #4: 처리완료 전환 시 만족도 평가 안내
+      if (newStatus === 'resolved') {
+        toast('처리 완료 — 요청자에게 만족도 평가가 안내됩니다', {
+          description: '이메일로 평가 링크가 발송됩니다.',
+          action: {
+            label: '평가 페이지 보기',
+            onClick: () => window.open(`/tickets/${iid}/rate`, '_blank'),
+          },
+          duration: 6000,
+        })
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '상태 변경 실패'
       // 409 Conflict = 동시 편집 충돌
@@ -1219,7 +1259,7 @@ function TicketDetailContent() {
 
   async function handleEditImageUpload(file: File): Promise<string> {
     const result = await uploadFile(file, ticket?.project_id || projectId)
-    return `/api/tickets/uploads/proxy?path=${encodeURIComponent(result.proxy_path || result.full_path)}`
+    return toDisplayUrl(result)
   }
 
   async function handleEditSubmit(e: React.FormEvent) {
@@ -1232,7 +1272,7 @@ function TicketDetailContent() {
       const uploaded: { name: string; url: string }[] = []
       for (const file of editNewFiles) {
         const result = await uploadFile(file, ticket.project_id || projectId)
-        const url = `/api/tickets/uploads/proxy?path=${encodeURIComponent(result.proxy_path || result.full_path)}`
+        const url = toDisplayUrl(result)
         uploaded.push({ name: file.name, url })
       }
 
@@ -1407,7 +1447,7 @@ function TicketDetailContent() {
         const attachments: string[] = []
         for (const file of commentFiles) {
           const result = await uploadFile(file, ticket?.project_id || undefined)
-          const proxyUrl = `/api/tickets/uploads/proxy?path=${encodeURIComponent(result.proxy_path || result.full_path)}`
+          const proxyUrl = toDisplayUrl(result)
           const name = result.name ?? file.name
           if (isImageFile(file.name)) {
             attachments.push(
@@ -1452,20 +1492,40 @@ function TicketDetailContent() {
       setComments((prev) => prev.map((c) => c.id === noteId ? { ...c, body: updated.body } : c))
       setEditingCommentId(null)
     } catch (err) {
-      alert(err instanceof Error ? err.message : '수정 실패')
+      toast.error(err instanceof Error ? err.message : '수정 실패')
     } finally {
       setSavingComment(false)
     }
   }
 
   async function handleDeleteCommentConfirm(noteId: number) {
-    if (!confirm('이 댓글을 삭제하시겠습니까?')) return
-    try {
-      await deleteComment(iid, noteId, ticket?.project_id || undefined)
-      setComments((prev) => prev.filter((c) => c.id !== noteId))
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '삭제 실패')
-    }
+    if (!(await confirm({ title: '이 댓글을 삭제하시겠습니까?', variant: 'danger', confirmLabel: '확인' }))) return
+    // 낙관적 제거 + 5초 동안 undo 가능
+    const removed = comments.find((c) => c.id === noteId)
+    if (!removed) return
+    setComments((prev) => prev.filter((c) => c.id !== noteId))
+    let cancelled = false
+    toast('댓글이 삭제됩니다', {
+      description: '5초 안에 실행취소할 수 있습니다.',
+      action: {
+        label: '실행취소',
+        onClick: () => {
+          cancelled = true
+          setComments((prev) => [...prev, removed].sort((a, b) => a.id - b.id))
+        },
+      },
+      duration: 5000,
+    })
+    setTimeout(async () => {
+      if (cancelled) return
+      try {
+        await deleteComment(iid, noteId, ticket?.project_id || undefined)
+      } catch (err) {
+        // 서버 삭제 실패 시 복원
+        setComments((prev) => [...prev, removed].sort((a, b) => a.id - b.id))
+        toast.error(err instanceof Error ? err.message : '삭제 실패')
+      }
+    }, 5100)
   }
 
   async function handleAddLink(e: React.FormEvent) {
@@ -1481,7 +1541,7 @@ function TicketDetailContent() {
       setLinks((prev) => [...prev, link])
       setLinkTargetIid('')
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '링크 추가 실패')
+      toast.error(err instanceof Error ? err.message : '링크 추가 실패')
     } finally {
       setAddingLink(false)
     }
@@ -1493,7 +1553,7 @@ function TicketDetailContent() {
       await deleteTicketLink(iid, linkId)
       setLinks((prev) => prev.filter((l) => l.id !== linkId))
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '링크 삭제 실패')
+      toast.error(err instanceof Error ? err.message : '링크 삭제 실패')
     }
   }
 
@@ -1519,19 +1579,19 @@ function TicketDetailContent() {
       setSelectedDevProject('')
       setForwardNote('')
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '전달 실패')
+      toast.error(err instanceof Error ? err.message : '전달 실패')
     } finally {
       setForwarding(false)
     }
   }
 
   async function handleDeleteForward(forwardId: number) {
-    if (!confirm('전달 기록을 삭제하시겠습니까?')) return
+    if (!(await confirm({ title: '전달 기록을 삭제하시겠습니까?', variant: 'danger', confirmLabel: '확인' }))) return
     try {
       await deleteForward(iid, forwardId)
       setForwards((prev) => prev.filter((f) => f.id !== forwardId))
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '삭제 실패')
+      toast.error(err instanceof Error ? err.message : '삭제 실패')
     }
   }
 
@@ -1619,13 +1679,34 @@ function TicketDetailContent() {
   }
 
   if (error || !ticket) {
+    // 404 상태로 판단되면 Next.js notFound 페이지로 (브레드크럼/SEO/HTTP 시맨틱)
+    const is404 = !!error && /404|not.?found|찾을 수 없/i.test(error)
     return (
-      <div className="text-center py-16">
-        <div className="text-4xl mb-3">⚠️</div>
-        <p className="text-red-600">{error || '티켓을 찾을 수 없습니다.'}</p>
-        <Link href="/" className="mt-4 inline-block text-blue-600 hover:underline">
-          목록으로
-        </Link>
+      <div className="text-center py-16 animate-fadeIn">
+        <div className="text-7xl mb-4 select-none" aria-hidden="true">{is404 ? '🔍' : '⚠️'}</div>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+          {is404 ? '티켓을 찾을 수 없습니다' : '티켓을 불러오지 못했습니다'}
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+          {is404 ? '삭제되었거나 권한이 없는 티켓일 수 있습니다.' : (error || '잠시 후 다시 시도해주세요.')}
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-sm font-semibold transition-all"
+          >
+            🏠 목록으로
+          </Link>
+          {!is404 && (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 text-sm font-medium text-gray-700 dark:text-gray-300 transition-all"
+            >
+              🔄 다시 시도
+            </button>
+          )}
+        </div>
       </div>
     )
   }
@@ -1676,20 +1757,26 @@ function TicketDetailContent() {
 
   return (
     <>
-    {/* 추가정보 대기 이유 입력 모달 */}
+    {/* 상태 전환 이유 입력 모달 (대기/재개 공용) */}
     {waitingReasonModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">추가정보 요청 사유</h2>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-fadeIn backdrop-blur-sm p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-scaleIn">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
+            {pendingReasonStatus === 'reopened' ? '티켓 재개 사유' : '추가정보 요청 사유'}
+          </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-            어떤 추가 정보가 필요한지 작성해주세요. 티켓 타임라인에 기록됩니다.
+            {pendingReasonStatus === 'reopened'
+              ? '재개 사유를 작성해주세요. 티켓 타임라인에 기록됩니다.'
+              : '어떤 추가 정보가 필요한지 작성해주세요. 티켓 타임라인에 기록됩니다.'}
           </p>
           <textarea
             autoFocus
             value={waitingReasonInput}
             onChange={e => setWaitingReasonInput(e.target.value)}
             rows={3}
-            placeholder="예: 오류 발생 스크린샷과 정확한 발생 시각을 알려주세요."
+            placeholder={pendingReasonStatus === 'reopened'
+              ? '예: 문제가 재발하여 추가 조치가 필요합니다.'
+              : '예: 오류 발생 스크린샷과 정확한 발생 시각을 알려주세요.'}
             className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
           />
           <div className="flex gap-2 mt-4 justify-end">
@@ -1703,9 +1790,13 @@ function TicketDetailContent() {
               disabled={!waitingReasonInput.trim()}
               onClick={() => {
                 setWaitingReasonModal(false)
-                _doStatusChange('waiting', '', '', waitingReasonInput.trim())
+                _doStatusChange(pendingReasonStatus, '', '', waitingReasonInput.trim())
               }}
-              className="px-4 py-2 rounded-lg text-sm bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
+              className={`px-4 py-2 rounded-lg text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed ${
+                pendingReasonStatus === 'reopened'
+                  ? 'bg-yellow-500 hover:bg-yellow-600'
+                  : 'bg-orange-500 hover:bg-orange-600'
+              }`}
             >
               확인
             </button>
@@ -1732,7 +1823,7 @@ function TicketDetailContent() {
       <div className="flex-1 min-w-0 space-y-4 w-full lg:w-auto">
 
         {/* Header: breadcrumb + title + badges */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-5 sticky top-0 z-30 backdrop-blur-sm bg-white/95 dark:bg-gray-900/95 print-hidden-sticky">
           <div className="mb-3">
             <Link href="/" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">← 목록으로</Link>
           </div>
@@ -1746,6 +1837,14 @@ function TicketDetailContent() {
             >
               #{ticket.iid}
             </a>
+            <CopyButton
+              value={`#${ticket.iid}`}
+              successMessage={`#${ticket.iid} 복사됨`}
+              iconOnly
+              label="티켓 번호 복사"
+              className="text-gray-400 dark:text-gray-500"
+            />
+            <StarToggle iid={ticket.iid} size="md" />
             <StatusBadge status={ticket.status} />
             <PriorityBadge priority={ticket.priority} />
             <CategoryBadge category={ticket.category} />
@@ -1754,6 +1853,7 @@ function TicketDetailContent() {
               createdAt={ticket.created_at}
               state={ticket.state}
               slaDeadline={slaRecord?.sla_deadline}
+              paused={ticket.status === 'waiting'}
             />
             </div>
           <div className="flex items-start justify-between gap-3">
@@ -1779,7 +1879,7 @@ function TicketDetailContent() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">상세 내용</h2>
             {canEdit && !isEditing && (
-              <button onClick={startEdit} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">✏️ 수정</button>
+              <button data-ticket-edit-btn onClick={startEdit} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">✏️ 수정 <kbd className="ml-1 text-[9px] bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-1 py-px font-mono">E</kbd></button>
             )}
           </div>
 
@@ -1838,7 +1938,7 @@ function TicketDetailContent() {
                     {inlineImages.map((img, i) => (
                       <div
                         key={img.src + i}
-                        className="relative group w-24 h-24 border rounded-lg overflow-hidden bg-white shadow-sm"
+                        className="relative group w-24 h-24 border dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800 shadow-sm"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -1929,7 +2029,7 @@ function TicketDetailContent() {
                         title="첨부 파일 삭제"
                         onClick={() => setEditAttachments((prev) => prev.filter((_, j) => j !== i))}
                         className="shrink-0 text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors text-base leading-none"
-                      >
+                       aria-label="제거">
                         ✕
                       </button>
                     </li>
@@ -1974,7 +2074,7 @@ function TicketDetailContent() {
                         type="button"
                         onClick={() => setEditNewFiles((prev) => prev.filter((_, j) => j !== i))}
                         className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
-                      >
+                       aria-label="제거">
                         ✕
                       </button>
                     </li>
@@ -1987,7 +2087,7 @@ function TicketDetailContent() {
               <button
                 type="submit"
                 disabled={editSaving}
-                className="bg-blue-600 text-white px-4 py-1.5 rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="bg-blue-600 text-white px-4 py-1.5 rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {editSaving ? '저장 중...' : '저장'}
               </button>
@@ -2046,15 +2146,18 @@ function TicketDetailContent() {
         {comments.length === 0 ? (
           <p className="text-gray-400 dark:text-gray-500 text-sm">아직 처리 내역이 없습니다.</p>
         ) : (
-          <div className="space-y-4 mb-4">
+          <div className="relative space-y-4 mb-4">
+            {/* Timeline rail — 댓글들을 연결하는 좌측 vertical line */}
+            {comments.length > 1 && (
+              <div className="absolute left-4 top-7 bottom-7 w-0.5 bg-gradient-to-b from-blue-200 via-gray-200 to-transparent dark:from-blue-700/50 dark:via-gray-700 pointer-events-none" aria-hidden="true" />
+            )}
             {comments.map((c) => (
               <div
                 key={c.id}
-                className={`flex gap-3 rounded-lg p-3 ${c.internal ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50' : ''}`}
+                data-comment-item
+                className={`relative flex gap-3 rounded-lg p-3 transition-all ${c.internal ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50' : ''}`}
               >
-                <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-sm shrink-0">
-                  {formatName(c.author_name).charAt(0)}
-                </div>
+                <Avatar name={formatName(c.author_name)} username={c.author_name} size="md" className="relative z-10 ring-2 ring-white dark:ring-gray-900" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{formatName(c.author_name)}</span>
@@ -2063,7 +2166,15 @@ function TicketDetailContent() {
                         🔒 내부 메모
                       </span>
                     )}
-                    <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(c.created_at, 'full')}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500" title={new Date(c.created_at).toLocaleString('ko-KR')}>{formatSmartDate(c.created_at)}</span>
+                    {c.updated_at && c.updated_at !== c.created_at && (
+                      <span
+                        className="text-[10px] text-gray-400 dark:text-gray-500 italic"
+                        title={`수정됨: ${new Date(c.updated_at).toLocaleString('ko-KR')}`}
+                      >
+                        (수정됨)
+                      </span>
+                    )}
                     {/* 수정/삭제 버튼 — 작성자 본인 또는 관리자 */}
                     {(c.author_name === user?.name || ['admin', 'manager', 'agent'].includes(user?.role || '')) && editingCommentId !== c.id && (
                       <span className="ml-auto flex gap-1">
@@ -2083,16 +2194,21 @@ function TicketDetailContent() {
                   {editingCommentId === c.id ? (
                     <div className="space-y-2">
                       <textarea
-                        className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                        className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
                         rows={4}
                         value={editingCommentBody}
                         onChange={(e) => setEditingCommentBody(e.target.value)}
+                        onInput={(e) => {
+                          const el = e.currentTarget
+                          el.style.height = 'auto'
+                          el.style.height = Math.min(el.scrollHeight, 400) + 'px'
+                        }}
                       />
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleSaveCommentEdit(c.id)}
                           disabled={savingComment || !editingCommentBody.trim()}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg disabled:opacity-50 transition-colors"
+                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >{savingComment ? '저장 중…' : '저장'}</button>
                         <button
                           onClick={() => setEditingCommentId(null)}
@@ -2101,7 +2217,12 @@ function TicketDetailContent() {
                       </div>
                     </div>
                   ) : (
-                    <DescriptionWithAttachments description={c.body} projectPath={ticket?.project_path} onImageClick={(url, name) => setLightbox({ url, name })} />
+                    <>
+                      <DescriptionWithAttachments description={c.body} projectPath={ticket?.project_path} onImageClick={(url, name) => setLightbox({ url, name })} />
+                      <div className="group">
+                        <CommentReactions commentId={c.id} />
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -2111,7 +2232,7 @@ function TicketDetailContent() {
 
         {/* 코멘트 입력 폼 */}
         <form onSubmit={handleAddComment} className="border-t dark:border-gray-700 pt-4">
-          {/* 빠른 답변 템플릿 */}
+          {/* 빠른 답변 템플릿 — 티켓 카테고리와 일치하는 항목 우선 정렬 */}
           <div className="mb-2">
             <select
               value=""
@@ -2122,24 +2243,54 @@ function TicketDetailContent() {
               className="text-sm border dark:border-gray-600 rounded-md px-2 py-1.5 text-gray-600 dark:text-gray-300 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
             >
               <option value="">빠른 답변 선택...</option>
-              {quickReplies.map((r) => (
-                <option key={r.id} value={r.name}>
-                  {r.name}
-                </option>
-              ))}
+              {(() => {
+                const cat = ticket?.category
+                const matched = cat ? quickReplies.filter(r => r.category === cat) : []
+                const others = quickReplies.filter(r => !cat || r.category !== cat)
+                return (
+                  <>
+                    {matched.length > 0 && (
+                      <optgroup label={`📌 이 티켓에 추천 (${cat})`}>
+                        {matched.map(r => (
+                          <option key={r.id} value={r.name}>{r.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {others.length > 0 && (
+                      <optgroup label={matched.length > 0 ? '기타 빠른 답변' : '빠른 답변'}>
+                        {others.map(r => (
+                          <option key={r.id} value={r.name}>{r.name}{r.category ? ` (${r.category})` : ''}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </>
+                )
+              })()}
             </select>
           </div>
 
-          <RichTextEditor
-            value={newComment}
-            onChange={(val) => {
-              setNewComment(val)
-              sendTyping(val.replace(/<[^>]*>/g, '').trim().length > 0)
+          <div
+            data-comment-input
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                e.preventDefault()
+                if (newComment.trim() || commentFiles.length > 0) {
+                  handleAddComment(e as unknown as React.FormEvent)
+                }
+              }
             }}
-            placeholder="처리 내용을 입력하세요... (@로 멘션)"
-            minHeight="160px"
-            mentionUsers={members.map(m => ({ id: m.username, label: m.name }))}
-          />
+          >
+            <RichTextEditor
+              value={newComment}
+              onChange={(val) => {
+                setNewComment(val)
+                sendTyping(val.replace(/<[^>]*>/g, '').trim().length > 0)
+              }}
+              placeholder="처리 내용을 입력하세요... (@로 멘션 · ⌘+Enter로 등록)"
+              minHeight="160px"
+              mentionUsers={members.map(m => ({ id: m.username, label: m.name }))}
+            />
+          </div>
 
           {/* 타이핑 인디케이터 */}
           {typingUsers.length > 0 && (
@@ -2182,7 +2333,7 @@ function TicketDetailContent() {
                       type="button"
                       onClick={() => setCommentFiles((prev) => prev.filter((_, i) => i !== idx))}
                       className="text-gray-400 dark:text-gray-500 hover:text-red-500 text-xs shrink-0"
-                    >
+                     aria-label="제거">
                       ✕
                     </button>
                   </li>
@@ -2218,17 +2369,22 @@ function TicketDetailContent() {
               </span>
             </label>
 
-            <button
-              type="submit"
-              disabled={commenting || (!newComment.trim() && commentFiles.length === 0)}
-              className={`text-sm font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50 ${
-                isInternal
-                  ? 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
-              }`}
-            >
-              {commentUploading ? '파일 업로드 중...' : commenting ? '등록 중...' : isInternal ? '🔒 메모 등록' : '코멘트 등록'}
-            </button>
+            <div className="flex items-center gap-3">
+              <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-500">
+                <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded text-[10px] font-mono">⌘ + Enter</kbd> 등록
+              </span>
+              <button
+                type="submit"
+                disabled={commenting || (!newComment.trim() && commentFiles.length === 0)}
+                className={`text-sm font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isInternal
+                    ? 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900'
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                }`}
+              >
+                {commentUploading ? '파일 업로드 중...' : commenting ? '등록 중...' : isInternal ? '🔒 메모 등록' : '코멘트 등록'}
+              </button>
+            </div>
           </div>
         </form>
         </div>
@@ -2246,7 +2402,7 @@ function TicketDetailContent() {
                   <button
                     onClick={handleConvertToKb}
                     disabled={convertingToKb}
-                    className="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                    className="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {convertingToKb ? '변환 중...' : '📚 KB 아티클로 변환'}
                   </button>
@@ -2339,14 +2495,16 @@ function TicketDetailContent() {
             <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">워크플로우</h3>
             <WorkflowStepper status={ticket.status} state={ticket.state} />
             <div className="mt-3 flex flex-col gap-2">
-              {statusActions.map((action) => (
+              {statusActions.map((action, idx) => (
                 <button
                   key={action.status}
+                  data-ticket-status-select={idx === 0 ? '' : undefined}
                   onClick={() => handleStatusChange(action.status)}
                   disabled={updating}
-                  className={`w-full text-sm px-3 py-1.5 rounded-md font-medium transition-colors disabled:opacity-50 ${action.color}`}
+                  className={`w-full text-sm px-3 py-1.5 rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${action.color}`}
                 >
                   {updating ? '처리 중...' : action.label}
+                  {idx === 0 && <kbd className="ml-1.5 text-[9px] opacity-60 font-mono bg-white/20 rounded px-1">S</kbd>}
                 </button>
               ))}
             </div>
@@ -2382,7 +2540,7 @@ function TicketDetailContent() {
                 value={ticket.category || '기타'}
                 onChange={(e) => handleCategoryChange(e.target.value)}
                 disabled={updating}
-                className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {serviceTypes.map((c) => (
                   <option key={c.value} value={c.label}>{c.emoji} {c.label}</option>
@@ -2401,7 +2559,7 @@ function TicketDetailContent() {
                 value={ticket.priority || 'medium'}
                 onChange={(e) => handlePriorityChange(e.target.value)}
                 disabled={updating}
-                className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {PRIORITY_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -2416,19 +2574,29 @@ function TicketDetailContent() {
           <div className="flex items-center justify-between gap-2">
             <span className="text-gray-500 dark:text-gray-400 text-xs shrink-0">담당자</span>
             {isAgent && members.length > 0 ? (
-              <select
-                value={ticket.assignee_id ?? ''}
-                onChange={(e) => handleAssigneeChange(e.target.value)}
-                disabled={updating}
-                className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 max-w-[160px]"
-              >
-                <option value="">담당자 없음</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>{formatName(m.name)}</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-1.5">
+                {ticket.assignee_name && (
+                  <Avatar name={formatName(ticket.assignee_name)} username={ticket.assignee_name} size="xs" />
+                )}
+                <select
+                  value={ticket.assignee_id ?? ''}
+                  onChange={(e) => handleAssigneeChange(e.target.value)}
+                  disabled={updating}
+                  className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed max-w-[140px]"
+                >
+                  <option value="">담당자 없음</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>{formatName(m.name)}</option>
+                  ))}
+                </select>
+              </div>
             ) : (
-              <span className="text-gray-800 dark:text-gray-200 text-xs">{ticket.assignee_name ? formatName(ticket.assignee_name) : '미배정'}</span>
+              <div className="flex items-center gap-1.5">
+                {ticket.assignee_name && (
+                  <Avatar name={formatName(ticket.assignee_name)} username={ticket.assignee_name} size="xs" />
+                )}
+                <span className="text-gray-800 dark:text-gray-200 text-xs">{ticket.assignee_name ? formatName(ticket.assignee_name) : '미배정'}</span>
+              </div>
             )}
           </div>
 
@@ -2440,7 +2608,7 @@ function TicketDetailContent() {
                 value={ticket.milestone_id ?? ''}
                 onChange={(e) => handleMilestoneChange(e.target.value)}
                 disabled={updating}
-                className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 max-w-[160px]"
+                className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed max-w-[160px]"
               >
                 <option value="">없음</option>
                 {milestones.map((m) => (
@@ -2523,7 +2691,7 @@ function TicketDetailContent() {
               <button
                 onClick={handleSaveCustomFields}
                 disabled={savingCustomFields}
-                className="w-full text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-1.5 rounded-md font-medium transition-colors mt-1"
+                className="w-full text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-1.5 rounded-md font-medium transition-colors mt-1"
               >
                 {savingCustomFields ? '저장 중...' : '저장'}
               </button>
@@ -2647,6 +2815,40 @@ function TicketDetailContent() {
             </div>
             {isAgent && (
               <div className="space-y-2">
+                {/* SLA 위반/임박 시 — 눈에 띄는 빠른 연장 칩 */}
+                {slaRecord?.breached && ticket?.state !== 'closed' && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2">
+                    <p className="text-[10px] font-semibold text-red-700 dark:text-red-400 mb-1.5">🚨 SLA 위반 — 빠른 연장</p>
+                    <div className="flex gap-1.5">
+                      {[
+                        { mins: 60, label: '+1시간' },
+                        { mins: 480, label: '+8시간' },
+                        { mins: 1440, label: '+1일' },
+                      ].map(({ mins, label }) => (
+                        <button
+                          key={mins}
+                          type="button"
+                          disabled={slaExtending}
+                          onClick={async () => {
+                            setSlaExtending(true)
+                            try {
+                              const updated = await extendTicketSLA(iid, mins, ticket?.project_id)
+                              setSlaRecord(updated)
+                              toast.success(`SLA ${label} 연장 완료`)
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : 'SLA 연장 실패')
+                            } finally {
+                              setSlaExtending(false)
+                            }
+                          }}
+                          className="flex-1 text-[11px] px-2 py-1.5 bg-white dark:bg-gray-800 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-50 disabled:cursor-not-allowed font-medium active:scale-95 transition-all"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {/* Pause / Resume */}
                 {ticket?.state !== 'closed' && (
                   <div className="flex gap-2">
@@ -2654,7 +2856,7 @@ function TicketDetailContent() {
                       <button
                         onClick={handleSlaResume}
                         disabled={slaResuming}
-                        className="flex-1 text-xs px-2 py-1.5 bg-green-50 dark:bg-green-900/30 border border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:opacity-50 font-medium"
+                        className="flex-1 text-xs px-2 py-1.5 bg-green-50 dark:bg-green-900/30 border border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                       >
                         {slaResuming ? '...' : '▶ SLA 재개'}
                       </button>
@@ -2662,7 +2864,7 @@ function TicketDetailContent() {
                       <button
                         onClick={handleSlaPause}
                         disabled={slaPausing}
-                        className="flex-1 text-xs px-2 py-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-50 font-medium"
+                        className="flex-1 text-xs px-2 py-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                       >
                         {slaPausing ? '...' : '⏸ SLA 일시정지'}
                       </button>
@@ -2685,7 +2887,7 @@ function TicketDetailContent() {
                   <button
                     type="submit"
                     disabled={slaExtending}
-                    className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                    className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     {slaExtending ? '...' : '연장'}
                   </button>
@@ -2702,7 +2904,7 @@ function TicketDetailContent() {
                   <button
                     type="submit"
                     disabled={slaSaving || !slaEditDate}
-                    className="bg-gray-600 text-white px-2 py-1 rounded text-xs hover:bg-gray-700 disabled:opacity-50 whitespace-nowrap"
+                    className="bg-gray-600 text-white px-2 py-1 rounded text-xs hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     {slaSaving ? '...' : '날짜 변경'}
                   </button>
@@ -2721,7 +2923,7 @@ function TicketDetailContent() {
               <button
                 onClick={handleAISummary}
                 disabled={aiSummaryLoading}
-                className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50 font-medium"
+                className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed font-medium"
               >
                 {aiSummaryLoading ? '분석 중...' : aiSummary ? '재분석' : '요약 생성'}
               </button>
@@ -2781,7 +2983,7 @@ function TicketDetailContent() {
                         #{link.target_iid}
                       </a>
                     </div>
-                    <button onClick={() => handleDeleteLink(link.id)} className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 ml-1">✕</button>
+                    <button onClick={() => handleDeleteLink(link.id)} className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 ml-1" aria-label="삭제">✕</button>
                   </li>
                 ))}
               </ul>
@@ -2808,7 +3010,7 @@ function TicketDetailContent() {
                 <button
                   type="submit"
                   disabled={addingLink || !linkTargetIid}
-                  className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                  className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {addingLink ? '...' : '추가'}
                 </button>
@@ -2864,7 +3066,7 @@ function TicketDetailContent() {
                               #{link.target_iid}
                             </Link>
                           </div>
-                          <button onClick={() => handleDeleteLink(link.id)} className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 ml-1">✕</button>
+                          <button onClick={() => handleDeleteLink(link.id)} className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 ml-1" aria-label="삭제">✕</button>
                         </li>
                       ))}
                     </ul>
@@ -2891,7 +3093,7 @@ function TicketDetailContent() {
                       <button
                         type="submit"
                         disabled={addingLink || !linkTargetIid}
-                        className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                        className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {addingLink ? '...' : '추가'}
                       </button>
@@ -2958,7 +3160,7 @@ function TicketDetailContent() {
                                 <p className="text-gray-400 dark:text-gray-500 mt-0.5">{formatName(fwd.created_by_name)} · {new Date(fwd.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</p>
                               </div>
                               {isAdmin && (
-                                <button onClick={() => handleDeleteForward(fwd.id)} className="text-gray-400 dark:text-gray-500 hover:text-red-500 shrink-0">✕</button>
+                                <button onClick={() => handleDeleteForward(fwd.id)} className="text-gray-400 dark:text-gray-500 hover:text-red-500 shrink-0" aria-label="삭제">✕</button>
                               )}
                             </div>
                           </li>
@@ -2988,7 +3190,7 @@ function TicketDetailContent() {
                       <button
                         type="submit"
                         disabled={forwarding || !selectedDevProject}
-                        className="w-full bg-indigo-600 text-white py-1 rounded text-xs hover:bg-indigo-700 disabled:opacity-50"
+                        className="w-full bg-indigo-600 text-white py-1 rounded text-xs hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {forwarding ? '전달 중...' : '이슈 전달'}
                       </button>
@@ -3073,7 +3275,7 @@ function TicketDetailContent() {
                         }
                       }}
                       disabled={triggeringPipeline || !pipelineRef}
-                      className="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50 whitespace-nowrap font-medium"
+                      className="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap font-medium"
                     >
                       {triggeringPipeline ? '...' : '▶ 실행'}
                     </button>
@@ -3110,7 +3312,7 @@ function TicketDetailContent() {
           <button
             onClick={handleToggleWatch}
             disabled={watchLoading}
-            className={`w-full text-xs px-3 py-1.5 rounded-md border transition-colors disabled:opacity-50 ${
+            className={`w-full text-xs px-3 py-1.5 rounded-md border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               isWatching
                 ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50'
                 : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
@@ -3142,7 +3344,7 @@ function TicketDetailContent() {
             <button
               onClick={handleClone}
               disabled={cloning}
-              className="w-full text-xs px-3 py-1.5 border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors disabled:opacity-50 font-medium"
+              className="w-full text-xs px-3 py-1.5 border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
               {cloning ? '복제 중...' : '🧬 이 티켓 복제'}
             </button>
@@ -3167,7 +3369,7 @@ function TicketDetailContent() {
               <button
                 onClick={handleMerge}
                 disabled={merging || !mergeTargetIid || mergeSuccess}
-                className="text-xs px-3 py-1.5 border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-md transition-colors disabled:opacity-50 font-medium whitespace-nowrap"
+                className="text-xs px-3 py-1.5 border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap"
               >
                 {merging ? '병합 중...' : '🔀 병합'}
               </button>
@@ -3188,7 +3390,7 @@ function TicketDetailContent() {
                   <button
                     onClick={handleDelete}
                     disabled={deleting}
-                    className="flex-1 text-xs px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50"
+                    className="flex-1 text-xs px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {deleting ? '삭제 중...' : '삭제 확인'}
                   </button>

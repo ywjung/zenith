@@ -536,27 +536,51 @@ services:
 
   pg-backup:
     image: postgres:17
-    profiles: ["backup"]
     restart: unless-stopped
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_DB: ${POSTGRES_DB}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
     volumes:
       - ./volumes/backups:/backups
     entrypoint: >
       /bin/sh -c "
+        set -eu
+        mkdir -p /backups
+        # 시작 시 기존 postgres 준비 대기 (컨테이너 재시작 완화)
+        sleep 30
         while true; do
           FILENAME=/backups/itsm_$$(date +%Y%m%d_%H%M%S).sql.gz
-          pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > $$FILENAME
-          echo \"Backup created: $$FILENAME\"
-          find /backups -name 'itsm_*.sql.gz' -mtime +7 -delete
-          sleep 86400
+          TMPFILE=$$FILENAME.tmp
+          if pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > $$TMPFILE; then
+            # 무결성 확인 후 최종 이름으로 이동 (실패 시 부분 파일 잔존 방지)
+            if gzip -t $$TMPFILE 2>/dev/null; then
+              mv $$TMPFILE $$FILENAME
+              echo \"[pg-backup] OK: $$FILENAME ($$(stat -c%s $$FILENAME 2>/dev/null || stat -f%z $$FILENAME) bytes)\"
+            else
+              echo \"[pg-backup] FAIL: gzip integrity check failed, removing $$TMPFILE\" >&2
+              rm -f $$TMPFILE
+            fi
+          else
+            echo \"[pg-backup] FAIL: pg_dump failed\" >&2
+            rm -f $$TMPFILE
+          fi
+          find /backups -name 'itsm_*.sql.gz' -mtime +$$BACKUP_RETENTION_DAYS -delete
+          sleep $$BACKUP_INTERVAL_SECONDS
         done
       "
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      # 24시간 내 백업 1개 이상 존재 확인 (없으면 unhealthy → 알림 훅 가능)
+      test: ["CMD-SHELL", "find /backups -name 'itsm_*.sql.gz' -mtime -1 | grep -q . || exit 1"]
+      interval: 1h
+      timeout: 10s
+      retries: 2
+      start_period: 2m
     logging: *default-logging
 
 # ---------------------------------------------------------------------------

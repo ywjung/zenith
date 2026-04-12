@@ -139,8 +139,13 @@ def _sla_checker_loop():
 
 
 def _seconds_until_midnight() -> float:
-    """다음 자정까지 남은 초를 반환."""
-    now = datetime.now()
+    """다음 KST 자정 00:05까지 남은 초를 반환.
+
+    컨테이너는 UTC로 동작할 수 있으므로 KST를 명시해 의도한 한국 시간 기준 스냅샷 생성을 보장.
+    """
+    from zoneinfo import ZoneInfo
+    kst = ZoneInfo("Asia/Seoul")
+    now = datetime.now(tz=kst)
     midnight = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
     return (midnight - now).total_seconds()
 
@@ -288,8 +293,10 @@ def _run_user_sync():
     logger.info("User sync: total %d active GitLab members", len(active_ids))
 
     with SessionLocal() as db:
+        from .models import ApiKey
         all_users = db.query(UserRole).all()
         changed = 0
+        revoked_keys = 0
         for user in all_users:
             was_active = user.is_active
             should_be_active = user.gitlab_user_id in active_ids
@@ -298,9 +305,19 @@ def _run_user_sync():
                 changed += 1
                 action = "activated" if should_be_active else "deactivated"
                 logger.info("User sync: %s user %s (id=%d)", action, user.username, user.gitlab_user_id)
+                # 비활성화 시 해당 사용자가 생성한 API 키 자동 폐기 (orphan 방지)
+                if not should_be_active:
+                    n = (
+                        db.query(ApiKey)
+                        .filter(ApiKey.created_by == user.username, ApiKey.revoked == False)  # noqa: E712
+                        .update({"revoked": True})
+                    )
+                    if n:
+                        revoked_keys += n
+                        logger.info("User sync: revoked %d API key(s) owned by deactivated user %s", n, user.username)
         if changed:
             db.commit()
-            logger.info("User sync: updated %d user(s)", changed)
+            logger.info("User sync: updated %d user(s), revoked %d api_key(s)", changed, revoked_keys)
         else:
             logger.debug("User sync: no changes")
 
@@ -399,10 +416,11 @@ app = FastAPI(
     version="2.0.0",
     description="GitLab CE 기반 ITSM 포털 API",
     lifespan=lifespan,
-    # H-1: production 환경에서 API 문서 비공개
-    docs_url=None if _is_production() else "/docs",
-    redoc_url=None if _is_production() else "/redoc",
-    openapi_url=None if _is_production() else "/openapi.json",
+    # AIRGAP: Swagger/ReDoc 항상 활성화 (내부망 전용 — nginx IP 제한으로 보호)
+    # CDN 의존 제거를 위해 기본 docs를 비활성화하고 커스텀 엔드포인트로 대체
+    docs_url=None,
+    redoc_url=None,
+    openapi_url="/openapi.json",
     # nginx /api/ → FastAPI / 로 proxy할 때 redirect URL에 /api prefix 유지
     root_path="/api",
     # trailing slash 없이 접근 시 307 redirect 방지
@@ -410,6 +428,47 @@ app = FastAPI(
 )
 
 settings = get_settings()
+
+# ── AIRGAP: Swagger UI / ReDoc — CDN 없이 로컬 번들로 서빙 ────────────────────
+# pip install 없이 unpkg/jsdelivr 번들을 직접 참조하지 않고,
+# FastAPI가 기본 제공하는 get_swagger_ui_html/get_redoc_html에
+# 로컬 static URL을 주입.
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+import pathlib as _pathlib
+
+_static_dir = _pathlib.Path(__file__).parent / "static"
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    return get_swagger_ui_html(
+        openapi_url=app.root_path + "/openapi.json",
+        title=app.title + " — Swagger UI",
+        # AIRGAP: 로컬 파일 사용 — CDN 불필요
+        swagger_js_url="/api/docs-static/swagger-ui-bundle.js",
+        swagger_css_url="/api/docs-static/swagger-ui.css",
+    )
+
+@app.get("/redoc", include_in_schema=False)
+async def custom_redoc_html():
+    return get_redoc_html(
+        openapi_url=app.root_path + "/openapi.json",
+        title=app.title + " — ReDoc",
+        redoc_js_url="/api/docs-static/redoc.standalone.js",
+    )
+
+# AIRGAP: docs 정적 파일을 명시적 라우트로 서빙 (mount 방식은 미들웨어에 의해 가려짐)
+from fastapi.responses import FileResponse as _FileResponse
+
+@app.get("/docs-static/{filename}", include_in_schema=False)
+async def serve_docs_static(filename: str):
+    safe_name = _pathlib.Path(filename).name  # path traversal 방지
+    file_path = _static_dir / safe_name
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    media_types = {".js": "application/javascript", ".css": "text/css"}
+    mt = media_types.get(file_path.suffix, "application/octet-stream")
+    return _FileResponse(str(file_path), media_type=mt, headers={"Cache-Control": "public, max-age=604800"})
+
 
 # OpenTelemetry 분산 추적
 from .telemetry import setup_telemetry
@@ -708,6 +767,32 @@ async def add_request_id(request: Request, call_next):
     return response
 
 
+# OPT: 자주 변경되지 않는 GET endpoint에 stale-while-revalidate 캐시 헤더 적용
+# 브라우저가 max-age 동안은 네트워크 요청 없이 캐시 사용, 이후 백그라운드 revalidation
+_CACHEABLE_PATHS = frozenset({
+    "/admin/filter-options",    # 상태/우선순위/카테고리 — 거의 안 변함
+    "/admin/service-types",     # 서비스 유형 목록
+    "/admin/quick-replies",     # 빠른 답변 — 가끔 변경
+    "/admin/faq",               # FAQ 목록
+})
+_SHORT_CACHE_PATHS = frozenset({
+    "/tickets/stats",           # 통계 — 30초 캐시
+    "/notifications/announcements",  # 공지 — 60초 캐시
+})
+
+
+@app.middleware("http")
+async def cache_control_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.method == "GET" and response.status_code == 200:
+        path = request.url.path
+        if path in _CACHEABLE_PATHS:
+            response.headers["Cache-Control"] = "private, max-age=60, stale-while-revalidate=300"
+        elif path in _SHORT_CACHE_PATHS:
+            response.headers["Cache-Control"] = "private, max-age=10, stale-while-revalidate=30"
+    return response
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
@@ -823,9 +908,12 @@ try:
         async def dispatch(self, request: _Request, call_next):
             response = await call_next(request)
             if response.status_code == 429:
+                # 라우트 템플릿("/api/tickets/{iid}")으로 정규화 — 고카디널리티(실제 iid) 방지
+                route = request.scope.get("route")
+                path_label = getattr(route, "path", None) or "unmatched"
                 _rate_limited_counter.labels(
                     method=request.method,
-                    path=request.url.path,
+                    path=path_label,
                 ).inc()
             return response
 

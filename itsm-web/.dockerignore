@@ -8,3 +8,15 @@ __tests__
 *.test.tsx
 jest.config.js
 jest.setup.ts
+.git
+.gitignore
+.vscode
+.idea
+*.log
+*.md
+Dockerfile*
+.dockerignore
+playwright-report
+test-results
+e2e
+tsconfig.tsbuildinfo

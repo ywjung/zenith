@@ -60,7 +60,7 @@ class RolePatch(BaseModel):
 
 @router.get("/users")
 def list_users(
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10000),
     per_page: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     _user: dict = Depends(require_admin),
@@ -214,7 +214,7 @@ def _audit_row_to_dict(r) -> dict:
 
 @router.get("/audit")
 def list_audit_logs(
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10000),
     per_page: int = Query(default=50, ge=1, le=200),
     resource_type: Optional[str] = None,
     actor_id: Optional[str] = None,
