@@ -1109,5 +1109,21 @@
     "error_heading": "An error occurred",
     "error_body": "There was a problem displaying this page.",
     "error_id": "Error ID: {id}"
+  },
+  "login": {
+    "tagline": "IT Service Management",
+    "checking_auth": "Checking authentication...",
+    "gitlab_login": "Sign in with GitLab",
+    "sign_in_hint": "Sign in with your organization's GitLab account.\nContact the administrator if you don't have an account.",
+    "portal_title": "IT Support Request Portal",
+    "portal_subtitle": "Request support without a GitLab account",
+    "security_badge": "OAuth 2.0 · HttpOnly cookies · CSRF protection",
+    "error_unknown": "An authentication error occurred. Please try again.",
+    "error_access_denied": "GitLab sign-in was cancelled.",
+    "error_csrf": "Security validation failed. Please try again.",
+    "error_token_exchange": "An error occurred during authentication. Please try again.",
+    "error_user_info": "Could not fetch user info. Please try again later.",
+    "error_auth_failed": "Sign-in failed. Please try again.",
+    "error_exchange_failed": "An error occurred during sign-in. Please try again."
   }
 }

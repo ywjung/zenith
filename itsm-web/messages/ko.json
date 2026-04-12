@@ -1109,5 +1109,21 @@
     "error_heading": "오류가 발생했습니다",
     "error_body": "페이지를 표시하는 중 문제가 발생했습니다.",
     "error_id": "오류 ID: {id}"
+  },
+  "login": {
+    "tagline": "IT Service Management",
+    "checking_auth": "인증 확인 중...",
+    "gitlab_login": "GitLab으로 로그인",
+    "sign_in_hint": "조직의 GitLab 계정으로 로그인합니다.\n계정이 없으면 관리자에게 문의하세요.",
+    "portal_title": "IT 지원 요청 포털",
+    "portal_subtitle": "GitLab 계정 없이 바로 지원 요청 가능",
+    "security_badge": "OAuth 2.0 · httponly 쿠키 · CSRF 보호",
+    "error_unknown": "인증 오류가 발생했습니다. 다시 시도해 주세요.",
+    "error_access_denied": "GitLab 로그인이 취소됐습니다.",
+    "error_csrf": "보안 검증에 실패했습니다. 다시 시도해 주세요.",
+    "error_token_exchange": "인증 처리 중 오류가 발생했습니다. 다시 시도해 주세요.",
+    "error_user_info": "사용자 정보를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    "error_auth_failed": "로그인에 실패했습니다. 다시 시도해 주세요.",
+    "error_exchange_failed": "로그인 처리 중 오류가 발생했습니다. 다시 시도해 주세요."
   }
 }

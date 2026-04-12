@@ -2,28 +2,31 @@
 
 import { useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
 import { useAuth } from '@/context/AuthContext'
 
-const ERROR_MESSAGES: Record<string, string> = {
-  access_denied:   'GitLab 로그인이 취소됐습니다.',
-  csrf:            '보안 검증에 실패했습니다. 다시 시도해 주세요.',
-  token_exchange:  '인증 처리 중 오류가 발생했습니다. 다시 시도해 주세요.',
-  user_info:       '사용자 정보를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.',
-  auth_failed:     '로그인에 실패했습니다. 다시 시도해 주세요.',
-  exchange_failed: '로그인 처리 중 오류가 발생했습니다. 다시 시도해 주세요.',
+const ERROR_KEY_MAP: Record<string, string> = {
+  access_denied:   'error_access_denied',
+  csrf:            'error_csrf',
+  token_exchange:  'error_token_exchange',
+  user_info:       'error_user_info',
+  auth_failed:     'error_auth_failed',
+  exchange_failed: 'error_exchange_failed',
 }
 
 function LoginContent() {
+  const t = useTranslations('login')
   const params = useSearchParams()
   const router = useRouter()
-  // AuthContext의 /api/auth/me 결과를 재사용 — 중복 호출 방지
   const { user, loading } = useAuth()
 
   const errorKey = params.get('error') ?? ''
-  const errorMsg = ERROR_MESSAGES[errorKey] ?? (errorKey ? '인증 오류가 발생했습니다. 다시 시도해 주세요.' : null)
+  const mappedKey = ERROR_KEY_MAP[errorKey]
+  const errorMsg = mappedKey
+    ? t(mappedKey as 'error_access_denied')
+    : (errorKey ? t('error_unknown') : null)
 
-  // 이미 로그인된 경우 메인으로 이동
   useEffect(() => {
     if (!loading && user) {
       router.replace('/')
@@ -31,11 +34,9 @@ function LoginContent() {
   }, [user, loading, router])
 
   return (
-    // fixed inset-0: Header/Footer/body 위를 완전히 덮는 full-screen 레이아웃
     <div className="fixed inset-0 z-[999] flex items-center justify-center overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}
     >
-      {/* Background grid pattern */}
       <div
         className="absolute inset-0 opacity-[0.04] pointer-events-none"
         style={{
@@ -44,32 +45,27 @@ function LoginContent() {
           backgroundSize: '48px 48px',
         }}
       />
-      {/* Glow orbs */}
       <div className="absolute top-[30%] left-[20%] w-[500px] h-[400px] rounded-full opacity-10 pointer-events-none"
         style={{ background: 'radial-gradient(circle, #3b82f6 0%, transparent 70%)' }} />
       <div className="absolute bottom-[20%] right-[15%] w-[400px] h-[300px] rounded-full opacity-8 pointer-events-none"
         style={{ background: 'radial-gradient(circle, #8b5cf6 0%, transparent 70%)' }} />
 
-      {/* Card */}
       {loading ? (
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-2 border-yellow-400/60 border-t-yellow-400 rounded-full animate-spin" />
-          <p className="text-slate-400 text-sm">인증 확인 중...</p>
+          <p className="text-slate-400 text-sm">{t('checking_auth')}</p>
         </div>
       ) : (
         <div className="relative w-full max-w-sm mx-6">
-          {/* Outer glow ring */}
           <div className="absolute -inset-px rounded-2xl opacity-40"
             style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.5), rgba(139,92,246,0.3), rgba(59,130,246,0.1))' }} />
 
           <div className="relative rounded-2xl overflow-hidden"
             style={{ background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.08)' }}
           >
-            {/* Top accent bar */}
             <div className="h-0.5 w-full" style={{ background: 'linear-gradient(90deg, transparent, #3b82f6, #8b5cf6, transparent)' }} />
 
             <div className="p-8">
-              {/* Logo */}
               <div className="flex flex-col items-center mb-8">
                 <div className="w-18 h-18 mb-4 relative">
                   <div className="absolute inset-0 rounded-2xl opacity-30 blur-xl"
@@ -93,10 +89,9 @@ function LoginContent() {
                   </div>
                 </div>
                 <h1 className="text-3xl font-bold tracking-[0.15em] text-white">ZENITH</h1>
-                <p className="text-xs tracking-widest text-slate-400 mt-1.5 uppercase">IT Service Management</p>
+                <p className="text-xs tracking-widest text-slate-400 mt-1.5 uppercase">{t('tagline')}</p>
               </div>
 
-              {/* Error message */}
               {errorMsg && (
                 <div className="flex items-start gap-2.5 mb-6 px-3.5 py-3 rounded-xl"
                   style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
@@ -109,7 +104,6 @@ function LoginContent() {
                 </div>
               )}
 
-              {/* Login button */}
               <a
                 href={`${API_BASE}/auth/login`}
                 className="flex items-center justify-center gap-2.5 w-full py-3 px-4 rounded-xl font-semibold text-sm text-white transition-all duration-150 active:scale-[0.98]"
@@ -120,40 +114,47 @@ function LoginContent() {
                 onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 4px 32px rgba(252,109,38,0.5)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 4px 24px rgba(252,109,38,0.3)' }}
               >
-                {/* GitLab fox logo */}
                 <svg className="w-5 h-5 shrink-0" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M24.507 9.5l-.034-.09L21.082.562a.896.896 0 00-1.694.091l-2.29 7.01H8.355L6.064.653a.898.898 0 00-1.694-.09L.451 9.411.416 9.5a6.297 6.297 0 002.09 7.277l.012.01.03.022 5.16 3.867 2.56 1.935 1.554 1.176a1.051 1.051 0 001.268 0l1.555-1.176 2.56-1.935 5.197-3.89.014-.01A6.297 6.297 0 0024.507 9.5z" fill="white"/>
                 </svg>
-                GitLab으로 로그인
+                {t('gitlab_login')}
               </a>
 
-              <p className="text-center text-xs text-slate-500 mt-5 leading-relaxed">
-                조직의 GitLab 계정으로 로그인합니다.<br />
-                계정이 없으면 관리자에게 문의하세요.
+              <p className="text-center text-xs text-slate-500 mt-5 leading-relaxed whitespace-pre-line">
+                {t('sign_in_hint')}
               </p>
 
-              {/* Portal link for users without GitLab account */}
-              <div className="mt-4 pt-4 border-t border-white/5 text-center">
+              <div className="mt-5 pt-5 border-t border-white/5">
                 <a
                   href="/portal"
-                  className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-400 transition-colors duration-150"
+                  className="flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-150 hover:scale-[1.01] active:scale-[0.99]"
+                  style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.12)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.06)' }}
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background: 'rgba(59,130,246,0.15)' }}>
+                    <svg className="w-4.5 h-4.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-blue-300">{t('portal_title')}</p>
+                    <p className="text-[11px] text-slate-500">{t('portal_subtitle')}</p>
+                  </div>
+                  <svg className="w-4 h-4 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
-                  GitLab 계정 없이 IT 지원 요청하기
                 </a>
               </div>
             </div>
 
-            {/* Bottom security badge */}
             <div className="px-8 pb-5 flex items-center justify-center gap-1.5">
               <svg className="w-3 h-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              <span className="text-[10px] text-slate-600">OAuth 2.0 · httponly 쿠키 · CSRF 보호</span>
+              <span className="text-[10px] text-slate-600">{t('security_badge')}</span>
             </div>
           </div>
         </div>
