@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   fetchAISettings, updateAISettings, testAIConnection, fetchOllamaModels,
   type AISettingsData, type OllamaModel,
@@ -8,13 +9,15 @@ import {
 import { errorMessage } from '@/lib/utils'
 import SpinnerIcon from '@/components/SpinnerIcon'
 
-const OPENAI_MODELS = [
-  { value: 'gpt-4o-mini', label: 'GPT-4o Mini (빠름·저렴)' },
-  { value: 'gpt-4o', label: 'GPT-4o (고품질)' },
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-]
+const OPENAI_MODEL_VALUES = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'] as const
+const OPENAI_MODEL_KEY: Record<string, string> = {
+  'gpt-4o-mini': 'model_gpt4o_mini_label',
+  'gpt-4o':      'model_gpt4o_label',
+  'gpt-4-turbo': 'model_gpt4_turbo_label',
+}
 
 export default function AISettingsPage() {
+  const t = useTranslations('admin.ai_settings')
   const [settings, setSettings] = useState<AISettingsData | null>(null)
 
   const [form, setForm] = useState({
@@ -58,7 +61,7 @@ export default function AISettingsPage() {
           openai_auth_method: data.openai_auth_method || 'api_key',
         }))
       })
-      .catch(() => setError('설정을 불러오는 중 오류가 발생했습니다.'))
+      .catch(() => setError(t('load_failed')))
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -89,7 +92,7 @@ export default function AISettingsPage() {
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (e: unknown) {
-      setError(errorMessage(e, '저장 중 오류가 발생했습니다.'))
+      setError(errorMessage(e, t('save_failed')))
     } finally {
       setSaving(false)
     }
@@ -121,10 +124,10 @@ export default function AISettingsPage() {
       const inferSec = res.infer_ms != null ? `${(res.infer_ms / 1000).toFixed(1)}s` : ''
       setTestResult({
         ok: true,
-        msg: `연결 성공! 모델: ${model} · 추론: ${inferSec} · 분류: ${res.sample_result.category}/${res.sample_result.priority}`,
+        msg: t('test_success', { model, sec: inferSec, cat: res.sample_result.category, prio: res.sample_result.priority }),
       })
     } catch (e: unknown) {
-      setTestResult({ ok: false, msg: errorMessage(e, '연결 실패') })
+      setTestResult({ ok: false, msg: errorMessage(e, t('test_failed')) })
     } finally {
       setTesting(false)
       if (testTimerRef.current) { clearInterval(testTimerRef.current); testTimerRef.current = null }
@@ -146,14 +149,14 @@ export default function AISettingsPage() {
         set('ollama_model', res.models[0].name)
       }
     } catch (e: unknown) {
-      setOllamaFetchError(errorMessage(e, 'Ollama 서버에 연결할 수 없습니다.'))
+      setOllamaFetchError(errorMessage(e, t('ollama_unreachable')))
       setOllamaModels([])
     } finally {
       setOllamaFetching(false)
     }
   }
 
-  if (loading) return <div className="p-8 text-gray-500">로딩 중...</div>
+  if (loading) return <div className="p-8 text-gray-500">{t('loading')}</div>
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
@@ -161,10 +164,10 @@ export default function AISettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <span className="text-2xl">🤖</span> AI 설정
+            <span className="text-2xl">🤖</span> {t('title')}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            OpenAI 또는 Ollama를 사용해 티켓 자동 분류·요약·KB 추천 기능을 제공합니다.
+            {t('subtitle')}
           </p>
         </div>
         <button
@@ -174,7 +177,7 @@ export default function AISettingsPage() {
           className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors flex items-center gap-2"
         >
           {saving && <SpinnerIcon className="w-4 h-4" />}
-          {saving ? '저장 중...' : saved ? '✅ 저장됨' : '저장'}
+          {saving ? t('saving') : saved ? t('saved') : t('save')}
         </button>
       </div>
 
@@ -182,9 +185,9 @@ export default function AISettingsPage() {
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-gray-900 dark:text-white">AI 기능 활성화</p>
+            <p className="font-semibold text-gray-900 dark:text-white">{t('enable_ai')}</p>
             <p className="text-sm text-gray-500 mt-0.5">
-              비활성화 시 모든 AI 기능이 일시 중지됩니다.
+              {t('enable_ai_hint')}
             </p>
           </div>
           <button
@@ -210,14 +213,14 @@ export default function AISettingsPage() {
 
       {/* Provider 선택 */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
-        <p className="font-semibold text-gray-900 dark:text-white">AI 제공자</p>
+        <p className="font-semibold text-gray-900 dark:text-white">{t('provider_title')}</p>
         <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
-          💡 폐쇄망(내부망) 환경에서는 <strong>Ollama</strong>만 사용 가능합니다. OpenAI는 외부 인터넷 연결이 필요합니다.
+          {t('provider_hint')}
         </p>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { value: 'openai', label: 'OpenAI', icon: '🟢', desc: 'GPT-4o 계열 — 외부 인터넷 필요' },
-            { value: 'ollama', label: 'Ollama', icon: '🦙', desc: '로컬 LLM — 인터넷 불필요 ✅' },
+            { value: 'openai', label: t('openai_label'), icon: '🟢', desc: t('openai_desc') },
+            { value: 'ollama', label: t('ollama_label'), icon: '🦙', desc: t('ollama_desc') },
           ].map(p => (
             <button
               key={p.value}
@@ -239,39 +242,39 @@ export default function AISettingsPage() {
       {/* OpenAI 설정 */}
       {form.provider === 'openai' && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
-          <p className="font-semibold text-gray-900 dark:text-white">OpenAI 설정</p>
+          <p className="font-semibold text-gray-900 dark:text-white">{t('openai_title')}</p>
 
           {/* API 키 */}
           <div className="space-y-1">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              API 키
+              {t('api_key')}
               {settings?.openai_api_key_set && (
-                <span className="ml-2 text-xs text-green-600 dark:text-green-400">✓ 저장됨</span>
+                <span className="ml-2 text-xs text-green-600 dark:text-green-400">{t('api_key_saved')}</span>
               )}
             </label>
             <input
               type="password"
               autoComplete="off"
-              placeholder={settings?.openai_api_key_set ? '변경하려면 새 키 입력 (비워두면 유지)' : 'sk-...'}
+              placeholder={settings?.openai_api_key_set ? t('api_key_change_placeholder') : 'sk-...'}
               value={form.openai_api_key}
               onChange={e => set('openai_api_key', e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-xs text-gray-400">
               <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer"
-                className="text-blue-500 hover:underline">platform.openai.com</a>에서 발급 — API 크레딧 필요
+                className="text-blue-500 hover:underline">platform.openai.com</a>{t('api_key_hint_suffix')}
             </p>
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">모델</label>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('model_label')}</label>
             <select
               value={form.openai_model}
               onChange={e => set('openai_model', e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {OPENAI_MODELS.map(m => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+              {OPENAI_MODEL_VALUES.map(v => (
+                <option key={v} value={v}>{t(OPENAI_MODEL_KEY[v] as 'model_gpt4o_mini_label')}</option>
               ))}
             </select>
           </div>
@@ -281,11 +284,11 @@ export default function AISettingsPage() {
       {/* Ollama 설정 */}
       {form.provider === 'ollama' && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
-          <p className="font-semibold text-gray-900 dark:text-white">Ollama 설정</p>
+          <p className="font-semibold text-gray-900 dark:text-white">{t('ollama_title')}</p>
 
           {/* URL 입력 + 모델 목록 조회 버튼 */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Ollama 서버 URL</label>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('ollama_url_label')}</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -305,12 +308,12 @@ export default function AISettingsPage() {
                 disabled={ollamaFetching || !form.ollama_base_url.trim()}
                 className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors whitespace-nowrap"
               >
-                {ollamaFetching ? '조회 중...' : '모델 목록'}
+                {ollamaFetching ? t('fetching_models') : t('fetch_models')}
               </button>
             </div>
             <p className="text-xs text-gray-400">
-              Docker 내부: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://ollama:11434</code>
-              {' '}· 호스트 머신: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://host.docker.internal:11434</code>
+              {t('docker_hint_prefix')}<code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://ollama:11434</code>
+              {t('docker_hint_middle')}<code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">http://host.docker.internal:11434</code>
             </p>
           </div>
 
@@ -355,8 +358,7 @@ export default function AISettingsPage() {
           {/* 목록 조회 성공했지만 모델 없음 */}
           {ollamaFetched && ollamaModels.length === 0 && (
             <div className="rounded-lg px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-xs text-amber-700 dark:text-amber-300">
-              ⚠️ 서버에 설치된 모델이 없습니다.{' '}
-              <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">ollama pull llama3.2</code> 명령으로 모델을 먼저 설치하세요.
+              {t('no_models_found')} <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">ollama pull llama3.2</code>{t('no_models_cmd_suffix')}
             </div>
           )}
 
@@ -364,8 +366,8 @@ export default function AISettingsPage() {
           {!ollamaFetched && (
             <div className="space-y-1">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                모델 이름
-                <span className="ml-2 text-xs font-normal text-gray-400">목록 조회 후 선택하거나 직접 입력</span>
+                {t('model_name_label')}
+                <span className="ml-2 text-xs font-normal text-gray-400">{t('model_name_hint')}</span>
               </label>
               <input
                 type="text"
@@ -375,8 +377,7 @@ export default function AISettingsPage() {
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <p className="text-xs text-gray-400">
-                예: llama3.2, mistral, qwen2.5 —{' '}
-                <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">ollama pull llama3.2</code>로 다운로드
+                {t('model_examples_prefix')}<code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">ollama pull llama3.2</code>{t('model_examples_suffix')}
               </p>
             </div>
           )}
@@ -385,25 +386,25 @@ export default function AISettingsPage() {
 
       {/* 기능별 ON/OFF */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-3">
-        <p className="font-semibold text-gray-900 dark:text-white">기능 설정</p>
+        <p className="font-semibold text-gray-900 dark:text-white">{t('features_title')}</p>
         {[
           {
             key: 'feature_classify',
             icon: '🏷️',
-            label: '자동 분류',
-            desc: '티켓 작성 시 카테고리·우선순위 AI 제안',
+            label: t('feature_classify'),
+            desc: t('feature_classify_desc'),
           },
           {
             key: 'feature_summarize',
             icon: '📝',
-            label: '스레드 요약',
-            desc: '티켓 상세에서 댓글 스레드 AI 요약',
+            label: t('feature_summarize'),
+            desc: t('feature_summarize_desc'),
           },
           {
             key: 'feature_kb_suggest',
             icon: '📚',
-            label: 'KB 문서 추천',
-            desc: '티켓 내용과 관련된 지식베이스 자동 추천',
+            label: t('feature_kb'),
+            desc: t('feature_kb_desc'),
           },
         ].map(feat => (
           <div key={feat.key} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
@@ -455,23 +456,23 @@ export default function AISettingsPage() {
           className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
         >
           {saving && <SpinnerIcon className="w-4 h-4" />}
-          {saving ? '저장 중...' : saved ? '✅ 저장됨' : '저장'}
+          {saving ? t('saving') : saved ? t('saved') : t('save')}
         </button>
         <button
           onClick={handleTest}
           disabled={testing}
-          title="저장 전에도 현재 폼 설정으로 테스트 가능"
+          title={t('test_tooltip')}
           className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 text-sm font-medium transition-colors"
         >
-          {testing ? `테스트 중... ${testElapsed}s` : '연결 테스트'}
+          {testing ? t('testing_progress', { sec: testElapsed }) : t('test_connection')}
         </button>
       </div>
 
       {/* 안내 */}
       <div className="text-xs text-gray-400 space-y-1 border-t border-gray-100 dark:border-gray-700 pt-4">
-        <p>• OpenAI API 키는 암호화되어 DB에 저장되며 화면에 노출되지 않습니다.</p>
-        <p>• Ollama 사용 시 <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">docker compose up ollama</code>로 서비스를 먼저 시작하세요.</p>
-        <p>• 연결 테스트는 저장된 설정(Enable 상태)으로 실행됩니다.</p>
+        <p>{t('info_1')}</p>
+        <p>{t('info_2_prefix')}<code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">docker compose up ollama</code>{t('info_2_suffix')}</p>
+        <p>{t('info_3')}</p>
       </div>
     </div>
   )
