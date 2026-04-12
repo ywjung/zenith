@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
 import { errorMessage } from '@/lib/utils'
 
@@ -32,6 +33,7 @@ const FIELD_TYPES = ['text', 'textarea', 'select', 'date'] as const
 const EMPTY_FIELD: FieldDef = { name: '', label: '', type: 'text', required: false }
 
 function FieldEditor({ fields, onChange }: { fields: FieldDef[]; onChange: (fields: FieldDef[]) => void }) {
+  const t = useTranslations('admin.service_catalog')
   function update(idx: number, patch: Partial<FieldDef>) {
     const next = fields.map((f, i) => i === idx ? { ...f, ...patch } : f)
     onChange(next)
@@ -45,13 +47,13 @@ function FieldEditor({ fields, onChange }: { fields: FieldDef[]; onChange: (fiel
         <div key={i} className="border dark:border-gray-600 rounded-lg p-3 space-y-2 bg-gray-50 dark:bg-gray-800/40">
           <div className="flex gap-2">
             <input
-              placeholder="필드 ID (영문)"
+              placeholder={t('field_id_placeholder')}
               value={f.name}
               onChange={e => update(i, { name: e.target.value })}
               className="flex-1 text-xs border dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
             <input
-              placeholder="레이블"
+              placeholder={t('field_label_placeholder')}
               value={f.label}
               onChange={e => update(i, { label: e.target.value })}
               className="flex-1 text-xs border dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -65,13 +67,13 @@ function FieldEditor({ fields, onChange }: { fields: FieldDef[]; onChange: (fiel
             </select>
             <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
               <input type="checkbox" checked={f.required} onChange={e => update(i, { required: e.target.checked })} />
-              필수
+              {t('required')}
             </label>
-            <button onClick={() => remove(i)} className="text-xs text-red-500 hover:text-red-700 px-1" aria-label="삭제">✕</button>
+            <button onClick={() => remove(i)} className="text-xs text-red-500 hover:text-red-700 px-1" aria-label={t('remove_aria')}>✕</button>
           </div>
           {f.type === 'select' && (
             <input
-              placeholder="선택지 (쉼표 구분)"
+              placeholder={t('options_placeholder')}
               value={(f.options || []).join(', ')}
               onChange={e => update(i, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
               className="w-full text-xs border dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -84,7 +86,7 @@ function FieldEditor({ fields, onChange }: { fields: FieldDef[]; onChange: (fiel
         onClick={add}
         className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
       >
-        + 필드 추가
+        {t('add_field')}
       </button>
     </div>
   )
@@ -110,6 +112,7 @@ const EMPTY_FORM: FormState = {
 }
 
 export default function ServiceCatalogAdminPage() {
+  const t = useTranslations('admin.service_catalog')
   const [items, setItems] = useState<CatalogItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -123,10 +126,10 @@ export default function ServiceCatalogAdminPage() {
     setLoading(true)
     try {
       const res = await fetch(`${API_BASE}/service-catalog`, { credentials: 'include' })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '목록 조회 실패')
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || t('load_failed'))
       setItems(await res.json())
     } catch (e: unknown) {
-      setError(errorMessage(e, '목록 조회 실패'))
+      setError(errorMessage(e, t('load_failed')))
     } finally { setLoading(false) }
   }
 
@@ -158,7 +161,7 @@ export default function ServiceCatalogAdminPage() {
   }
 
   async function handleSave() {
-    if (!form.name.trim()) { setError('이름을 입력하세요.'); return }
+    if (!form.name.trim()) { setError(t('name_required')); return }
     setSaving(true); setError(null)
     try {
       const url = editId ? `${API_BASE}/service-catalog/${editId}` : `${API_BASE}/service-catalog`
@@ -181,12 +184,12 @@ export default function ServiceCatalogAdminPage() {
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(d.detail || '저장 실패')
+        throw new Error(d.detail || t('save_failed'))
       }
       setShowModal(false)
       await load()
     } catch (err: unknown) {
-      setError(errorMessage(err, '오류가 발생했습니다.'))
+      setError(errorMessage(err, t('generic_error')))
     } finally { setSaving(false) }
   }
 
@@ -199,11 +202,11 @@ export default function ServiceCatalogAdminPage() {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail || '상태 변경에 실패했습니다.')
+        throw new Error(err.detail || t('toggle_failed'))
       }
       await load()
     } catch (e: unknown) {
-      setError(errorMessage(e, '상태 변경에 실패했습니다.'))
+      setError(errorMessage(e, t('toggle_failed')))
     }
   }
 
@@ -212,12 +215,12 @@ export default function ServiceCatalogAdminPage() {
       const res = await fetch(`${API_BASE}/service-catalog/${id}`, { method: 'DELETE', credentials: 'include' })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail || '삭제에 실패했습니다.')
+        throw new Error(err.detail || t('delete_failed'))
       }
       setDeleteId(null)
       await load()
     } catch (e: unknown) {
-      setError(errorMessage(e, '삭제에 실패했습니다.'))
+      setError(errorMessage(e, t('delete_failed')))
     }
   }
 
@@ -230,25 +233,25 @@ export default function ServiceCatalogAdminPage() {
               <svg className="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
               </svg>
-              서비스 카탈로그
+              {t('title')}
             </h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">포털에서 신청 가능한 서비스 항목을 관리합니다.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('subtitle')}</p>
           </div>
           <button
             onClick={openCreate}
             className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-medium"
           >
-            + 항목 추가
+            {t('add_item')}
           </button>
         </div>
 
         {loading ? (
-          <div className="text-center py-8 text-gray-400 text-sm">불러오는 중...</div>
+          <div className="text-center py-8 text-gray-400 text-sm">{t('loading')}</div>
         ) : items.length === 0 ? (
           <div className="text-center py-12 text-gray-400 text-sm">
             <div className="text-3xl mb-2">📦</div>
-            <p>카탈로그 항목이 없습니다.</p>
-            <button onClick={openCreate} className="mt-2 text-blue-600 dark:text-blue-400 hover:underline text-xs">첫 항목 추가하기</button>
+            <p>{t('empty')}</p>
+            <button onClick={openCreate} className="mt-2 text-blue-600 dark:text-blue-400 hover:underline text-xs">{t('add_first')}</button>
           </div>
         ) : (
           <div className="space-y-2">
@@ -271,16 +274,16 @@ export default function ServiceCatalogAdminPage() {
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
                       item.is_active ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
                     }`}>
-                      {item.is_active ? '활성' : '비활성'}
+                      {item.is_active ? t('active') : t('inactive')}
                     </span>
-                    <span className="text-xs text-gray-400">순서 {item.order}</span>
+                    <span className="text-xs text-gray-400">{t('order_prefix', { n: item.order })}</span>
                   </div>
                   {item.description && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{item.description}</p>
                   )}
                   {item.fields_schema.length > 0 && (
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                      필드 {item.fields_schema.length}개: {item.fields_schema.map(f => f.label || f.name).join(', ')}
+                      {t('fields_count', { n: item.fields_schema.length, list: item.fields_schema.map(f => f.label || f.name).join(', ') })}
                     </p>
                   )}
                 </div>
@@ -289,19 +292,19 @@ export default function ServiceCatalogAdminPage() {
                     onClick={() => handleToggleActive(item)}
                     className="text-xs px-2 py-1 border dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
                   >
-                    {item.is_active ? '비활성화' : '활성화'}
+                    {item.is_active ? t('disable') : t('enable')}
                   </button>
                   <button
                     onClick={() => openEdit(item)}
                     className="text-xs px-2 py-1 border dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
                   >
-                    편집
+                    {t('edit')}
                   </button>
                   <button
                     onClick={() => setDeleteId(item.id)}
                     className="text-xs px-2 py-1 border border-red-200 dark:border-red-800 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
-                    삭제
+                    {t('delete')}
                   </button>
                 </div>
               </div>
@@ -316,22 +319,22 @@ export default function ServiceCatalogAdminPage() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-scaleIn">
             <div className="p-5 border-b dark:border-gray-700">
               <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                {editId ? '카탈로그 항목 편집' : '새 카탈로그 항목'}
+                {editId ? t('edit_title') : t('new_title')}
               </h3>
             </div>
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">이름 *</label>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('name_label')}</label>
                   <input
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="예: 노트북 지급 신청"
+                    placeholder={t('name_placeholder')}
                     className="w-full text-sm border dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">아이콘 (이모지)</label>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('icon_label')}</label>
                   <input
                     value={form.icon}
                     onChange={e => setForm(f => ({ ...f, icon: e.target.value }))}
@@ -340,26 +343,26 @@ export default function ServiceCatalogAdminPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">카테고리</label>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('category_label')}</label>
                   <input
                     value={form.category}
                     onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                    placeholder="예: 하드웨어"
+                    placeholder={t('category_placeholder')}
                     className="w-full text-sm border dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">설명</label>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('description_label')}</label>
                   <textarea
                     value={form.description}
                     onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                     rows={2}
-                    placeholder="간단한 항목 설명"
+                    placeholder={t('description_placeholder')}
                     className="w-full text-sm border dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">표시 순서</label>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('order_label')}</label>
                   <input
                     type="number"
                     value={form.order}
@@ -375,14 +378,14 @@ export default function ServiceCatalogAdminPage() {
                       onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
                       className="rounded"
                     />
-                    활성화
+                    {t('enabled_toggle')}
                   </label>
                 </div>
               </div>
 
               <div>
                 <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-2">
-                  추가 입력 필드 <span className="text-gray-400 font-normal">(포털 신청 시 표시됩니다)</span>
+                  {t('extra_fields_label')} <span className="text-gray-400 font-normal">{t('extra_fields_hint')}</span>
                 </label>
                 <FieldEditor
                   fields={form.fields_schema}
@@ -400,19 +403,19 @@ export default function ServiceCatalogAdminPage() {
                     className="rounded border-gray-300 dark:border-gray-600 text-blue-600"
                   />
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    ✅ 승인 필요 <span className="text-gray-400 font-normal">(티켓 생성 시 자동으로 승인 요청 생성)</span>
+                    {t('approval_required')} <span className="text-gray-400 font-normal">{t('approval_required_hint')}</span>
                   </span>
                 </label>
                 {form.requires_approval && (
                   <div className="space-y-2 ml-5">
                     <input
-                      placeholder="승인자 사용자명 (비워두면 에이전트 전체)"
+                      placeholder={t('approver_placeholder')}
                       value={form.approver_username}
                       onChange={e => setForm(f => ({ ...f, approver_username: e.target.value }))}
                       className="w-full text-xs border dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                     <textarea
-                      placeholder="요청자에게 보여줄 안내 메시지 (선택)"
+                      placeholder={t('approval_note_placeholder')}
                       value={form.approval_note}
                       onChange={e => setForm(f => ({ ...f, approval_note: e.target.value }))}
                       rows={2}
@@ -429,14 +432,14 @@ export default function ServiceCatalogAdminPage() {
                 onClick={() => setShowModal(false)}
                 className="text-sm px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
-                취소
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
                 className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? '저장 중...' : '저장'}
+                {saving ? t('saving') : t('save')}
               </button>
             </div>
           </div>
@@ -447,11 +450,11 @@ export default function ServiceCatalogAdminPage() {
       {deleteId !== null && (
         <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 max-w-sm w-full animate-scaleIn">
-            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">항목 삭제</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">이 카탈로그 항목을 삭제할까요?</p>
+            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">{t('delete_title')}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{t('delete_confirm')}</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setDeleteId(null)} className="text-sm px-3 py-1.5 border dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400">취소</button>
-              <button onClick={() => handleDelete(deleteId)} className="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-medium">삭제</button>
+              <button onClick={() => setDeleteId(null)} className="text-sm px-3 py-1.5 border dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400">{t('cancel')}</button>
+              <button onClick={() => handleDelete(deleteId)} className="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-medium">{t('delete')}</button>
             </div>
           </div>
         </div>
