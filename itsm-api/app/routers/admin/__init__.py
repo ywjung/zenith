@@ -988,7 +988,7 @@ def get_notification_channels(
 ):
     """이메일·텔레그램·Slack 채널 활성화 상태와 인프라(env) 설정 여부를 반환한다."""
     settings = get_settings()
-    rows = {r.key: r.value for r in db.query(SystemSetting).filter(SystemSetting.key.in_(list(_CHANNEL_KEYS))).all()}
+    rows = {r.key: r.value for r in db.query(SystemSetting).filter(SystemSetting.key.in_(list(_CHANNEL_KEYS))).limit(len(_CHANNEL_KEYS)).all()}
     return {
         "email_enabled": rows.get("email_enabled", "true") == "true",
         "telegram_enabled": rows.get("telegram_enabled", "true") == "true",

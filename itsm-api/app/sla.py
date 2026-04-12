@@ -311,8 +311,9 @@ def check_and_send_warnings(db: Session, warning_minutes: int = 60) -> list[SLAR
     from .models import UserRole
     from .notifications import create_db_notification
     try:
-        staff = db.query(UserRole).filter(UserRole.role.in_(["admin", "agent"])).all()
-    except Exception:
+        staff = db.query(UserRole).filter(UserRole.role.in_(["admin", "agent"])).limit(500).all()
+    except Exception as e:
+        logger.warning("SLA staff lookup failed: %s", e)
         staff = []
 
     for record in at_risk:

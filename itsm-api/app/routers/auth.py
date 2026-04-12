@@ -369,26 +369,24 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="리프레시 토큰이 없습니다.")
 
     token_hash = hashlib.sha256(raw.encode()).hexdigest()
+    _now_utc = datetime.now(timezone.utc)
+    # 만료 체크를 filter에 포함 — 만료된 토큰은 행 잠금 없이 즉시 거부되어
+    # 반복 공격 시 잠금 점유 최소화.
     record = (
         db.query(RefreshToken)
         .filter(
             RefreshToken.token_hash == token_hash,
             RefreshToken.revoked == False,  # noqa: E712
+            RefreshToken.expires_at > _now_utc,
         )
         .with_for_update()
         .first()
     )
 
     if not record:
+        # 유효하지 않거나 만료된 토큰 — 둘 다 동일한 401로 처리 (정보 누출 방지)
         write_audit_log(db, {"username": "unknown"}, "auth.refresh.invalid_token", "auth", "", request=request)
-        raise HTTPException(status_code=401, detail="유효하지 않은 리프레시 토큰입니다.")
-
-    expires_at = record.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
-        write_audit_log(db, {"username": record.gitlab_user_id}, "auth.refresh.expired", "auth", record.gitlab_user_id, request=request)
-        raise HTTPException(status_code=401, detail="리프레시 토큰이 만료됐습니다.")
+        raise HTTPException(status_code=401, detail="유효하지 않거나 만료된 리프레시 토큰입니다.")
 
     settings = get_settings()
 
