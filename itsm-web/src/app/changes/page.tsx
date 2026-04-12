@@ -1,26 +1,17 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import RequireAuth from '@/components/RequireAuth'
 import EmptyState from '@/components/EmptyState'
 import { SkeletonRow } from '@/components/Skeleton'
 import { listChanges, getChangeStats, transitionChange, type ChangeRequest } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
-import { formatDate } from '@/lib/utils'
+import { formatDate, errorMessage } from '@/lib/utils'
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: '초안',
-  submitted: '제출됨',
-  reviewing: '심의 중',
-  approved: '승인됨',
-  rejected: '반려됨',
-  implementing: '구현 중',
-  implemented: '구현 완료',
-  failed: '구현 실패',
-  cancelled: '취소됨',
-}
+const STATUS_KEYS = ['draft', 'submitted', 'reviewing', 'approved', 'rejected', 'implementing', 'implemented', 'failed', 'cancelled'] as const
 
 const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
@@ -41,12 +32,6 @@ const RISK_COLORS: Record<string, string> = {
   critical: 'text-red-600 dark:text-red-400',
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  standard: '정형',
-  normal: '일반',
-  emergency: '긴급',
-}
-
 const TYPE_COLORS: Record<string, string> = {
   standard: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
   normal: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
@@ -54,9 +39,12 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 function ChangesContent() {
+  const t = useTranslations('changes')
   const { user } = useAuth()
-  const router = useRouter()
   const isAgent = user?.role === 'admin' || user?.role === 'agent'
+
+  const statusLabel = (s: string) => t(`status_${s}` as 'status_draft')
+  const typeLabel = (tp: string) => t(`type_${tp}` as 'type_standard')
 
   const [changes, setChanges] = useState<ChangeRequest[]>([])
   const [total, setTotal] = useState(0)
@@ -70,8 +58,12 @@ function ChangesContent() {
   const [commentInput, setCommentInput] = useState('')
 
   const COMMENT_REQUIRED = new Set(['approved', 'rejected', 'implemented', 'failed'])
-  const STATUS_ACTION_LABELS: Record<string, string> = {
-    approved: '승인 사유', rejected: '반려 사유', implemented: '구현 결과', failed: '실패 사유',
+  const actionLabel = (s: string) => {
+    if (s === 'approved') return t('action_approved')
+    if (s === 'rejected') return t('action_rejected')
+    if (s === 'implemented') return t('action_implemented')
+    if (s === 'failed') return t('action_failed')
+    return t('action_default')
   }
 
   const PER_PAGE = 20
@@ -86,8 +78,8 @@ function ChangesContent() {
       setChanges(res.changes)
       setTotal(res.total)
       if (isAgent) setStats(s)
-    } catch (e) {
-      void e // 변경 요청 목록 로드 실패 — UI에서 빈 목록 표시
+    } catch {
+      /* empty list on error */
     } finally {
       setLoading(false)
     }
@@ -97,7 +89,7 @@ function ChangesContent() {
 
   const handleQuickTransition = (id: number, newStatus: string) => {
     if (COMMENT_REQUIRED.has(newStatus)) {
-      setCommentModal({ id, status: newStatus, label: STATUS_ACTION_LABELS[newStatus] ?? '코멘트' })
+      setCommentModal({ id, status: newStatus, label: actionLabel(newStatus) })
       setCommentInput('')
       return
     }
@@ -110,7 +102,7 @@ function ChangesContent() {
       await transitionChange(id, newStatus, comment)
       await loadData()
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '상태 변경 실패')
+      toast.error(errorMessage(e, t('loading_fail')))
     } finally {
       setTransitioning(null)
     }
@@ -127,20 +119,19 @@ function ChangesContent() {
 
   return (
     <div>
-        {/* 코멘트 필수 모달 */}
         {commentModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-fadeIn backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 w-full max-w-md mx-4 animate-scaleIn">
               <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
-                {STATUS_LABELS[commentModal.status] ?? commentModal.status}
+                {statusLabel(commentModal.status)}
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{commentModal.label}을(를) 입력해주세요.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('comment_prompt', { label: commentModal.label })}</p>
               <textarea
                 autoFocus
                 value={commentInput}
                 onChange={e => setCommentInput(e.target.value)}
                 rows={3}
-                placeholder={`${commentModal.label}를 입력하세요`}
+                placeholder={t('comment_placeholder', { label: commentModal.label })}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <div className="flex justify-end gap-2 mt-4">
@@ -148,38 +139,36 @@ function ChangesContent() {
                   onClick={() => setCommentModal(null)}
                   className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                 >
-                  취소
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={confirmCommentModal}
                   disabled={!commentInput.trim()}
                   className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-40"
                 >
-                  확인
+                  {t('confirm')}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* 헤더 */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🔄 변경 관리</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">ITIL 기반 변경 요청(RFC) 관리</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('title')}</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
           </div>
           <Link
             href="/changes/new"
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
           >
-            + 변경 요청
+            {t('new')}
           </Link>
         </div>
 
-        {/* 상태별 집계 (에이전트 이상) */}
         {isAgent && Object.keys(stats).length > 0 && (
           <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 mb-6">
-            {Object.entries(STATUS_LABELS).map(([s, label]) => (
+            {STATUS_KEYS.map(s => (
               <button
                 key={s}
                 onClick={() => { setStatusFilter(statusFilter === s ? '' : s); setPage(1) }}
@@ -190,22 +179,21 @@ function ChangesContent() {
                 }`}
               >
                 <div className="text-lg font-bold text-gray-900 dark:text-white">{stats[s] ?? 0}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{statusLabel(s)}</div>
               </button>
             ))}
           </div>
         )}
 
-        {/* 필터 */}
         <div className="flex flex-wrap gap-3 mb-4">
           <select
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
             className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
           >
-            <option value="">전체 상태</option>
-            {Object.entries(STATUS_LABELS).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
+            <option value="">{t('all_status')}</option>
+            {STATUS_KEYS.map(v => (
+              <option key={v} value={v}>{statusLabel(v)}</option>
             ))}
           </select>
           <select
@@ -213,22 +201,21 @@ function ChangesContent() {
             onChange={e => { setTypeFilter(e.target.value); setPage(1) }}
             className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
           >
-            <option value="">전체 유형</option>
-            <option value="standard">정형</option>
-            <option value="normal">일반</option>
-            <option value="emergency">긴급</option>
+            <option value="">{t('all_types')}</option>
+            <option value="standard">{t('type_standard')}</option>
+            <option value="normal">{t('type_normal')}</option>
+            <option value="emergency">{t('type_emergency')}</option>
           </select>
           {(statusFilter || typeFilter) && (
             <button
               onClick={() => { setStatusFilter(''); setTypeFilter(''); setPage(1) }}
               className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-2"
             >
-              ✕ 초기화
+              {t('reset_filter')}
             </button>
           )}
         </div>
 
-        {/* 목록 */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
           {loading ? (
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -237,9 +224,9 @@ function ChangesContent() {
           ) : changes.length === 0 ? (
             <EmptyState
               icon="🔄"
-              title="변경 요청이 없습니다"
-              description="ITIL 기반 변경 관리를 시작해보세요."
-              actionLabel="+ 첫 번째 변경 요청 만들기"
+              title={t('empty_title')}
+              description={t('empty_desc')}
+              actionLabel={t('empty_cta')}
               actionHref="/changes/new"
             />
           ) : (
@@ -250,13 +237,13 @@ function ChangesContent() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[cr.status] ?? 'bg-gray-100 text-gray-700'}`}>
-                          {STATUS_LABELS[cr.status] ?? cr.status}
+                          {statusLabel(cr.status)}
                         </span>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${TYPE_COLORS[cr.change_type]}`}>
-                          {TYPE_LABELS[cr.change_type] ?? cr.change_type}
+                          {typeLabel(cr.change_type)}
                         </span>
                         <span className={`text-xs font-medium ${RISK_COLORS[cr.risk_level] ?? ''}`}>
-                          위험도: {cr.risk_level.toUpperCase()}
+                          {t('risk_level', { level: cr.risk_level.toUpperCase() })}
                         </span>
                       </div>
                       <Link
@@ -266,24 +253,23 @@ function ChangesContent() {
                         #{cr.id} {cr.title}
                       </Link>
                       <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        <span>요청자: {cr.requester_name ?? cr.requester_username}</span>
+                        <span>{t('requester', { name: cr.requester_name ?? cr.requester_username })}</span>
                         {cr.scheduled_start_at && (
-                          <span>예정: {formatDate(cr.scheduled_start_at)}</span>
+                          <span>{t('scheduled', { date: formatDate(cr.scheduled_start_at) })}</span>
                         )}
-                        <span>생성: {formatDate(cr.created_at ?? '')}</span>
+                        <span>{t('created', { date: formatDate(cr.created_at ?? '') })}</span>
                       </div>
                     </div>
 
-                    {/* 빠른 상태 전이 (에이전트 이상) */}
                     {isAgent && (
                       <div className="flex gap-1 flex-shrink-0">
                         {cr.status === 'submitted' && (
                           <button
                             onClick={() => handleQuickTransition(cr.id, 'reviewing')}
                             disabled={transitioning === cr.id}
-                            className="px-2 py-1 text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-lg disabled:opacity-50"
+                            className="px-2 py-1 text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            심의 시작
+                            {t('start_review')}
                           </button>
                         )}
                         {cr.status === 'reviewing' && (
@@ -291,16 +277,16 @@ function ChangesContent() {
                             <button
                               onClick={() => handleQuickTransition(cr.id, 'approved')}
                               disabled={transitioning === cr.id}
-                              className="px-2 py-1 text-xs bg-teal-100 hover:bg-teal-200 text-teal-800 rounded-lg disabled:opacity-50"
+                              className="px-2 py-1 text-xs bg-teal-100 hover:bg-teal-200 text-teal-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              승인
+                              {t('approve')}
                             </button>
                             <button
                               onClick={() => handleQuickTransition(cr.id, 'rejected')}
                               disabled={transitioning === cr.id}
-                              className="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-800 rounded-lg disabled:opacity-50"
+                              className="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              반려
+                              {t('reject')}
                             </button>
                           </>
                         )}
@@ -308,9 +294,9 @@ function ChangesContent() {
                           <button
                             onClick={() => handleQuickTransition(cr.id, 'implementing')}
                             disabled={transitioning === cr.id}
-                            className="px-2 py-1 text-xs bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-lg disabled:opacity-50"
+                            className="px-2 py-1 text-xs bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            구현 시작
+                            {t('start_implementing')}
                           </button>
                         )}
                         {cr.status === 'implementing' && (
@@ -318,16 +304,16 @@ function ChangesContent() {
                             <button
                               onClick={() => handleQuickTransition(cr.id, 'implemented')}
                               disabled={transitioning === cr.id}
-                              className="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-800 rounded-lg disabled:opacity-50"
+                              className="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              완료
+                              {t('mark_done')}
                             </button>
                             <button
                               onClick={() => handleQuickTransition(cr.id, 'failed')}
                               disabled={transitioning === cr.id}
-                              className="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-800 rounded-lg disabled:opacity-50"
+                              className="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              실패
+                              {t('mark_failed')}
                             </button>
                           </>
                         )}
@@ -340,7 +326,6 @@ function ChangesContent() {
           )}
         </div>
 
-        {/* 페이지네이션 */}
         {totalPages > 1 && (
           <div className="flex items-center justify-center gap-2 mt-4">
             <button
@@ -348,7 +333,7 @@ function ChangesContent() {
               disabled={page === 1}
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
-              이전
+              {t('prev_page')}
             </button>
             <span className="text-sm text-gray-600 dark:text-gray-400">{page} / {totalPages}</span>
             <button
@@ -356,7 +341,7 @@ function ChangesContent() {
               disabled={page === totalPages}
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
-              다음
+              {t('next_page')}
             </button>
           </div>
         )}
