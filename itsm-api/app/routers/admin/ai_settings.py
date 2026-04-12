@@ -327,7 +327,8 @@ def list_ollama_models(
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Ollama 서버 응답 시간 초과 (10s)")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Ollama 연결 오류: {e}")
+        logger.error("Ollama list_models failed: %s", e)
+        raise HTTPException(status_code=502, detail="Ollama 연결 오류가 발생했습니다. 관리자 로그를 확인하세요.")
 
     models = data.get("models", [])
     return {

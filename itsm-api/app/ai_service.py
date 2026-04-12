@@ -106,6 +106,13 @@ def _call_ollama(base_url: str, model: str, prompt: str) -> str:
         import httpx
     except ImportError:
         raise RuntimeError("httpx 패키지가 설치되지 않았습니다.")
+    # SSRF 방지 — base_url이 관리자 설정으로부터 오지만 방어적으로 재검증
+    from .security import is_safe_external_url
+    from .config import get_settings
+    allow_internal = getattr(get_settings(), "ENVIRONMENT", "production") == "development"
+    ok, reason = is_safe_external_url(base_url, allow_internal=allow_internal)
+    if not ok:
+        raise RuntimeError(f"Ollama base_url이 허용되지 않는 주소입니다: {reason}")
     resp = httpx.post(
         f"{base_url.rstrip('/')}/api/generate",
         json={"model": model, "prompt": prompt, "stream": False, "format": "json"},
