@@ -97,8 +97,8 @@ def _fetch_max_access_level(gitlab_user_id: int) -> int:
                 memberships = membership_resp.json()
                 if memberships:
                     return max(m.get("access_level", 0) for m in memberships)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to fetch GitLab access level: %s", e)
     return 0
 
 
@@ -422,8 +422,8 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
                     # 갱신된 refresh_token 암호화 후 DB 업데이트
                     record.gitlab_refresh_token = encrypt_token(new_gitlab_refresh_token)
                     db.commit()
-        except Exception:
-            pass  # GitLab 갱신 실패 시 그룹 토큰으로 폴백
+        except Exception as e:
+            logger.debug("GitLab token refresh failed, falling back to group token: %s", e)
 
     # GitLab OAuth refresh 불가 시 그룹 토큰으로 폴백 (읽기/쓰기 대부분 가능)
     if not new_gitlab_token:
@@ -497,8 +497,8 @@ def logout(request: Request, db: Session = Depends(get_db)):
                     if ttl > 0:
                         # 아직 유효한 토큰만 JTI 블랙리스트에 등록 (잔여 유효 시간만큼 보관)
                         blacklist_token(jti, ttl)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("JTI blacklist on logout failed: %s", e)
 
     # Refresh Token 무효화
     raw_refresh = request.cookies.get("itsm_refresh")
@@ -531,10 +531,12 @@ def logout(request: Request, db: Session = Depends(get_db)):
             logger.warning("Failed to invalidate sudo token on logout: %s", e)
 
     response = RedirectResponse("/login", status_code=303)
-    response.delete_cookie("itsm_token")
-    response.delete_cookie("itsm_refresh")
-    response.delete_cookie("itsm_sudo", httponly=True, secure=get_settings().COOKIE_SECURE, samesite="strict")
-    response.set_cookie("itsm_reauth", "1", max_age=300, httponly=True, samesite="strict", secure=get_settings().COOKIE_SECURE)
+    cookie_secure = get_settings().COOKIE_SECURE
+    # SEC: 쿠키 삭제 시에도 set 시점과 동일한 속성을 명시해야 일부 브라우저에서 silent 실패 방지
+    response.delete_cookie("itsm_token", httponly=True, secure=cookie_secure, samesite="strict")
+    response.delete_cookie("itsm_refresh", httponly=True, secure=cookie_secure, samesite="strict")
+    response.delete_cookie("itsm_sudo", httponly=True, secure=cookie_secure, samesite="strict")
+    response.set_cookie("itsm_reauth", "1", max_age=300, httponly=True, samesite="strict", secure=cookie_secure)
     return response
 
 

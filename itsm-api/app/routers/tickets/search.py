@@ -269,7 +269,8 @@ def get_ticket_stats(
                 ).count()
                 _result["sla_over"]     = _sla_over
                 _result["sla_imminent"] = _sla_imminent
-        except Exception:
+        except Exception as e:
+            logger.warning("SLA stats calculation failed, defaulting to 0: %s", e)
             _result["sla_over"]     = 0
             _result["sla_imminent"] = 0
 

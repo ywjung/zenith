@@ -42,6 +42,18 @@ def get_ticket_links(
 ):
     """티켓과 연결된 다른 이슈 목록 반환.
     GitLab API 링크와 로컬 DB 링크를 통합하여 반환합니다."""
+    # SEC #1 (IDOR): 티켓 view 권한 검증
+    from .helpers import _can_user_view_issue
+    try:
+        issue = gitlab_client.get_issue(iid, project_id=project_id)
+        if not _can_user_view_issue(issue, _user):
+            raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("Ticket links access check failed (iid=%s): %s", iid, e)
+        raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+
     s = get_settings()
     pid = project_id or str(s.GITLAB_PROJECT_ID)
 

@@ -48,8 +48,8 @@ async def ticket_event_stream(
             if r is not None:
                 try:
                     await r.aclose()
-                except Exception:
-                    pass
+                except Exception as ce:
+                    logger.debug("SSE redis close failed (iid=%s): %s", iid, ce)
             return
 
         keepalive_interval = 30.0
@@ -77,8 +77,8 @@ async def ticket_event_stream(
             try:
                 await pubsub.unsubscribe(channel)
                 await r.aclose()
-            except Exception:
-                pass
+            except Exception as ce:
+                logger.debug("SSE cleanup failed (iid=%s): %s", iid, ce)
 
     return StreamingResponse(
         event_generator(),

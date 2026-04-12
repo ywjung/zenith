@@ -920,7 +920,7 @@ def get_role_labels(
     """역할 표시명 반환."""
     rows = {
         r.key[len("role_label."):]: r.value
-        for r in db.query(SystemSetting).filter(SystemSetting.key.like("role_label.%")).all()
+        for r in db.query(SystemSetting).filter(SystemSetting.key.like("role_label.%")).limit(50).all()
     }
     return {role: rows.get(role, default) for role, default in _ROLE_LABEL_DEFAULTS.items()}
 
