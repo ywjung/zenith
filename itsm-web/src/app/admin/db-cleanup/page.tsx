@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
 import { adminFetch } from '@/lib/adminFetch'
 import { errorMessage } from '@/lib/utils'
@@ -31,7 +32,7 @@ interface HistoryEntry {
 
 
 function formatNumber(n: number) {
-  return n.toLocaleString('ko-KR')
+  return n.toLocaleString()
 }
 
 function formatDuration(ms: number) {
@@ -40,7 +41,7 @@ function formatDuration(ms: number) {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleString('ko-KR', {
+  return new Date(iso).toLocaleString(undefined, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -57,6 +58,7 @@ interface ConfirmModal {
 }
 
 export default function DbCleanupPage() {
+  const t = useTranslations('admin.db_cleanup')
   const [preview, setPreview] = useState<PreviewData | null>(null)
   const [previewLoading, setPreviewLoading] = useState(true)
   const [previewError, setPreviewError] = useState<string | null>(null)
@@ -80,7 +82,7 @@ export default function DbCleanupPage() {
       const data = await adminFetch<PreviewData>('/admin/db-cleanup/preview')
       setPreview(data)
     } catch (e: unknown) {
-      setPreviewError(errorMessage(e, '불러오기 실패'))
+      setPreviewError(errorMessage(e, t('load_failed')))
     } finally {
       setPreviewLoading(false)
     }
@@ -119,7 +121,7 @@ export default function DbCleanupPage() {
           timestamp: new Date().toISOString(),
           label,
           duration_ms: Date.now() - started,
-          error: errorMessage(e, '실행 실패'),
+          error: errorMessage(e, t('run_failed')),
         },
         ...prev,
       ])
@@ -147,7 +149,7 @@ export default function DbCleanupPage() {
           timestamp: new Date().toISOString(),
           label: 'VACUUM ANALYZE',
           duration_ms: Date.now() - started,
-          error: errorMessage(e, '실행 실패'),
+          error: errorMessage(e, t('run_failed')),
         },
         ...prev,
       ])
@@ -161,32 +163,32 @@ export default function DbCleanupPage() {
         {
           key: 'audit-logs',
           endpoint: 'audit-logs',
-          label: '감사 로그 정리',
-          desc: `${preview.policy.audit_log_retention_days}일 이상 경과한 감사 로그를 삭제합니다.`,
+          label: t('task_audit_label'),
+          desc: t('task_audit_desc', { days: preview.policy.audit_log_retention_days }),
           count: preview.old_audit_logs,
-          countLabel: `감사 로그 (${preview.policy.audit_log_retention_days}일+)`,
+          countLabel: t('audit_label', { days: preview.policy.audit_log_retention_days }),
           icon: '🔍',
-          confirmDesc: `${preview.policy.audit_log_retention_days}일 이상된 감사 로그 ${formatNumber(preview.old_audit_logs)}건을 영구 삭제합니다.`,
+          confirmDesc: t('task_audit_confirm', { days: preview.policy.audit_log_retention_days, n: formatNumber(preview.old_audit_logs) }),
         },
         {
           key: 'notifications',
           endpoint: 'notifications',
-          label: '읽은 알림 정리',
-          desc: `읽음 처리된 알림 중 ${preview.policy.notification_retention_days}일 이상된 항목을 삭제합니다.`,
+          label: t('task_notif_label'),
+          desc: t('task_notif_desc', { days: preview.policy.notification_retention_days }),
           count: preview.orphan_notifications,
-          countLabel: `읽은 알림 (${preview.policy.notification_retention_days}일+)`,
+          countLabel: t('notif_label', { days: preview.policy.notification_retention_days }),
           icon: '🔔',
-          confirmDesc: `${preview.policy.notification_retention_days}일 이상된 읽음 알림 ${formatNumber(preview.orphan_notifications)}건을 영구 삭제합니다.`,
+          confirmDesc: t('task_notif_confirm', { days: preview.policy.notification_retention_days, n: formatNumber(preview.orphan_notifications) }),
         },
         {
           key: 'kb-revisions',
           endpoint: 'kb-revisions',
-          label: 'KB 구버전 정리',
-          desc: `KB 문서당 최신 ${preview.policy.kb_revision_keep_count}개 버전만 유지하고 나머지를 삭제합니다.`,
+          label: t('task_kb_label'),
+          desc: t('task_kb_desc', { n: preview.policy.kb_revision_keep_count }),
           count: preview.old_kb_revisions,
-          countLabel: `초과 KB 버전 (최신 ${preview.policy.kb_revision_keep_count}개 초과)`,
+          countLabel: t('kb_label', { n: preview.policy.kb_revision_keep_count }),
           icon: '📚',
-          confirmDesc: `KB 문서당 최신 ${preview.policy.kb_revision_keep_count}개 이외의 구버전 ${formatNumber(preview.old_kb_revisions)}건을 영구 삭제합니다.`,
+          confirmDesc: t('task_kb_confirm', { n: preview.policy.kb_revision_keep_count, count: formatNumber(preview.old_kb_revisions) }),
         },
       ]
     : []
@@ -200,10 +202,10 @@ export default function DbCleanupPage() {
             <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
             </svg>
-            DB 정리 자동화
+            {t('title')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            오래된 로그·알림·KB 버전을 선택적으로 정리하고 DB를 최적화합니다.
+            {t('subtitle')}
           </p>
         </div>
         <button
@@ -211,20 +213,20 @@ export default function DbCleanupPage() {
           disabled={previewLoading}
           className="text-sm border dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          🔄 새로고침
+          {t('refresh')}
         </button>
       </div>
 
       {/* 오류 */}
       {previewError && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg p-3 text-sm">
-          미리보기 불러오기 실패: {previewError}
+          {t('preview_error_prefix', { msg: previewError })}
         </div>
       )}
 
       {/* 미리보기 섹션 */}
       <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-5 space-y-3">
-        <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">정리 대상 현황</h3>
+        <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{t('preview_title')}</h3>
         {previewLoading ? (
           <div className="grid grid-cols-3 gap-3">
             {[1, 2, 3].map(i => (
@@ -238,26 +240,26 @@ export default function DbCleanupPage() {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                감사 로그 ({preview.policy.audit_log_retention_days}일+)
+                {t('audit_label', { days: preview.policy.audit_log_retention_days })}
               </div>
               <div className={`text-2xl font-bold ${preview.old_audit_logs > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                {formatNumber(preview.old_audit_logs)}건
+                {t('count_suffix', { n: formatNumber(preview.old_audit_logs) })}
               </div>
             </div>
             <div>
               <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                읽은 알림 ({preview.policy.notification_retention_days}일+)
+                {t('notif_label', { days: preview.policy.notification_retention_days })}
               </div>
               <div className={`text-2xl font-bold ${preview.orphan_notifications > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                {formatNumber(preview.orphan_notifications)}건
+                {t('count_suffix', { n: formatNumber(preview.orphan_notifications) })}
               </div>
             </div>
             <div>
               <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                초과 KB 버전 (최신 {preview.policy.kb_revision_keep_count}개 초과)
+                {t('kb_label', { n: preview.policy.kb_revision_keep_count })}
               </div>
               <div className={`text-2xl font-bold ${preview.old_kb_revisions > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                {formatNumber(preview.old_kb_revisions)}건
+                {t('count_suffix', { n: formatNumber(preview.old_kb_revisions) })}
               </div>
             </div>
           </div>
@@ -296,7 +298,7 @@ export default function DbCleanupPage() {
                               : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                           }`}
                         >
-                          {task.countLabel}: {formatNumber(task.count)}건
+                          {task.countLabel}: {t('count_suffix', { n: formatNumber(task.count) })}
                         </span>
                       </div>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{task.desc}</p>
@@ -317,7 +319,7 @@ export default function DbCleanupPage() {
                           : 'bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed'
                     }`}
                   >
-                    {runningKey === task.key ? '실행 중…' : '실행'}
+                    {runningKey === task.key ? t('running') : t('run')}
                   </button>
                 </div>
               </div>
@@ -330,9 +332,9 @@ export default function DbCleanupPage() {
           <div className="flex items-start gap-3">
             <span className="text-xl shrink-0 mt-0.5">🛠️</span>
             <div>
-              <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">DB 최적화 (VACUUM ANALYZE)</div>
+              <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{t('vacuum_title')}</div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                테이블 통계를 갱신하고 불필요한 페이지를 회수합니다. 정리 작업 후 실행하면 효과적입니다.
+                {t('vacuum_desc')}
               </p>
             </div>
           </div>
@@ -340,8 +342,8 @@ export default function DbCleanupPage() {
             disabled={vacuumRunning || runningKey !== null}
             onClick={() =>
               openConfirm(
-                'VACUUM ANALYZE 실행',
-                'PostgreSQL VACUUM ANALYZE를 실행합니다. 완료까지 수 초~수 분이 소요될 수 있습니다.',
+                t('vacuum_confirm_title'),
+                t('vacuum_confirm_desc'),
                 runVacuum
               )
             }
@@ -353,10 +355,10 @@ export default function DbCleanupPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
-                실행 중…
+                {t('running')}
               </span>
             ) : (
-              'DB 최적화 실행'
+              t('vacuum_run')
             )}
           </button>
         </div>
@@ -365,7 +367,7 @@ export default function DbCleanupPage() {
       {/* 실행 이력 */}
       {history.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-5 space-y-3">
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">실행 이력 (현재 세션)</h3>
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{t('history_title')}</h3>
           <div className="space-y-2">
             {history.map((entry, idx) => (
               <div
@@ -386,8 +388,8 @@ export default function DbCleanupPage() {
                 ) : (
                   <span className="text-gray-500 dark:text-gray-400 text-xs">
                     {entry.deleted !== undefined
-                      ? `${formatNumber(entry.deleted)}건 삭제`
-                      : '완료'}{' '}
+                      ? t('deleted_count', { n: formatNumber(entry.deleted) })
+                      : t('completed')}{' '}
                     ({formatDuration(entry.duration_ms)})
                   </span>
                 )}
@@ -415,7 +417,7 @@ export default function DbCleanupPage() {
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{modal.description}</p>
               <p className="text-sm text-red-600 dark:text-red-400 mt-2 font-medium">
-                이 작업은 되돌릴 수 없습니다.
+                {t('irreversible')}
               </p>
             </div>
             <div className="flex gap-3 justify-end">
@@ -423,7 +425,7 @@ export default function DbCleanupPage() {
                 onClick={closeModal}
                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                취소
+                {t('cancel')}
               </button>
               <button
                 onClick={() => {
@@ -432,7 +434,7 @@ export default function DbCleanupPage() {
                 }}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
               >
-                삭제 실행
+                {t('confirm_delete')}
               </button>
             </div>
           </div>
