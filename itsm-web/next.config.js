@@ -2,25 +2,33 @@
 
 // CSP는 nginx에서 일원화 설정 — 중복 헤더 시 브라우저가 양쪽 모두 적용(AND)하여
 // 더 엄격한 쪽이 적용되므로 Next.js에서는 CSP를 제외하고 nginx template에서만 관리한다.
+// SEC #9: X-XSS-Protection 제거 — Chrome M78에서 deprecated, XS-leak 유발 가능.
+// CSP nonce가 더 강력한 XSS 방어를 제공함.
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
-  { key: 'X-XSS-Protection', value: '1; mode=block' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
 ]
 
 const nextConfig = {
   output: 'standalone',
+  // 서버 버전·프레임워크 노출 방지 (X-Powered-By: Next.js 헤더 제거)
+  poweredByHeader: false,
+  // React Strict Mode — 개발 시 이중 effect로 버그 조기 발견
+  reactStrictMode: true,
+  // 프로덕션 브라우저 소스맵 비활성 (기본값이지만 명시 — 민감 로직 노출 방지)
+  productionBrowserSourceMaps: false,
   // jsdom reads CSS files via fs.readFileSync at runtime — must NOT be bundled
   serverExternalPackages: ['jsdom', 'isomorphic-dompurify'],
 
   // 이미지 최적화: WebP/AVIF 자동 변환, 원격 도메인 허용
+  // AIRGAP: 외부 이미지 소스 제거 — 폐쇄망에서 external hostname 접근 불가
+  // 모든 이미지는 로컬 proxy를 통해 서빙됨
   images: {
     formats: ['image/avif', 'image/webp'],
     remotePatterns: [
-      { protocol: 'https', hostname: '**.gitlab.com' },
-      // 개발 환경에서만 localhost 허용
+      // 개발 환경에서만 localhost (로컬 GitLab) 허용
       ...(process.env.NODE_ENV !== 'production' ? [
         { protocol: 'http', hostname: 'localhost' },
         { protocol: 'http', hostname: '127.0.0.1' },
@@ -39,6 +47,8 @@ const nextConfig = {
       '@tiptap/starter-kit',
       '@hello-pangea/dnd',
       'react-markdown',
+      'sonner',           // toast 25곳 사용 — 트리셰이킹 유리
+      'next-intl',        // 30곳 사용
     ],
   },
 
