@@ -1537,5 +1537,18 @@
     "action_implemented": "구현 결과",
     "action_failed": "실패 사유",
     "action_default": "코멘트"
+  },
+  "inline": {
+    "assign_change": "클릭하여 담당자 변경",
+    "assign_unassigned": "미배정",
+    "assign_none": "— 담당자 없음",
+    "assign_loading": "로딩 중...",
+    "assign_changed": "#{iid} 담당자 변경 완료",
+    "assign_cleared": "#{iid} 담당자 해제",
+    "assign_failed": "담당자 변경 실패",
+    "status_change": "클릭하여 상태 변경",
+    "status_changing": "변경중...",
+    "status_toast": "#{iid} → {label}",
+    "status_failed": "상태 변경 실패"
   }
 }

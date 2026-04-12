@@ -1537,5 +1537,18 @@
     "action_implemented": "Implementation result",
     "action_failed": "Failure reason",
     "action_default": "Comment"
+  },
+  "inline": {
+    "assign_change": "Click to change assignee",
+    "assign_unassigned": "Unassigned",
+    "assign_none": "— No assignee",
+    "assign_loading": "Loading...",
+    "assign_changed": "#{iid} assignee changed",
+    "assign_cleared": "#{iid} assignee cleared",
+    "assign_failed": "Assignee change failed",
+    "status_change": "Click to change status",
+    "status_changing": "Changing...",
+    "status_toast": "#{iid} → {label}",
+    "status_failed": "Status change failed"
   }
 }
