@@ -1558,5 +1558,51 @@
     "status_changing": "Changing...",
     "status_toast": "#{iid} → {label}",
     "status_failed": "Status change failed"
+  },
+  "file_preview": {
+    "img_error": "Failed to load image",
+    "retry_aria": "Retry",
+    "retry": "↻ Retry",
+    "download_aria": "Download file",
+    "view_original": "Click to view original",
+    "view_enlarge": "Enlarge",
+    "img_preview_aria": "Image preview",
+    "download": "⬇ Download",
+    "close": "✕ Close",
+    "preview": "Preview"
+  },
+  "time_tracker": {
+    "load_failed": "Failed to load time entries.",
+    "required": "Enter at least 1 hour or minute.",
+    "max_exceeded": "Maximum 1 week (10080 min) per entry.",
+    "record_failed": "Failed to record time",
+    "delete_confirm": "Delete this time entry?",
+    "delete_failed": "Delete failed",
+    "title": "Time Log",
+    "total": "Total {value}",
+    "loading": "Loading...",
+    "empty": "No time entries.",
+    "delete_title": "Delete",
+    "note_placeholder": "Description (optional)",
+    "submitting": "Recording...",
+    "submit": "Log time"
+  },
+  "kb_upload": {
+    "upload_failed": "Upload failed",
+    "invalid_type": "File type not allowed. ({exts})",
+    "too_large": "File size cannot exceed 10MB.",
+    "uploading": "Uploading...",
+    "click_or_drag": "Click",
+    "click_or_drag_suffix": " or drag files",
+    "allowed_types": "Images, PDF, docs, spreadsheets, ZIP — max 10MB",
+    "close": "Close",
+    "insert_title": "Insert into editor",
+    "insert": "Insert",
+    "copy_success": "Markdown link copied.",
+    "copy_failed": "Copy failed",
+    "copy_title": "Copy markdown",
+    "copy": "Copy",
+    "remove_title": "Remove from list",
+    "remove_aria": "Remove"
   }
 }

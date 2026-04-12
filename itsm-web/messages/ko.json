@@ -1558,5 +1558,51 @@
     "status_changing": "변경중...",
     "status_toast": "#{iid} → {label}",
     "status_failed": "상태 변경 실패"
+  },
+  "file_preview": {
+    "img_error": "이미지를 불러오지 못했습니다",
+    "retry_aria": "다시 시도",
+    "retry": "↻ 재시도",
+    "download_aria": "파일 다운로드",
+    "view_original": "클릭하여 원본 보기",
+    "view_enlarge": "확대 보기",
+    "img_preview_aria": "이미지 미리보기",
+    "download": "⬇ 다운로드",
+    "close": "✕ 닫기",
+    "preview": "미리보기"
+  },
+  "time_tracker": {
+    "load_failed": "시간 기록을 불러오지 못했습니다.",
+    "required": "시간 또는 분을 1 이상 입력하세요.",
+    "max_exceeded": "최대 1주일(10080분)까지 기록할 수 있습니다.",
+    "record_failed": "기록 실패",
+    "delete_confirm": "이 시간 기록을 삭제하시겠습니까?",
+    "delete_failed": "삭제 실패",
+    "title": "시간 기록",
+    "total": "총 {value}",
+    "loading": "불러오는 중...",
+    "empty": "기록된 시간이 없습니다.",
+    "delete_title": "삭제",
+    "note_placeholder": "설명 (선택)",
+    "submitting": "기록 중...",
+    "submit": "시간 기록"
+  },
+  "kb_upload": {
+    "upload_failed": "업로드 실패",
+    "invalid_type": "허용되지 않는 파일 형식입니다. ({exts})",
+    "too_large": "파일 크기는 10MB를 초과할 수 없습니다.",
+    "uploading": "업로드 중...",
+    "click_or_drag": "클릭",
+    "click_or_drag_suffix": "하거나 파일을 드래그하세요",
+    "allowed_types": "이미지, PDF, 문서, 스프레드시트, ZIP — 최대 10MB",
+    "close": "닫기",
+    "insert_title": "에디터에 삽입",
+    "insert": "삽입",
+    "copy_success": "마크다운 링크를 복사했습니다.",
+    "copy_failed": "복사 실패",
+    "copy_title": "마크다운 복사",
+    "copy": "복사",
+    "remove_title": "목록에서 제거",
+    "remove_aria": "삭제"
   }
 }

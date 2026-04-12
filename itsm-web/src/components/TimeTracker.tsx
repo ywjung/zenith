@@ -1,8 +1,11 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { fetchTimeEntries, logTime, deleteTimeEntry } from '@/lib/api'
 import type { TimeEntry } from '@/types'
+import { errorMessage } from '@/lib/utils'
 
 interface TimeTrackerProps {
   iid: number
@@ -30,6 +33,7 @@ export default function TimeTracker({
   currentUserId,
   isAdmin = false,
 }: TimeTrackerProps) {
+  const t = useTranslations('time_tracker')
   const [entries, setEntries] = useState<TimeEntry[]>([])
   const [totalMinutes, setTotalMinutes] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -54,7 +58,7 @@ export default function TimeTracker({
         setEntries(e)
         setError(null)
       })
-      .catch(() => setError('시간 기록을 불러오지 못했습니다.'))
+      .catch(() => setError(t('load_failed')))
       .finally(() => setLoading(false))
   }, [iid, projectId])
 
@@ -67,11 +71,11 @@ export default function TimeTracker({
     const totalMins = h * 60 + m
 
     if (totalMins < 1) {
-      setFormError('시간 또는 분을 1 이상 입력하세요.')
+      setFormError(t('required'))
       return
     }
     if (totalMins > 10080) {
-      setFormError('최대 1주일(10080분)까지 기록할 수 있습니다.')
+      setFormError(t('max_exceeded'))
       return
     }
 
@@ -84,14 +88,14 @@ export default function TimeTracker({
       setMins('')
       setDescription('')
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : '기록 실패')
+      setFormError(errorMessage(err, t('record_failed')))
     } finally {
       setSubmitting(false)
     }
   }
 
   async function handleDelete(entryId: number) {
-    if (!confirm('이 시간 기록을 삭제하시겠습니까?')) return
+    if (!confirm(t('delete_confirm'))) return
     setDeletingId(entryId)
     try {
       await deleteTimeEntry(iid, projectId, entryId)
@@ -99,7 +103,7 @@ export default function TimeTracker({
       setEntries((prev) => prev.filter((e) => e.id !== entryId))
       if (removed) setTotalMinutes((prev) => prev - removed.minutes)
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '삭제 실패')
+      toast.error(errorMessage(err, t('delete_failed')))
     } finally {
       setDeletingId(null)
     }
@@ -114,21 +118,21 @@ export default function TimeTracker({
     <div className="space-y-3">
       {/* 합계 */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">시간 기록</span>
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('title')}</span>
         {totalMinutes > 0 && (
           <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-            총 {formatMinutes(totalMinutes)}
+            {t('total', { value: formatMinutes(totalMinutes) })}
           </span>
         )}
       </div>
 
       {/* 항목 목록 */}
       {loading ? (
-        <p className="text-xs text-gray-400 dark:text-gray-500">불러오는 중...</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">{t('loading')}</p>
       ) : error ? (
         <p className="text-xs text-red-500">{error}</p>
       ) : entries.length === 0 ? (
-        <p className="text-xs text-gray-400 dark:text-gray-500">기록된 시간이 없습니다.</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">{t('empty')}</p>
       ) : (
         <ul className="space-y-1.5 max-h-48 overflow-y-auto">
           {entries.map((entry) => (
@@ -160,7 +164,7 @@ export default function TimeTracker({
                   onClick={() => handleDelete(entry.id)}
                   disabled={deletingId === entry.id}
                   className="shrink-0 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors"
-                  title="삭제"
+                  title={t('delete_title')}
                 >
                   {deletingId === entry.id ? '...' : '✕'}
                 </button>
@@ -201,7 +205,7 @@ export default function TimeTracker({
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="설명 (선택)"
+            placeholder={t('note_placeholder')}
             maxLength={500}
             className="w-full border border-gray-200 dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
@@ -211,9 +215,9 @@ export default function TimeTracker({
           <button
             type="submit"
             disabled={submitting || (!hours && !mins)}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs py-1.5 rounded transition-colors"
+            className={`relative overflow-hidden w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs py-1.5 rounded transition-colors ${submitting ? 'btn-progress' : ''}`}
           >
-            {submitting ? '기록 중...' : '시간 기록'}
+            {submitting ? t('submitting') : t('submit')}
           </button>
         </form>
       )}

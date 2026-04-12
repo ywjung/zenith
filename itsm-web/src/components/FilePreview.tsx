@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface FilePreviewProps {
   url: string
@@ -18,38 +19,91 @@ function isPdf(name: string, mime?: string): boolean {
 }
 
 export default function FilePreview({ url, name, mime }: FilePreviewProps) {
+  const t = useTranslations('file_preview')
   const [lightbox, setLightbox] = useState(false)
   const [pdfModal, setPdfModal] = useState(false)
+  const [imgError, setImgError] = useState(false)
+  const [retryKey, setRetryKey] = useState(0)
+
+  // ESC 키로 라이트박스/PDF 모달 닫기
+  useEffect(() => {
+    if (!lightbox && !pdfModal) return
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (lightbox) setLightbox(false)
+        if (pdfModal) setPdfModal(false)
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    // body scroll lock
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', handleKey)
+      document.body.style.overflow = originalOverflow
+    }
+  }, [lightbox, pdfModal])
 
   if (isImage(name, mime)) {
+    if (imgError) {
+      return (
+        <div className="inline-flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-500 dark:text-gray-400">
+          <span className="text-xl" aria-hidden="true">🖼️</span>
+          <div className="flex-1 min-w-0">
+            <div className="truncate font-medium">{name}</div>
+            <div className="text-xs text-red-500 dark:text-red-400">{t('img_error')}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setImgError(false); setRetryKey(k => k + 1) }}
+            className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+            aria-label={t('retry_aria')}
+          >
+            {t('retry')}
+          </button>
+          <a
+            href={url}
+            download={name}
+            className="text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+            aria-label={t('download_aria')}
+          >
+            ⬇
+          </a>
+        </div>
+      )
+    }
     return (
       <>
         <button
           onClick={() => setLightbox(true)}
           className="group relative block rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 transition-colors cursor-zoom-in"
-          title="클릭하여 원본 보기"
+          title={t('view_original')}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            key={retryKey}
             src={url}
             alt={name}
             className="max-h-48 max-w-xs object-contain bg-gray-50 dark:bg-gray-800"
             loading="lazy"
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+            onError={() => setImgError(true)}
           />
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
             <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 text-white text-xs px-2 py-1 rounded">
-              확대 보기
+              {t('view_enlarge')}
             </span>
           </div>
         </button>
 
         {lightbox && (
           <div
-            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('img_preview_aria')}
+            className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
             onClick={() => setLightbox(false)}
           >
-            <div className="relative max-w-5xl max-h-full" onClick={e => e.stopPropagation()}>
+            <div className="relative max-w-5xl max-h-full animate-scaleIn" onClick={e => e.stopPropagation()}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={url}
@@ -63,13 +117,13 @@ export default function FilePreview({ url, name, mime }: FilePreviewProps) {
                   className="bg-black/50 hover:bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg"
                   onClick={e => e.stopPropagation()}
                 >
-                  ⬇ 다운로드
+                  {t('download')}
                 </a>
                 <button
                   onClick={() => setLightbox(false)}
                   className="bg-black/50 hover:bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg"
                 >
-                  ✕ 닫기
+                  {t('close')}
                 </button>
               </div>
               <p className="text-center text-white/70 text-xs mt-2 truncate">{name}</p>
@@ -89,7 +143,7 @@ export default function FilePreview({ url, name, mime }: FilePreviewProps) {
         >
           <span className="text-lg">📄</span>
           <span className="font-medium truncate max-w-xs">{name}</span>
-          <span className="text-xs text-red-500 dark:text-red-500 shrink-0">미리보기</span>
+          <span className="text-xs text-red-500 dark:text-red-500 shrink-0">{t('preview')}</span>
         </button>
 
         {pdfModal && (
@@ -103,13 +157,13 @@ export default function FilePreview({ url, name, mime }: FilePreviewProps) {
                     download={name}
                     className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
                   >
-                    ⬇ 다운로드
+                    {t('download')}
                   </a>
                   <button
                     onClick={() => setPdfModal(false)}
                     className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-gray-700 dark:text-gray-300"
                   >
-                    ✕ 닫기
+                    {t('close')}
                   </button>
                 </div>
               </div>
