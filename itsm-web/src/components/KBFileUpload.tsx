@@ -1,7 +1,10 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
+import { errorMessage } from '@/lib/utils'
 
 export interface KBUploadedFile {
   name: string
@@ -45,6 +48,7 @@ function fileIcon(mime: string): string {
 }
 
 export default function KBFileUpload({ onInsert, files, onFilesChange, projectId }: Props) {
+  const t = useTranslations('kb_upload')
   const inputRef = useRef<HTMLInputElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -81,7 +85,7 @@ export default function KBFileUpload({ onInsert, files, onFilesChange, projectId
         : `[📎 ${data.name}](${proxyUrl})`
       onInsert(insertMarkdown)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '업로드 실패')
+      setError(errorMessage(e, t('upload_failed')))
     } finally {
       setUploading(false)
     }
@@ -92,11 +96,11 @@ export default function KBFileUpload({ onInsert, files, onFilesChange, projectId
     const file = fileList[0]
     const ext = '.' + file.name.split('.').pop()?.toLowerCase()
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      setError(`허용되지 않는 파일 형식입니다. (${ALLOWED_EXTENSIONS.join(', ')})`)
+      setError(t('invalid_type', { exts: ALLOWED_EXTENSIONS.join(', ') }))
       return
     }
     if (file.size > 10 * 1024 * 1024) {
-      setError('파일 크기는 10MB를 초과할 수 없습니다.')
+      setError(t('too_large'))
       return
     }
     upload(file)
@@ -140,7 +144,7 @@ export default function KBFileUpload({ onInsert, files, onFilesChange, projectId
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
             </svg>
-            <span className="text-sm text-blue-600 dark:text-blue-400">업로드 중...</span>
+            <span className="text-sm text-blue-600 dark:text-blue-400">{t('uploading')}</span>
           </>
         ) : (
           <>
@@ -150,10 +154,10 @@ export default function KBFileUpload({ onInsert, files, onFilesChange, projectId
             </svg>
             <div className="text-center">
               <p className="text-sm text-gray-600 dark:text-gray-300">
-                <span className="text-blue-600 dark:text-blue-400 font-medium">클릭</span>하거나 파일을 드래그하세요
+                <span className="text-blue-600 dark:text-blue-400 font-medium">{t('click_or_drag')}</span>{t('click_or_drag_suffix')}
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                이미지, PDF, 문서, 스프레드시트, ZIP — 최대 10MB
+                {t('allowed_types')}
               </p>
             </div>
           </>
@@ -164,7 +168,7 @@ export default function KBFileUpload({ onInsert, files, onFilesChange, projectId
         <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
           <span>⚠️</span>
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-300">×</button>
+          <button onClick={() => setError(null)} className="ml-auto text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-300" aria-label={t('close')}>×</button>
         </div>
       )}
 
@@ -191,26 +195,33 @@ export default function KBFileUpload({ onInsert, files, onFilesChange, projectId
                     : `[📎 ${f.name}](${proxyUrl})`
                   onInsert(insertMarkdown)
                 }}
-                title="에디터에 삽입"
+                title={t('insert_title')}
                 className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 shrink-0"
               >
-                삽입
+                {t('insert')}
               </button>
               {/* 링크 복사 */}
               <button
                 type="button"
-                onClick={() => navigator.clipboard?.writeText(f.markdown)}
-                title="마크다운 복사"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(f.markdown)
+                    toast.success(t('copy_success'))
+                  } catch {
+                    toast.error(t('copy_failed'))
+                  }
+                }}
+                title={t('copy_title')}
                 className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600 shrink-0"
               >
-                복사
+                {t('copy')}
               </button>
               <button
                 type="button"
                 onClick={() => removeFile(i)}
-                title="목록에서 제거"
+                title={t('remove_title')}
                 className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 shrink-0 text-lg leading-none"
-              >
+               aria-label={t('remove_aria')}>
                 ×
               </button>
             </li>
