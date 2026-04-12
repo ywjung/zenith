@@ -2320,7 +2320,7 @@ function TicketDetailContent() {
               onDrop={handleCommentDrop}
             >
               <span>📎</span>
-              <span>{commentIsDragging ? '여기에 놓으세요' : '파일 선택 또는 드래그 앤 드롭'}</span>
+              <span>{commentIsDragging ? t('file_drop_here') : t('file_drop_hint')}</span>
               <input
                 type="file"
                 multiple
@@ -2340,7 +2340,7 @@ function TicketDetailContent() {
                       type="button"
                       onClick={() => setCommentFiles((prev) => prev.filter((_, i) => i !== idx))}
                       className="text-gray-400 dark:text-gray-500 hover:text-red-500 text-xs shrink-0"
-                     aria-label="제거">
+                     aria-label={t('remove')}>
                       ✕
                     </button>
                   </li>
@@ -2372,13 +2372,13 @@ function TicketDetailContent() {
                 />
               </button>
               <span className={`text-sm ${isInternal ? 'text-yellow-700 dark:text-yellow-400 font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
-                {isInternal ? '🔒 내부 메모' : '공개 답변'}
+                {isInternal ? t('internal_memo_toggle') : t('public_reply_toggle')}
               </span>
             </label>
 
             <div className="flex items-center gap-3">
               <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-500">
-                <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded text-[10px] font-mono">⌘ + Enter</kbd> 등록
+                <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded text-[10px] font-mono">⌘ + Enter</kbd> {t('submit_shortcut_hint')}
               </span>
               <button
                 type="submit"
@@ -2389,7 +2389,7 @@ function TicketDetailContent() {
                     : 'bg-blue-500 hover:bg-blue-600 text-white'
                 }`}
               >
-                {commentUploading ? '파일 업로드 중...' : commenting ? '등록 중...' : isInternal ? '🔒 메모 등록' : '코멘트 등록'}
+                {commentUploading ? t('uploading_comment') : commenting ? t('submitting_comment') : isInternal ? t('submit_memo') : t('submit_comment')}
               </button>
             </div>
           </div>
@@ -2402,7 +2402,7 @@ function TicketDetailContent() {
         {(isResolved || isClosed) && resolutionNote?.id && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">✅ 해결 노트</h2>
+              <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('resolution_note_header')}</h2>
               {isAgent && !resolutionNote.kb_article_id && (
                 <div className="flex items-center gap-2">
                   {kbConvertError && <span className="text-xs text-red-500 dark:text-red-400">{kbConvertError}</span>}
@@ -2411,13 +2411,13 @@ function TicketDetailContent() {
                     disabled={convertingToKb}
                     className="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {convertingToKb ? '변환 중...' : '📚 KB 아티클로 변환'}
+                    {convertingToKb ? t('converting_to_kb') : t('convert_to_kb')}
                   </button>
                 </div>
               )}
               {resolutionNote.kb_article_id && (
                 <Link href={`/kb/${resolutionNote.kb_article_id}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
-                  📚 KB 아티클 보기 →
+                  {t('view_kb')}
                 </Link>
               )}
             </div>
@@ -2440,7 +2440,7 @@ function TicketDetailContent() {
         {/* 관련 KB 문서 추천 */}
         {isAgent && kbSuggestions.length > 0 && (
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">📚 관련 KB 문서</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('related_kb_header')}</h2>
             <div className="space-y-2">
               {kbSuggestions.map(kb => (
                 <Link
@@ -2461,29 +2461,29 @@ function TicketDetailContent() {
         {/* 만족도 평가 */}
         {(isClosed || isResolved) && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-5">
-            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">만족도 평가</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('satisfaction_header')}</h2>
             {rating ? (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-3">
                   <StarDisplay score={rating.score} />
-                  <span className="text-gray-700 dark:text-gray-200 font-medium">{rating.score}점 / 5점</span>
+                  <span className="text-gray-700 dark:text-gray-200 font-medium">{t('satisfaction_score_fmt', { score: rating.score })}</span>
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">평가자: {rating.employee_name}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('rater_prefix', { name: rating.employee_name })}</p>
                 {rating.comment && (
                   <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded p-3 mt-1">&quot;{rating.comment}&quot;</p>
                 )}
                 <div className="mt-2">
                   <Link href={rateHref} className="inline-block bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium px-4 py-1.5 rounded-md text-sm transition-colors">
-                    ✏️ 평가 수정
+                    {t('edit_rating')}
                   </Link>
                 </div>
               </div>
             ) : (
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                <p className="text-gray-600 dark:text-gray-300 text-sm">처리가 완료된 티켓입니다. 서비스에 만족하셨나요?</p>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">{t('satisfaction_prompt')}</p>
                 {canRate && (
                   <Link href={rateHref} className="shrink-0 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold px-5 py-2 rounded-md text-sm transition-colors">
-                    ⭐ 만족도 평가하기
+                    {t('rate_btn')}
                   </Link>
                 )}
               </div>
@@ -2499,7 +2499,7 @@ function TicketDetailContent() {
         {/* 워크플로우 + 상태 액션 — IT 개발자 이상 */}
         {isDeveloper && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">워크플로우</h3>
+            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{t('workflow_header')}</h3>
             <WorkflowStepper status={ticket.status} state={ticket.state} />
             <div className="mt-3 flex flex-col gap-2">
               {statusActions.map((action, idx) => (
@@ -2510,7 +2510,7 @@ function TicketDetailContent() {
                   disabled={updating}
                   className={`w-full text-sm px-3 py-1.5 rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${action.color}`}
                 >
-                  {updating ? '처리 중...' : action.label}
+                  {updating ? t('updating_action') : action.label}
                   {idx === 0 && <kbd className="ml-1.5 text-[9px] opacity-60 font-mono bg-white/20 rounded px-1">S</kbd>}
                 </button>
               ))}
@@ -2537,14 +2537,14 @@ function TicketDetailContent() {
 
         {/* 속성 패널 */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4 space-y-3 text-sm">
-          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">속성</h3>
+          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('properties_header')}</h3>
 
           {/* 서비스 유형 — 수정 권한 있는 사용자 편집 가능 */}
           <div className="flex items-center justify-between">
-            <span className="text-gray-500 dark:text-gray-400 text-xs">서비스 유형</span>
+            <span className="text-gray-500 dark:text-gray-400 text-xs">{t('prop_service_type')}</span>
             {canEdit ? (
               <select
-                value={ticket.category || '기타'}
+                value={ticket.category || t('prop_service_other_fallback')}
                 onChange={(e) => handleCategoryChange(e.target.value)}
                 disabled={updating}
                 className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2560,7 +2560,7 @@ function TicketDetailContent() {
 
           {/* 우선순위 — IT 개발자 이상 편집 가능 */}
           <div className="flex items-center justify-between">
-            <span className="text-gray-500 dark:text-gray-400 text-xs">우선순위</span>
+            <span className="text-gray-500 dark:text-gray-400 text-xs">{t('prop_priority')}</span>
             {isDeveloper ? (
               <select
                 value={ticket.priority || 'medium'}
@@ -2579,7 +2579,7 @@ function TicketDetailContent() {
 
           {/* 담당자 — IT 관리자 이상 편집 가능 */}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-gray-500 dark:text-gray-400 text-xs shrink-0">담당자</span>
+            <span className="text-gray-500 dark:text-gray-400 text-xs shrink-0">{t('prop_assignee')}</span>
             {isAgent && members.length > 0 ? (
               <div className="flex items-center gap-1.5">
                 {ticket.assignee_name && (
@@ -2591,7 +2591,7 @@ function TicketDetailContent() {
                   disabled={updating}
                   className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed max-w-[140px]"
                 >
-                  <option value="">담당자 없음</option>
+                  <option value="">{t('prop_no_assignee')}</option>
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>{formatName(m.name)}</option>
                   ))}
@@ -2602,14 +2602,14 @@ function TicketDetailContent() {
                 {ticket.assignee_name && (
                   <Avatar name={formatName(ticket.assignee_name)} username={ticket.assignee_name} size="xs" />
                 )}
-                <span className="text-gray-800 dark:text-gray-200 text-xs">{ticket.assignee_name ? formatName(ticket.assignee_name) : '미배정'}</span>
+                <span className="text-gray-800 dark:text-gray-200 text-xs">{ticket.assignee_name ? formatName(ticket.assignee_name) : t('prop_unassigned')}</span>
               </div>
             )}
           </div>
 
           {/* 마일스톤 */}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-gray-500 dark:text-gray-400 text-xs shrink-0">마일스톤</span>
+            <span className="text-gray-500 dark:text-gray-400 text-xs shrink-0">{t('prop_milestone')}</span>
             {isAgent && milestones.length > 0 ? (
               <select
                 value={ticket.milestone_id ?? ''}
@@ -2617,43 +2617,43 @@ function TicketDetailContent() {
                 disabled={updating}
                 className="text-xs border dark:border-gray-600 rounded px-1.5 py-1 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed max-w-[160px]"
               >
-                <option value="">없음</option>
+                <option value="">{t('prop_milestone_none')}</option>
                 {milestones.map((m) => (
                   <option key={m.id} value={m.id}>{m.title}</option>
                 ))}
               </select>
             ) : (
-              <span className="text-gray-800 dark:text-gray-200 text-xs">{ticket.milestone_title || '없음'}</span>
+              <span className="text-gray-800 dark:text-gray-200 text-xs">{ticket.milestone_title || t('prop_milestone_none')}</span>
             )}
           </div>
 
           <div className="border-t dark:border-gray-700 pt-3 space-y-2">
             <div>
-              <span className="text-gray-400 dark:text-gray-500 text-xs block">신청자</span>
+              <span className="text-gray-400 dark:text-gray-500 text-xs block">{t('prop_requester')}</span>
               <span className="text-gray-800 dark:text-gray-200 text-xs">{ticket.employee_name || '-'}</span>
             </div>
             {ticket.department && (
               <div>
-                <span className="text-gray-400 dark:text-gray-500 text-xs block">부서</span>
+                <span className="text-gray-400 dark:text-gray-500 text-xs block">{t('prop_department')}</span>
                 <span className="text-gray-800 dark:text-gray-200 text-xs">{ticket.department}</span>
               </div>
             )}
             {ticket.location && (
               <div>
-                <span className="text-gray-400 dark:text-gray-500 text-xs block">위치</span>
+                <span className="text-gray-400 dark:text-gray-500 text-xs block">{t('prop_location')}</span>
                 <span className="text-gray-800 dark:text-gray-200 text-xs">{ticket.location}</span>
               </div>
             )}
             <div>
-              <span className="text-gray-400 dark:text-gray-500 text-xs block">이메일</span>
+              <span className="text-gray-400 dark:text-gray-500 text-xs block">{t('prop_email')}</span>
               <span className="text-gray-800 dark:text-gray-200 text-xs break-all">{ticket.employee_email || '-'}</span>
             </div>
             <div>
-              <span className="text-gray-400 dark:text-gray-500 text-xs block">등록일시</span>
+              <span className="text-gray-400 dark:text-gray-500 text-xs block">{t('prop_created_at')}</span>
               <span className="text-gray-800 dark:text-gray-200 text-xs">{formatDate(ticket.created_at, 'full')}</span>
             </div>
             <div>
-              <span className="text-gray-400 dark:text-gray-500 text-xs block">최종수정</span>
+              <span className="text-gray-400 dark:text-gray-500 text-xs block">{t('prop_updated_at')}</span>
               <span className="text-gray-800 dark:text-gray-200 text-xs">{formatDate(ticket.updated_at, 'full')}</span>
             </div>
           </div>
@@ -2662,7 +2662,7 @@ function TicketDetailContent() {
         {/* 커스텀 필드 */}
         {customFields.length > 0 && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">추가 정보</h3>
+            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('custom_fields_header')}</h3>
             <div className="space-y-3">
               {customFields.map(f => (
                 <div key={f.id}>
@@ -2682,7 +2682,7 @@ function TicketDetailContent() {
                       onChange={e => setCustomFieldEdits(prev => ({ ...prev, [String(f.id)]: e.target.value }))}
                       className="w-full text-xs border dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                      <option value="">선택</option>
+                      <option value="">{t('custom_field_select')}</option>
                       {f.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   ) : (
@@ -2700,7 +2700,7 @@ function TicketDetailContent() {
                 disabled={savingCustomFields}
                 className="w-full text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-1.5 rounded-md font-medium transition-colors mt-1"
               >
-                {savingCustomFields ? '저장 중...' : '저장'}
+                {savingCustomFields ? t('custom_fields_saving') : t('custom_fields_save')}
               </button>
             </div>
           </div>
@@ -2709,7 +2709,7 @@ function TicketDetailContent() {
         {/* SLA — IT 개발자 이상 */}
         {isDeveloper && slaRecord && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">SLA 처리 기한</h3>
+            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('sla_header')}</h3>
 
             {/* SLA 진행 바 */}
             {slaRecord.sla_deadline && ticket && (() => {
@@ -2731,12 +2731,12 @@ function TicketDetailContent() {
               const hoursLeft = Math.round(msLeft / 3600000)
               const daysLeft = Math.floor(msLeft / 86400000)
               const timeLabel = slaRecord.resolved_at
-                ? '해결됨'
+                ? t('sla_resolved_badge')
                 : msLeft < 0
-                ? `${Math.abs(daysLeft) > 0 ? Math.abs(daysLeft) + '일 ' : ''}${Math.abs(hoursLeft % 24)}시간 초과`
+                ? (Math.abs(daysLeft) > 0 ? t('sla_overdue_days_hours', { days: Math.abs(daysLeft) + '일 ', hours: Math.abs(hoursLeft % 24) }) : t('sla_overdue_hours_only', { hours: Math.abs(hoursLeft % 24) }))
                 : daysLeft > 0
-                ? `${daysLeft}일 ${hoursLeft % 24}시간 남음`
-                : `${hoursLeft}시간 남음`
+                ? t('sla_remaining_days_hours', { days: daysLeft, hours: hoursLeft % 24 })
+                : t('sla_remaining_hours', { hours: hoursLeft })
               return (
                 <div className="mb-3">
                   <div className="flex justify-between text-[10px] mb-1">
@@ -2757,47 +2757,46 @@ function TicketDetailContent() {
 
             <div className="space-y-2 text-xs mb-3">
               <div className="flex justify-between items-start">
-                <span className="text-gray-500 dark:text-gray-400">처리 기한</span>
+                <span className="text-gray-500 dark:text-gray-400">{t('sla_deadline_label')}</span>
                 <span className={`font-medium text-right ${slaRecord.breached ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-200'}`}>
                   {slaRecord.sla_deadline
                     ? new Date(slaRecord.sla_deadline).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
                     : '-'}
-                  {slaRecord.breached && <span className="ml-1 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 px-1 py-0.5 rounded text-[10px]">위반</span>}
+                  {slaRecord.breached && <span className="ml-1 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 px-1 py-0.5 rounded text-[10px]">{t('sla_breach_badge')}</span>}
                 </span>
               </div>
               {slaRecord.paused_at && (
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-500 dark:text-gray-400">상태</span>
+                  <span className="text-gray-500 dark:text-gray-400">{t('sla_status_label')}</span>
                   <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                    SLA 일시정지됨
+                    {t('sla_paused_label')}
                   </span>
                 </div>
               )}
               {slaRecord.total_paused_seconds > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">정지 누적</span>
+                  <span className="text-gray-500 dark:text-gray-400">{t('sla_paused_total')}</span>
                   <span className="text-gray-600 dark:text-gray-300">
-                    {Math.floor(slaRecord.total_paused_seconds / 3600)}시간{' '}
-                    {Math.floor((slaRecord.total_paused_seconds % 3600) / 60)}분
+                    {t('sla_paused_duration', { hours: Math.floor(slaRecord.total_paused_seconds / 3600), minutes: Math.floor((slaRecord.total_paused_seconds % 3600) / 60) })}
                   </span>
                 </div>
               )}
               {slaRecord.first_response_at && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">최초 응답</span>
+                  <span className="text-gray-500 dark:text-gray-400">{t('sla_first_response')}</span>
                   <span className="text-gray-800 dark:text-gray-200">{new Date(slaRecord.first_response_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
                 </div>
               )}
               {slaRecord.resolved_at && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">처리 완료</span>
+                  <span className="text-gray-500 dark:text-gray-400">{t('sla_resolved_label')}</span>
                   <span className="text-green-700 dark:text-green-400">{new Date(slaRecord.resolved_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
                 </div>
               )}
               {slaPrediction && !slaRecord.resolved_at && (
                 <div className="flex justify-between items-start pt-1 border-t dark:border-gray-700">
-                  <span className="text-gray-500 dark:text-gray-400">예상 해결</span>
+                  <span className="text-gray-500 dark:text-gray-400">{t('sla_predicted_label')}</span>
                   <div className="text-right">
                     <span className="text-gray-700 dark:text-gray-300">
                       {new Date(slaPrediction.predicted_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
@@ -2811,10 +2810,10 @@ function TicketDetailContent() {
                         ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                     }`}>
-                      {slaPrediction.confidence === 'high' ? '높은 신뢰도'
-                        : slaPrediction.confidence === 'medium' ? '중간 신뢰도'
-                        : slaPrediction.confidence === 'low' ? '낮은 신뢰도'
-                        : '기본값'}
+                      {slaPrediction.confidence === 'high' ? t('sla_conf_high')
+                        : slaPrediction.confidence === 'medium' ? t('sla_conf_medium')
+                        : slaPrediction.confidence === 'low' ? t('sla_conf_low')
+                        : t('sla_conf_default')}
                     </span>
                   </div>
                 </div>
@@ -2825,12 +2824,12 @@ function TicketDetailContent() {
                 {/* SLA 위반/임박 시 — 눈에 띄는 빠른 연장 칩 */}
                 {slaRecord?.breached && ticket?.state !== 'closed' && (
                   <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2">
-                    <p className="text-[10px] font-semibold text-red-700 dark:text-red-400 mb-1.5">🚨 SLA 위반 — 빠른 연장</p>
+                    <p className="text-[10px] font-semibold text-red-700 dark:text-red-400 mb-1.5">{t('sla_quick_extend_header')}</p>
                     <div className="flex gap-1.5">
                       {[
-                        { mins: 60, label: '+1시간' },
-                        { mins: 480, label: '+8시간' },
-                        { mins: 1440, label: '+1일' },
+                        { mins: 60, label: t('sla_extend_1h') },
+                        { mins: 480, label: t('sla_extend_8h') },
+                        { mins: 1440, label: t('sla_extend_1d') },
                       ].map(({ mins, label }) => (
                         <button
                           key={mins}
@@ -2841,9 +2840,9 @@ function TicketDetailContent() {
                             try {
                               const updated = await extendTicketSLA(iid, mins, ticket?.project_id)
                               setSlaRecord(updated)
-                              toast.success(`SLA ${label} 연장 완료`)
+                              toast.success(t('sla_extended_toast', { label }))
                             } catch (err) {
-                              toast.error(err instanceof Error ? err.message : 'SLA 연장 실패')
+                              toast.error(err instanceof Error ? err.message : t('err_sla_extend_failed'))
                             } finally {
                               setSlaExtending(false)
                             }
@@ -2865,7 +2864,7 @@ function TicketDetailContent() {
                         disabled={slaResuming}
                         className="flex-1 text-xs px-2 py-1.5 bg-green-50 dark:bg-green-900/30 border border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                       >
-                        {slaResuming ? '...' : '▶ SLA 재개'}
+                        {slaResuming ? '...' : t('sla_resume_btn')}
                       </button>
                     ) : (
                       <button
@@ -2873,7 +2872,7 @@ function TicketDetailContent() {
                         disabled={slaPausing}
                         className="flex-1 text-xs px-2 py-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                       >
-                        {slaPausing ? '...' : '⏸ SLA 일시정지'}
+                        {slaPausing ? '...' : t('sla_pause_btn')}
                       </button>
                     )}
                   </div>
@@ -2885,18 +2884,18 @@ function TicketDetailContent() {
                     onChange={e => setSlaExtendMinutes(e.target.value)}
                     className="border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
-                    <option value="60">+1시간</option>
-                    <option value="240">+4시간</option>
-                    <option value="480">+8시간</option>
-                    <option value="1440">+1일</option>
-                    <option value="4320">+3일</option>
+                    <option value="60">{t('sla_extend_1h_option')}</option>
+                    <option value="240">{t('sla_extend_4h_option')}</option>
+                    <option value="480">{t('sla_extend_8h_option')}</option>
+                    <option value="1440">{t('sla_extend_1d_option')}</option>
+                    <option value="4320">{t('sla_extend_3d_option')}</option>
                   </select>
                   <button
                     type="submit"
                     disabled={slaExtending}
                     className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
-                    {slaExtending ? '...' : '연장'}
+                    {slaExtending ? '...' : t('sla_extend_btn')}
                   </button>
                 </form>
                 {/* Manual date change */}
@@ -2913,7 +2912,7 @@ function TicketDetailContent() {
                     disabled={slaSaving || !slaEditDate}
                     className="bg-gray-600 text-white px-2 py-1 rounded text-xs hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
-                    {slaSaving ? '...' : '날짜 변경'}
+                    {slaSaving ? '...' : t('sla_change_date_btn')}
                   </button>
                 </form>
                 {slaError && <p className="text-red-600 dark:text-red-400 text-[10px] mt-1">⚠️ {slaError}</p>}
@@ -2926,13 +2925,13 @@ function TicketDetailContent() {
         {isDeveloper && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">🤖 AI 활동 요약</h3>
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('ai_summary_header')}</h3>
               <button
                 onClick={handleAISummary}
                 disabled={aiSummaryLoading}
                 className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed font-medium"
               >
-                {aiSummaryLoading ? '분석 중...' : aiSummary ? '재분석' : '요약 생성'}
+                {aiSummaryLoading ? t('ai_analyzing') : aiSummary ? t('ai_reanalyze') : t('ai_generate')}
               </button>
             </div>
             {aiSummaryError && (
@@ -2952,15 +2951,15 @@ function TicketDetailContent() {
                 )}
                 {aiSummary.suggested_action && (
                   <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded p-2">
-                    <span className="text-purple-700 dark:text-purple-300 font-medium">권장 조치: </span>
+                    <span className="text-purple-700 dark:text-purple-300 font-medium">{t('ai_recommendation')} </span>
                     <span className="text-purple-600 dark:text-purple-400">{aiSummary.suggested_action}</span>
                   </div>
                 )}
-                <p className="text-gray-400 dark:text-gray-600 text-[10px]">댓글 {aiSummary.comment_count}개 분석 완료</p>
+                <p className="text-gray-400 dark:text-gray-600 text-[10px]">{t('ai_comments_analyzed', { n: aiSummary.comment_count })}</p>
               </div>
             )}
             {!aiSummary && !aiSummaryLoading && !aiSummaryError && (
-              <p className="text-xs text-gray-400 dark:text-gray-500">버튼을 눌러 AI가 댓글 스레드를 분석합니다.</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{t('ai_prompt_empty')}</p>
             )}
           </div>
         )}
@@ -2969,7 +2968,7 @@ function TicketDetailContent() {
         {isAgent && !isDeveloper && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
             <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-              연관 티켓 ({links.length})
+              {t('related_tickets_header', { n: links.length })}
             </h3>
             {links.length > 0 && (
               <ul className="space-y-1.5 mb-3">
@@ -2982,15 +2981,13 @@ function TicketDetailContent() {
                         link.link_type === 'duplicate_of'   ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400' :
                                                               'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                       }`}>
-                        {link.link_type === 'blocks'       ? '차단' :
-                         link.link_type === 'is_blocked_by'? '차단됨' :
-                         link.link_type === 'duplicate_of' ? '중복' : '관련'}
+                        {link.link_type === 'blocks' ? t('link_type_blocks') : link.link_type === 'is_blocked_by' ? t('link_type_blocked_by') : link.link_type === 'duplicate_of' ? t('link_type_duplicate_of') : t('link_type_relates_to')}
                       </span>
                       <a href={`/tickets/${link.target_iid}`} className="font-mono text-blue-600 dark:text-blue-400 hover:underline truncate">
                         #{link.target_iid}
                       </a>
                     </div>
-                    <button onClick={() => handleDeleteLink(link.id)} className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 ml-1" aria-label="삭제">✕</button>
+                    <button onClick={() => handleDeleteLink(link.id)} className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 ml-1" aria-label={t('link_delete_aria')}>✕</button>
                   </li>
                 ))}
               </ul>
@@ -3001,9 +2998,9 @@ function TicketDetailContent() {
                 onChange={(e) => setLinkType(e.target.value)}
                 className="w-full border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="relates_to">관련</option>
-                <option value="blocks">차단</option>
-                <option value="duplicate_of">중복</option>
+                <option value="relates_to">{t('link_type_relates_opt')}</option>
+                <option value="blocks">{t('link_type_blocks_opt')}</option>
+                <option value="duplicate_of">{t('link_type_duplicate_opt')}</option>
               </select>
               <div className="flex gap-1.5">
                 <input
@@ -3011,7 +3008,7 @@ function TicketDetailContent() {
                   min={1}
                   value={linkTargetIid}
                   onChange={(e) => setLinkTargetIid(e.target.value)}
-                  placeholder="#번호"
+                  placeholder={t('link_num_placeholder')}
                   className="flex-1 border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
                 <button
@@ -3019,7 +3016,7 @@ function TicketDetailContent() {
                   disabled={addingLink || !linkTargetIid}
                   className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {addingLink ? '...' : '추가'}
+                  {addingLink ? t('link_adding') : t('link_add_btn')}
                 </button>
               </div>
             </form>
@@ -3050,7 +3047,7 @@ function TicketDetailContent() {
               {/* 탭: 연관 티켓 */}
               {sideTab === 'links' && (
                 <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">연관 티켓 ({links.length})</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('related_tickets_label_n', { n: links.length })}</p>
                   {links.length > 0 && (
                     <ul className="space-y-1.5 mb-3">
                       {links.map((link) => (
@@ -3062,9 +3059,7 @@ function TicketDetailContent() {
                               link.link_type === 'duplicate_of'    ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400' :
                                                                      'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                             }`}>
-                              {link.link_type === 'blocks'        ? '차단' :
-                               link.link_type === 'is_blocked_by' ? '차단됨' :
-                               link.link_type === 'duplicate_of'  ? '중복' : '관련'}
+                              {link.link_type === 'blocks' ? t('link_type_blocks') : link.link_type === 'is_blocked_by' ? t('link_type_blocked_by') : link.link_type === 'duplicate_of' ? t('link_type_duplicate_of') : t('link_type_relates_to')}
                             </span>
                             <Link
                               href={`/tickets/${link.target_iid}`}
@@ -3073,7 +3068,7 @@ function TicketDetailContent() {
                               #{link.target_iid}
                             </Link>
                           </div>
-                          <button onClick={() => handleDeleteLink(link.id)} className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 ml-1" aria-label="삭제">✕</button>
+                          <button onClick={() => handleDeleteLink(link.id)} className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 ml-1" aria-label={t('link_delete_aria')}>✕</button>
                         </li>
                       ))}
                     </ul>
@@ -3084,9 +3079,9 @@ function TicketDetailContent() {
                       onChange={(e) => setLinkType(e.target.value)}
                       className="w-full border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                      <option value="relates_to">관련</option>
-                      <option value="blocks">차단</option>
-                      <option value="duplicate_of">중복</option>
+                      <option value="relates_to">{t('link_type_relates_opt')}</option>
+                      <option value="blocks">{t('link_type_blocks_opt')}</option>
+                      <option value="duplicate_of">{t('link_type_duplicate_opt')}</option>
                     </select>
                     <div className="flex gap-1.5">
                       <input
@@ -3094,7 +3089,7 @@ function TicketDetailContent() {
                         min={1}
                         value={linkTargetIid}
                         onChange={(e) => setLinkTargetIid(e.target.value)}
-                        placeholder="#번호"
+                        placeholder={t('link_num_placeholder')}
                         className="flex-1 border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                       <button
@@ -3102,7 +3097,7 @@ function TicketDetailContent() {
                         disabled={addingLink || !linkTargetIid}
                         className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {addingLink ? '...' : '추가'}
+                        {addingLink ? t('link_adding') : t('link_add_btn')}
                       </button>
                     </div>
                   </form>
@@ -3123,13 +3118,13 @@ function TicketDetailContent() {
               {/* 탭: 개발 프로젝트 전달 */}
               {sideTab === 'forward' && (
                 <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">개발 프로젝트 전달</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('forward_header')}</p>
 
                   {/* 모든 전달 이슈가 완료됐을 때 안내 배지 */}
                   {forwardsAllClosed && forwards.length > 0 && (
                     <div className="mb-2 px-2 py-1.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 rounded text-xs text-green-700 dark:text-green-400 flex items-center gap-1">
                       <span>✓</span>
-                      <span>전달된 이슈가 모두 완료됐습니다. ITSM 티켓 상태를 업데이트할 수 있습니다.</span>
+                      <span>{t('forward_all_done')}</span>
                     </div>
                   )}
 
@@ -3138,7 +3133,7 @@ function TicketDetailContent() {
                       {forwards.map((fwd) => {
                         const isClosed = fwd.target_state === 'closed'
                         const statusLabel = fwd.target_status
-                          ? { open: '접수', in_progress: '처리중', resolved: '해결됨', closed: '완료' }[fwd.target_status] ?? fwd.target_status
+                          ? ({ open: t('forward_status_open'), in_progress: t('forward_status_in_progress'), resolved: t('forward_status_resolved'), closed: t('forward_status_closed') }[fwd.target_status as 'open' | 'in_progress' | 'resolved' | 'closed']) ?? fwd.target_status
                           : null
                         return (
                           <li key={fwd.id} className={`text-xs border rounded px-2 py-1.5 ${isClosed ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-700/50' : 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-100 dark:border-indigo-700/50'}`}>
@@ -3153,7 +3148,7 @@ function TicketDetailContent() {
                                   )}
                                   {/* 전달 이슈 현재 상태 배지 */}
                                   {fwd.target_state === null ? (
-                                    <span className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 text-[10px]">조회불가</span>
+                                    <span className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 text-[10px]">{t('forward_fetch_failed')}</span>
                                   ) : statusLabel ? (
                                     <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${isClosed ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'}`}>
                                       {statusLabel}
@@ -3161,13 +3156,13 @@ function TicketDetailContent() {
                                   ) : null}
                                 </div>
                                 {fwd.target_assignee && (
-                                  <p className="text-gray-500 dark:text-gray-400 mt-0.5">담당: {fwd.target_assignee}</p>
+                                  <p className="text-gray-500 dark:text-gray-400 mt-0.5">{t('forward_assignee_prefix', { name: fwd.target_assignee })}</p>
                                 )}
                                 {fwd.note && <p className="text-gray-500 dark:text-gray-400 truncate mt-0.5">{fwd.note}</p>}
                                 <p className="text-gray-400 dark:text-gray-500 mt-0.5">{formatName(fwd.created_by_name)} · {new Date(fwd.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</p>
                               </div>
                               {isAdmin && (
-                                <button onClick={() => handleDeleteForward(fwd.id)} className="text-gray-400 dark:text-gray-500 hover:text-red-500 shrink-0" aria-label="삭제">✕</button>
+                                <button onClick={() => handleDeleteForward(fwd.id)} className="text-gray-400 dark:text-gray-500 hover:text-red-500 shrink-0" aria-label={t('link_delete_aria')}>✕</button>
                               )}
                             </div>
                           </li>
@@ -3183,7 +3178,7 @@ function TicketDetailContent() {
                         required
                         className="w-full border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       >
-                        <option value="">프로젝트 선택...</option>
+                        <option value="">{t('forward_project_select')}</option>
                         {devProjects.map((p) => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
@@ -3191,7 +3186,7 @@ function TicketDetailContent() {
                       <input
                         value={forwardNote}
                         onChange={(e) => setForwardNote(e.target.value)}
-                        placeholder="전달 메모 (선택)"
+                        placeholder={t('forward_note_placeholder')}
                         className="w-full border dark:border-gray-600 rounded px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
                       <button
@@ -3199,7 +3194,7 @@ function TicketDetailContent() {
                         disabled={forwarding || !selectedDevProject}
                         className="w-full bg-indigo-600 text-white py-1 rounded text-xs hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {forwarding ? '전달 중...' : '이슈 전달'}
+                        {forwarding ? t('forwarding') : t('forward_btn')}
                       </button>
                     </form>
                   )}
@@ -3209,9 +3204,9 @@ function TicketDetailContent() {
               {/* 탭: 연결된 MR — IT 관리자 이상 */}
               {isAgent && sideTab === 'mr' && (
                 <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">연결된 Merge Request ({linkedMRs.length})</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('linked_mrs_header', { n: linkedMRs.length })}</p>
                   {linkedMRs.length === 0 ? (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">연결된 MR 없음</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">{t('no_linked_mrs')}</p>
                   ) : (
                     <ul className="space-y-1.5">
                       {linkedMRs.map((mr) => (
@@ -3235,19 +3230,19 @@ function TicketDetailContent() {
               {/* 탭: CI/CD 파이프라인 트리거 */}
               {isAgent && sideTab === 'pipeline' && (
                 <div className="space-y-3">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">GitLab CI/CD 파이프라인을 트리거합니다. <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">ITSM_TICKET_IID</code> 변수가 자동 주입됩니다.</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('pipeline_intro_prefix')}<code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">ITSM_TICKET_IID</code>{t('pipeline_intro_suffix')}</p>
 
                   {pipelineError && <p className="text-xs text-red-600 dark:text-red-400">⚠️ {pipelineError}</p>}
                   {pipelineResult && (
                     <div className="text-xs bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 rounded-lg p-2">
-                      ✅ 파이프라인 <a href={pipelineResult.web_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline font-mono">#{pipelineResult.id}</a> 시작됨 — {pipelineResult.status}
+                      {t('pipeline_success_prefix')}<a href={pipelineResult.web_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline font-mono">#{pipelineResult.id}</a>{t('pipeline_success_suffix', { status: pipelineResult.status })}
                     </div>
                   )}
 
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="브랜치 (예: main)"
+                      placeholder={t('pipeline_branch_placeholder')}
                       value={pipelineRef}
                       onChange={e => setPipelineRef(e.target.value)}
                       className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-md px-2 py-1.5 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
@@ -3265,7 +3260,7 @@ function TicketDetailContent() {
                           })
                           if (!r.ok) {
                             const d = await r.json().catch(() => ({}))
-                            setPipelineError(d.detail ?? '트리거 실패')
+                            setPipelineError(d.detail ?? t('pipeline_trigger_failed'))
                           } else {
                             const d = await r.json()
                             setPipelineResult(d)
@@ -3276,7 +3271,7 @@ function TicketDetailContent() {
                             if (lr.ok) setPipelines(await lr.json())
                           }
                         } catch {
-                          setPipelineError('네트워크 오류')
+                          setPipelineError(t('pipeline_trigger_network'))
                         } finally {
                           setTriggeringPipeline(false)
                         }
@@ -3284,14 +3279,14 @@ function TicketDetailContent() {
                       disabled={triggeringPipeline || !pipelineRef}
                       className="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap font-medium"
                     >
-                      {triggeringPipeline ? '...' : '▶ 실행'}
+                      {triggeringPipeline ? t('pipeline_running') : t('pipeline_run_btn')}
                     </button>
                   </div>
 
                   {/* 최근 파이프라인 목록 */}
                   {pipelines.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">최근 파이프라인</p>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{t('pipeline_recent_header')}</p>
                       <ul className="space-y-1">
                         {pipelines.slice(0, 5).map(p => (
                           <li key={p.id} className="flex items-center gap-2 text-xs">
@@ -3325,7 +3320,7 @@ function TicketDetailContent() {
                 : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
             }`}
           >
-            {watchLoading ? '...' : isWatching ? '🔔 구독 중 (클릭하여 취소)' : '🔕 이 티켓 구독'}
+            {watchLoading ? t('watching_loading') : isWatching ? t('watching_cancel') : t('watching_start')}
           </button>
         </div>
 
@@ -3336,7 +3331,7 @@ function TicketDetailContent() {
               onClick={() => window.print()}
               className="w-full text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors font-medium"
             >
-              🖨️ 인쇄 / PDF 저장
+              {t('print_pdf')}
             </button>
           </div>
         )}
@@ -3344,7 +3339,7 @@ function TicketDetailContent() {
         {/* 티켓 복제 — IT 개발자 이상 */}
         {isDeveloper && ticket && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">제목·카테고리·우선순위·본문이 복사되고 원본과 관련 링크가 자동 연결됩니다.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('clone_desc')}</p>
             {cloneError && (
               <p className="text-xs text-red-600 dark:text-red-400 mb-2">⚠️ {cloneError}</p>
             )}
@@ -3353,7 +3348,7 @@ function TicketDetailContent() {
               disabled={cloning}
               className="w-full text-xs px-3 py-1.5 border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
-              {cloning ? '복제 중...' : '🧬 이 티켓 복제'}
+              {cloning ? t('cloning') : t('clone_btn')}
             </button>
           </div>
         )}
@@ -3361,14 +3356,14 @@ function TicketDetailContent() {
         {/* 티켓 병합 — 에이전트 이상 */}
         {isAgent && ticket && ticket.status !== 'closed' && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">중복 티켓을 다른 티켓으로 병합합니다. 이 티켓의 댓글이 대상에 복사되고 이 티켓은 닫힙니다.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('merge_desc')}</p>
             {mergeError && <p className="text-xs text-red-600 dark:text-red-400 mb-2">⚠️ {mergeError}</p>}
-            {mergeSuccess && <p className="text-xs text-green-600 dark:text-green-400 mb-2">✅ 병합 완료 — 페이지를 새로고침합니다…</p>}
+            {mergeSuccess && <p className="text-xs text-green-600 dark:text-green-400 mb-2">{t('merge_success')}</p>}
             <div className="flex gap-2">
               <input
                 type="number"
                 min="1"
-                placeholder="대상 티켓 # 번호"
+                placeholder={t('merge_target_placeholder')}
                 value={mergeTargetIid}
                 onChange={e => setMergeTargetIid(e.target.value)}
                 className="flex-1 text-xs border border-gray-200 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
@@ -3378,7 +3373,7 @@ function TicketDetailContent() {
                 disabled={merging || !mergeTargetIid || mergeSuccess}
                 className="text-xs px-3 py-1.5 border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap"
               >
-                {merging ? '병합 중...' : '🔀 병합'}
+                {merging ? t('merging') : t('merge_btn')}
               </button>
             </div>
           </div>
@@ -3392,20 +3387,20 @@ function TicketDetailContent() {
             )}
             {confirmDelete ? (
               <div className="space-y-2">
-                <p className="text-xs text-red-600 dark:text-red-400 font-medium">정말 삭제하시겠습니까?</p>
+                <p className="text-xs text-red-600 dark:text-red-400 font-medium">{t('delete_confirm_prompt')}</p>
                 <div className="flex gap-2">
                   <button
                     onClick={handleDelete}
                     disabled={deleting}
                     className="flex-1 text-xs px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {deleting ? '삭제 중...' : '삭제 확인'}
+                    {deleting ? t('deleting') : t('delete_confirm_btn')}
                   </button>
                   <button
                     onClick={() => setConfirmDelete(false)}
                     className="flex-1 text-xs px-3 py-1.5 border dark:border-gray-600 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
-                    취소
+                    {t('delete_cancel')}
                   </button>
                 </div>
               </div>
@@ -3414,7 +3409,7 @@ function TicketDetailContent() {
                 onClick={() => setConfirmDelete(true)}
                 className="w-full text-xs px-3 py-1.5 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
               >
-                🗑️ 티켓 삭제
+                {t('delete_btn')}
               </button>
             )}
           </div>
@@ -3424,7 +3419,7 @@ function TicketDetailContent() {
         {viewers.length > 0 && (
           <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
             <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-              현재 접속 중
+              {t('active_viewers')}
             </h3>
             <div className="flex flex-wrap gap-1.5">
               {viewers.map((v) => (
@@ -3454,10 +3449,15 @@ function TicketDetailContent() {
   )
 }
 
+function TicketLoadingFallback() {
+  const t = useTranslations('ticket_detail')
+  return <div className="text-center py-16 text-gray-500">{t('loading_fallback')}</div>
+}
+
 export default function TicketDetailPage() {
   return (
     <RequireAuth>
-      <Suspense fallback={<div className="text-center py-16 text-gray-500">불러오는 중...</div>}>
+      <Suspense fallback={<TicketLoadingFallback />}>
         <TicketDetailContent />
       </Suspense>
     </RequireAuth>
