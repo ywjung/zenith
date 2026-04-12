@@ -3,7 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
+import { useTranslations } from 'next-intl'
 import { API_BASE, STATUS_INFO } from '@/lib/constants'
+import { errorMessage } from '@/lib/utils'
+const MarkdownRenderer = dynamic(() => import('@/components/MarkdownRenderer'), { ssr: false })
 
 interface PortalComment {
   id: number
@@ -26,22 +30,15 @@ interface TicketStatus {
   expires_at: string | null
 }
 
-const PRIORITY_LABELS: Record<string, { label: string; color: string }> = {
-  critical: { label: '긴급', color: 'text-red-700 bg-red-50 border-red-200' },
-  high: { label: '높음', color: 'text-orange-700 bg-orange-50 border-orange-200' },
-  medium: { label: '보통', color: 'text-blue-700 bg-blue-50 border-blue-200' },
-  low: { label: '낮음', color: 'text-gray-600 bg-gray-50 border-gray-200' },
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  hardware: '하드웨어',
-  software: '소프트웨어',
-  network: '네트워크',
-  account: '계정',
-  other: '기타',
+const PRIORITY_COLORS: Record<string, string> = {
+  critical: 'text-red-700 bg-red-50 border-red-200',
+  high: 'text-orange-700 bg-orange-50 border-orange-200',
+  medium: 'text-blue-700 bg-blue-50 border-blue-200',
+  low: 'text-gray-600 bg-gray-50 border-gray-200',
 }
 
 function SLABadge({ deadline, breached }: { deadline: string | null; breached: boolean }) {
+  const t = useTranslations('portal_track')
   if (!deadline) return null
   const dl = new Date(deadline)
   const now = new Date()
@@ -49,13 +46,13 @@ function SLABadge({ deadline, breached }: { deadline: string | null; breached: b
   const diffH = diffMs / 3600000
 
   let color = 'text-green-700 bg-green-50 border-green-200'
-  let label = `마감 ${dl.toLocaleDateString('ko-KR')}`
+  let label = t('deadline', { date: dl.toLocaleDateString() })
   if (breached || diffH < 0) {
     color = 'text-red-700 bg-red-50 border-red-200'
-    label = 'SLA 초과'
+    label = t('sla_exceeded')
   } else if (diffH < 24) {
     color = 'text-orange-700 bg-orange-50 border-orange-200'
-    label = `마감 임박 (${Math.round(diffH)}시간 남음)`
+    label = t('deadline_soon', { hours: Math.round(diffH) })
   }
 
   return (
@@ -66,6 +63,7 @@ function SLABadge({ deadline, breached }: { deadline: string | null; breached: b
 }
 
 export default function TrackPage() {
+  const t = useTranslations('portal_track')
   const params = useParams()
   const token = params?.token as string
 
@@ -81,7 +79,7 @@ export default function TrackPage() {
       .then(async (res) => {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
-          throw new Error(data.detail || '조회에 실패했습니다.')
+          throw new Error(data.detail || t('load_error'))
         }
         return res.json()
       })
@@ -96,11 +94,11 @@ export default function TrackPage() {
     try {
       const res = await fetch(`${API_BASE}/portal/extend/${token}`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.detail || '연장 실패')
-      setExtendMsg(`링크 유효기간이 연장되었습니다. 만료: ${new Date(data.expires_at).toLocaleDateString('ko-KR')}`)
+      if (!res.ok) throw new Error(data.detail || t('extend_failed'))
+      setExtendMsg(t('extend_success', { date: new Date(data.expires_at).toLocaleDateString() }))
       if (ticket) setTicket({ ...ticket, expires_at: data.expires_at })
     } catch (e: unknown) {
-      setExtendMsg(e instanceof Error ? e.message : '연장 실패')
+      setExtendMsg(errorMessage(e, t('extend_failed')))
     } finally {
       setExtending(false)
     }
@@ -110,7 +108,7 @@ export default function TrackPage() {
     return (
       <div className="text-center py-16 text-gray-400">
         <div className="text-4xl mb-3">⏳</div>
-        <p>티켓 정보를 불러오는 중...</p>
+        <p>{t('loading')}</p>
       </div>
     )
   }
@@ -119,10 +117,10 @@ export default function TrackPage() {
     return (
       <div className="max-w-lg mx-auto py-12 text-center">
         <div className="text-5xl mb-4">⚠️</div>
-        <h1 className="text-xl font-bold text-gray-800 mb-2">조회 실패</h1>
+        <h1 className="text-xl font-bold text-gray-800 mb-2">{t('not_found')}</h1>
         <p className="text-gray-500 text-sm mb-6">{error}</p>
         <Link href="/portal" className="text-blue-600 text-sm hover:underline">
-          새 요청 제출하기 →
+          {t('new_request')}
         </Link>
       </div>
     )
@@ -136,7 +134,7 @@ export default function TrackPage() {
     icon: '📋',
   }
 
-  const priorityInfo = ticket.priority ? PRIORITY_LABELS[ticket.priority] : null
+  const priorityInfo = ticket.priority ? { label: t(`prio_${ticket.priority}` as 'prio_critical'), color: PRIORITY_COLORS[ticket.priority] } : null
   const isClosed = ticket.status === 'resolved' || ticket.status === 'closed'
 
   // 토큰 만료까지 3일 이하이면 연장 버튼 표시
@@ -147,15 +145,15 @@ export default function TrackPage() {
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-5">
       <div>
         <Link href="/portal" className="text-sm text-blue-600 hover:underline">
-          ← 새 요청 제출
+          {t('back_new')}
         </Link>
       </div>
 
       {/* 헤더 카드 */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="min-w-0">
-            <div className="text-xs text-gray-400 mb-1">티켓 #{ticket.ticket_iid}</div>
+            <div className="text-xs text-gray-400 mb-1">{t('ticket_id', { iid: ticket.ticket_iid })}</div>
             <h1 className="text-lg font-semibold text-gray-900 leading-snug">{ticket.title}</h1>
           </div>
           <span
@@ -174,7 +172,7 @@ export default function TrackPage() {
           )}
           {ticket.category && (
             <span className="inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full border text-gray-600 bg-gray-50 border-gray-200">
-              {CATEGORY_LABELS[ticket.category] ?? ticket.category}
+              {t(`cat_${ticket.category}` as 'cat_hardware') !== `cat_${ticket.category}` ? t(`cat_${ticket.category}` as 'cat_hardware') : ticket.category}
             </span>
           )}
           <SLABadge deadline={ticket.sla_deadline} breached={ticket.sla_breached} />
@@ -182,34 +180,34 @@ export default function TrackPage() {
 
         <div className="border-t border-gray-100 pt-4 space-y-2 text-sm text-gray-500">
           <div className="flex justify-between">
-            <span>접수 일시</span>
-            <span className="text-gray-700">{new Date(ticket.created_at).toLocaleString('ko-KR')}</span>
+            <span>{t('submitted')}</span>
+            <span className="text-gray-700">{new Date(ticket.created_at).toLocaleString()}</span>
           </div>
           {ticket.updated_at && (
             <div className="flex justify-between">
-              <span>최근 업데이트</span>
-              <span className="text-gray-700">{new Date(ticket.updated_at).toLocaleString('ko-KR')}</span>
+              <span>{t('updated')}</span>
+              <span className="text-gray-700">{new Date(ticket.updated_at).toLocaleString()}</span>
             </div>
           )}
           {expiresAt && (
             <div className="flex justify-between items-center">
-              <span>링크 만료</span>
-              <span className="text-gray-700">{expiresAt.toLocaleDateString('ko-KR')}</span>
+              <span>{t('link_expires')}</span>
+              <span className="text-gray-700">{expiresAt.toLocaleDateString()}</span>
             </div>
           )}
         </div>
 
         {isClosed && (
           <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
-            ✅ 요청이 처리 완료되었습니다. 추가 문의가 있으시면 새 요청을 제출해 주세요.
+            {t('completed')}
           </div>
         )}
       </div>
 
       {/* 담당자 댓글 */}
       {ticket.comments.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">💬 담당자 메시지 ({ticket.comments.length})</h2>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('comments_title', { n: ticket.comments.length })}</h2>
           <div className="space-y-4">
             {ticket.comments.map((c) => (
               <div key={c.id} className="flex gap-3">
@@ -220,10 +218,10 @@ export default function TrackPage() {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium text-gray-800">{c.author_name}</span>
                     <span className="text-xs text-gray-400">
-                      {new Date(c.created_at).toLocaleString('ko-KR')}
+                      {new Date(c.created_at).toLocaleString()}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{c.body}</p>
+                  <div className="text-sm text-gray-700"><MarkdownRenderer content={c.body} /></div>
                 </div>
               </div>
             ))}
@@ -235,15 +233,15 @@ export default function TrackPage() {
       {showExtend && !isClosed && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-4">
           <div className="text-sm text-amber-800">
-            <p className="font-medium">이 링크가 곧 만료됩니다</p>
-            <p className="text-xs mt-0.5 text-amber-700">7일 연장하여 계속 추적할 수 있습니다.</p>
+            <p className="font-medium">{t('link_expiring_title')}</p>
+            <p className="text-xs mt-0.5 text-amber-700">{t('link_expiring_body')}</p>
           </div>
           <button
             onClick={handleExtend}
             disabled={extending}
             className="shrink-0 text-xs bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
-            {extending ? '연장 중…' : '7일 연장'}
+            {extending ? t('extending') : t('extend')}
           </button>
         </div>
       )}
