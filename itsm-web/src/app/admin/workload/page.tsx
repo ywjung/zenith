@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { API_BASE } from '@/lib/constants'
 import { errorMessage } from '@/lib/utils'
+import { useTranslations } from 'next-intl'
 
 interface UserWorkload {
   username: string
@@ -58,9 +59,9 @@ function calcPerformance(r: UserWorkload) {
 // ── 포맷 헬퍼 ───────────────────────────────────────────────────────────────
 function fmtHours(h: number | null): string {
   if (h === null) return '—'
-  if (h < 1) return `${Math.round(h * 60)}분`
+  if (h < 1) return `${Math.round(h * 60)}m`
   if (h < 24) return `${h.toFixed(1)}h`
-  return `${(h / 24).toFixed(1)}일`
+  return `${(h / 24).toFixed(1)}d`
 }
 
 // AIRGAP: 외부 avatar_url(gravatar) 대신 로컬 Avatar 컴포넌트(hash 색상 이니셜) 사용
@@ -97,10 +98,11 @@ function ResBar({ rate }: { rate: number | null }) {
 }
 
 function StarRating({ score }: { score: number | null }) {
+  const t = useTranslations('admin.workload')
   if (score === null) return <span className="text-gray-300 dark:text-gray-600 text-xs">—</span>
   const full = Math.round(score)
   return (
-    <span className="text-yellow-400 text-xs tracking-tight" title={`${score}점`}>
+    <span className="text-yellow-400 text-xs tracking-tight" title={t('score_suffix', { n: score })}>
       {'★'.repeat(full)}{'☆'.repeat(5 - full)}
       <span className="ml-1 text-gray-500 dark:text-gray-400 font-medium">{score}</span>
     </span>
@@ -108,14 +110,16 @@ function StarRating({ score }: { score: number | null }) {
 }
 
 function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) return <span className="text-lg" title="1위">🥇</span>
-  if (rank === 2) return <span className="text-lg" title="2위">🥈</span>
-  if (rank === 3) return <span className="text-lg" title="3위">🥉</span>
+  const t = useTranslations('admin.workload')
+  if (rank === 1) return <span className="text-lg" title={t('rank_1')}>🥇</span>
+  if (rank === 2) return <span className="text-lg" title={t('rank_2')}>🥈</span>
+  if (rank === 3) return <span className="text-lg" title={t('rank_3')}>🥉</span>
   return <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums w-6 text-center">{rank}</span>
 }
 
 // ── 상위 3인 포디엄 ──────────────────────────────────────────────────────────
 function TopPodium({ rows }: { rows: UserWorkload[] }) {
+  const t = useTranslations('admin.workload')
   const ranked = [...rows]
     .filter(r => r.assigned > 0)
     .map(r => ({ ...r, perf: calcPerformance(r) }))
@@ -125,9 +129,9 @@ function TopPodium({ rows }: { rows: UserWorkload[] }) {
   if (ranked.length < 2) return null
 
   const medals = [
-    { label: '1위', icon: '🥇', ring: 'ring-yellow-400', bg: 'bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20', border: 'border-yellow-200 dark:border-yellow-800' },
-    { label: '2위', icon: '🥈', ring: 'ring-slate-400', bg: 'bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-800 dark:to-gray-800', border: 'border-slate-200 dark:border-slate-700' },
-    { label: '3위', icon: '🥉', ring: 'ring-orange-300', bg: 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20', border: 'border-orange-200 dark:border-orange-800' },
+    { label: t('rank_1'), icon: '🥇', ring: 'ring-yellow-400', bg: 'bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20', border: 'border-yellow-200 dark:border-yellow-800' },
+    { label: t('rank_2'), icon: '🥈', ring: 'ring-slate-400', bg: 'bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-800 dark:to-gray-800', border: 'border-slate-200 dark:border-slate-700' },
+    { label: t('rank_3'), icon: '🥉', ring: 'ring-orange-300', bg: 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20', border: 'border-orange-200 dark:border-orange-800' },
   ]
 
   return (
@@ -143,10 +147,10 @@ function TopPodium({ rows }: { rows: UserWorkload[] }) {
             <p className="text-xs text-gray-400 dark:text-gray-500 truncate">@{r.username}</p>
             <div className="mt-3 flex items-center justify-center gap-1.5">
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${gradeClass}`}>{grade}</span>
-              {score !== null && <span className="text-xs text-gray-500 dark:text-gray-400">{score}점</span>}
+              {score !== null && <span className="text-xs text-gray-500 dark:text-gray-400">{t('score_suffix', { n: score })}</span>}
             </div>
             <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-              <div>담당 <span className="font-medium text-gray-700 dark:text-gray-300">{r.assigned}</span>건</div>
+              <div>{t('assigned_count', { n: r.assigned })}</div>
               {r.sla_met_rate !== null && (
                 <div>SLA <span className="font-medium text-gray-700 dark:text-gray-300">{r.sla_met_rate}%</span></div>
               )}
@@ -160,6 +164,7 @@ function TopPodium({ rows }: { rows: UserWorkload[] }) {
 
 // ── 메인 페이지 ─────────────────────────────────────────────────────────────
 export default function WorkloadPage() {
+  const t = useTranslations('admin.workload')
   const [rows, setRows] = useState<UserWorkload[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -181,7 +186,7 @@ export default function WorkloadPage() {
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText)
       setRows(await res.json())
     } catch (e: unknown) {
-      setError(errorMessage(e, '불러오기 실패'))
+      setError(errorMessage(e, t('load_failed')))
     } finally {
       setLoading(false)
     }
@@ -222,7 +227,7 @@ export default function WorkloadPage() {
   const avgRating = ratingArr.length ? (ratingArr.reduce((s, v) => s + v, 0) / ratingArr.length).toFixed(1) : null
 
   function exportCsv() {
-    const header = ['순위', '사용자', '이름', '담당', '백로그', '완료', '완료율(%)', '평균처리시간(h)', 'SLA달성률(%)', '고객평점', '성과점수', '등급']
+    const header = [t('csv_header_rank'), t('csv_header_user'), t('csv_header_name'), t('csv_header_assigned'), t('csv_header_backlog'), t('csv_header_closed'), t('csv_header_rate'), t('csv_header_avg_hours'), t('csv_header_sla_rate'), t('csv_header_rating'), t('csv_header_perf'), t('csv_header_grade')]
     const body = filtered.map((r, i) => [
       i + 1, r.username, r.name, r.assigned, r.backlog, r.closed,
       r.resolution_rate ?? '', r.avg_resolve_hours ?? '',
@@ -257,30 +262,30 @@ export default function WorkloadPage() {
             <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            사용자별 업무 현황 및 성과
+            {t('title')}
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">담당 티켓·완료율·SLA·고객 만족도를 종합해 성과를 평가합니다.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{t('subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowPodium(v => !v)}
             className="border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-sm px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
           >
-            {showPodium ? '포디엄 숨기기' : '포디엄 보기'}
+            {showPodium ? t('hide_podium') : t('show_podium')}
           </button>
           <button
             onClick={exportCsv}
             disabled={filtered.length === 0}
             className="border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-sm px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40"
           >
-            CSV 내보내기
+            {t('export_csv')}
           </button>
         </div>
       </div>
 
       {/* 필터 바 */}
       <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3 shadow-sm">
-        <span className="text-xs text-gray-500 dark:text-gray-400">기간</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{t('period')}</span>
         <input
           type="date" value={fromDate} max={toDate || undefined}
           onChange={e => setFromDate(e.target.value)}
@@ -293,26 +298,26 @@ export default function WorkloadPage() {
           className="border dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
         />
         {(fromDate || toDate) && (
-          <button onClick={() => { setFromDate(''); setToDate('') }} className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500">✕ 초기화</button>
+          <button onClick={() => { setFromDate(''); setToDate('') }} className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500">{t('reset_period')}</button>
         )}
         <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
-        <span className="text-xs text-gray-500 dark:text-gray-400">사용자명</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{t('user_filter')}</span>
         <select
           value={selectedUser}
           onChange={e => setSelectedUser(e.target.value)}
           className="border dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
         >
-          <option value="">전체</option>
+          <option value="">{t('all_users')}</option>
           {rows.map(r => (
             <option key={r.username} value={r.username}>{r.name} (@{r.username})</option>
           ))}
         </select>
         {selectedUser && (
-          <button onClick={() => setSelectedUser('')} className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500" aria-label="제거">✕</button>
+          <button onClick={() => setSelectedUser('')} className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500" aria-label={t('remove_aria')}>✕</button>
         )}
         <div className="ml-auto">
           <input
-            type="text" placeholder="이름·아이디 검색..." value={search}
+            type="text" placeholder={t('search_placeholder')} value={search}
             onChange={e => setSearch(e.target.value)}
             className="border dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-44 bg-white dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500"
           />
@@ -322,11 +327,11 @@ export default function WorkloadPage() {
       {/* KPI 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
-          { label: '전체 사용자',    value: `${rows.length}명`,          color: 'text-blue-600',    sub: null },
-          { label: '총 담당 티켓',   value: `${totalAssigned}건`,        color: 'text-indigo-600',  sub: null },
-          { label: '총 완료',        value: `${totalClosed}건`,          color: 'text-emerald-600', sub: totalAssigned > 0 ? `완료율 ${Math.round(totalClosed/totalAssigned*100)}%` : null },
-          { label: '총 백로그',      value: `${totalBacklog}건`,         color: totalBacklog > 10 ? 'text-orange-600' : 'text-gray-600 dark:text-gray-300', sub: null },
-          { label: '평균 SLA 달성률', value: avgSla !== null ? `${avgSla}%` : '—', color: avgSla !== null && avgSla >= 80 ? 'text-emerald-600' : 'text-red-500', sub: avgRating !== null ? `고객 평점 ★ ${avgRating}` : null },
+          { label: t('kpi_total_users'),    value: t('kpi_users_unit', { n: rows.length }),          color: 'text-blue-600',    sub: null },
+          { label: t('kpi_total_assigned'),   value: t('kpi_assigned_unit', { n: totalAssigned }),        color: 'text-indigo-600',  sub: null },
+          { label: t('kpi_total_closed'),        value: t('kpi_assigned_unit', { n: totalClosed }),          color: 'text-emerald-600', sub: totalAssigned > 0 ? t('kpi_completion_rate', { n: Math.round(totalClosed/totalAssigned*100) }) : null },
+          { label: t('kpi_total_backlog'),      value: t('kpi_assigned_unit', { n: totalBacklog }),         color: totalBacklog > 10 ? 'text-orange-600' : 'text-gray-600 dark:text-gray-300', sub: null },
+          { label: t('kpi_avg_sla'), value: avgSla !== null ? `${avgSla}%` : '—', color: avgSla !== null && avgSla >= 80 ? 'text-emerald-600' : 'text-red-500', sub: avgRating !== null ? t('kpi_avg_rating', { rating: avgRating }) : null },
         ].map(c => (
           <div key={c.label} className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl p-4 shadow-sm text-center">
             <div className={`text-2xl font-bold ${c.color}`}>{c.value}</div>
@@ -338,19 +343,19 @@ export default function WorkloadPage() {
 
       {/* 등급 범례 */}
       <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <span className="font-medium text-gray-600 dark:text-gray-300">성과 등급 기준</span>
+        <span className="font-medium text-gray-600 dark:text-gray-300">{t('grade_legend')}</span>
         {[
-          { g: 'A', label: '85점 이상', c: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700' },
-          { g: 'B', label: '70–84점',   c: 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' },
-          { g: 'C', label: '55–69점',   c: 'text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700' },
-          { g: 'D', label: '40–54점',   c: 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' },
-          { g: 'F', label: '40점 미만', c: 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700' },
+          { g: 'A', label: t('grade_a'), c: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700' },
+          { g: 'B', label: t('grade_b'),   c: 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' },
+          { g: 'C', label: t('grade_c'),   c: 'text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700' },
+          { g: 'D', label: t('grade_d'),   c: 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' },
+          { g: 'F', label: t('grade_f'), c: 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700' },
         ].map(({ g, label, c }) => (
           <span key={g} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold ${c}`}>
             {g} <span className="font-normal text-gray-400 dark:text-gray-500">{label}</span>
           </span>
         ))}
-        <span className="text-gray-400 dark:text-gray-500 ml-1">· SLA 40% + 완료율 30% + 고객평점 30% 가중 합산</span>
+        <span className="text-gray-400 dark:text-gray-500 ml-1">{t('formula_hint')}</span>
       </div>
 
       {/* 상위 3인 포디엄 */}
@@ -364,25 +369,25 @@ export default function WorkloadPage() {
       {/* 테이블 */}
       <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
         {loading ? (
-          <div className="py-16 text-center text-gray-400 dark:text-gray-500 text-sm">불러오는 중…</div>
+          <div className="py-16 text-center text-gray-400 dark:text-gray-500 text-sm">{t('loading')}</div>
         ) : filtered.length === 0 ? (
-          <div className="py-16 text-center text-gray-400 dark:text-gray-500 text-sm">데이터가 없습니다.</div>
+          <div className="py-16 text-center text-gray-400 dark:text-gray-500 text-sm">{t('empty')}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[920px]">
               <thead>
                 <tr className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                   <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide w-8">#</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide w-44">사용자</th>
-                  <Th label="담당"    k="assigned"        title="전체 담당 티켓 수" />
-                  <Th label="백로그"  k="backlog"         title="처리 중 + 접수됨 (미완료 티켓)" />
-                  <Th label="완료"    k="closed"          title="종료 처리된 티켓 수" />
-                  <Th label="완료율"  k="resolution_rate" title="완료 / 담당 × 100" />
-                  <Th label="처리시간" k="avg_resolve_hours" title="평균 티켓 처리 시간" />
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">SLA 달성률</th>
-                  <Th label="고객평점" k="avg_rating"     title="만족도 평균 점수 (5점 만점)" />
-                  <Th label="성과점수" k={'_perf' as SortKey} title="SLA·완료율·고객평점 가중 합산 (100점 만점)" />
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">등급</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide w-44">{t('col_user')}</th>
+                  <Th label={t('col_assigned')}    k="assigned"        title={t('col_assigned_title')} />
+                  <Th label={t('col_backlog')}  k="backlog"         title={t('col_backlog_title')} />
+                  <Th label={t('col_closed')}    k="closed"          title={t('col_closed_title')} />
+                  <Th label={t('col_rate')}  k="resolution_rate" title={t('col_rate_title')} />
+                  <Th label={t('col_avg_time')} k="avg_resolve_hours" title={t('col_avg_time_title')} />
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('col_sla')}</th>
+                  <Th label={t('col_rating')} k="avg_rating"     title={t('col_rating_title')} />
+                  <Th label={t('col_perf')} k={'_perf' as SortKey} title={t('col_perf_title')} />
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('col_grade')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
