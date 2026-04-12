@@ -27,7 +27,15 @@
     "yesterday": "Yesterday",
     "daysAgo": "{n} days ago",
     "error_page": "An error occurred while loading the page.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "error_occurred": "Something went wrong",
+    "error_loading_data": "Failed to load data.",
+    "retrying": "Retrying...",
+    "retry_again": "🔄 Try again",
+    "offline": {
+      "banner": "You are offline. Some features may not work.",
+      "sse_reconnecting": "Reconnecting to live updates... (attempt {attempt})"
+    }
   },
   "nav": {
     "home": "Home",
@@ -1006,6 +1014,74 @@
       "desc_pl": "View/edit all tickets, KB authoring, reassignment, bulk actions",
       "desc_developer": "Handle own tickets, view KB, trigger GitLab pipelines",
       "desc_user": "Create/view own tickets, read KB, request service catalog"
+    },
+    "search_index": {
+      "title": "Full-text Search Index",
+      "subtitle": "PostgreSQL pg_trgm GIN index status and manual sync",
+      "refresh": "🔄 Refresh",
+      "load_failed": "Failed to load",
+      "total_indexed": "Tickets indexed",
+      "last_synced": "Last synced",
+      "none": "None",
+      "trgm_status": "pg_trgm extension",
+      "installed": "✓ Installed",
+      "not_installed": "✗ Not installed",
+      "install_hint": "Run: CREATE EXTENSION pg_trgm;",
+      "gin_list": "GIN indexes",
+      "no_gin": "No GIN indexes found. Verify migrations (0053, 0056) are applied.",
+      "how_it_works": "How it works",
+      "hint_webhook": "Issues are indexed in real time on GitLab webhook events.",
+      "hint_beat": "Celery Beat runs a full sync every 30 minutes.",
+      "hint_fallback": "Search falls back from index to GitLab API on miss.",
+      "hint_manual": "Use manual sync when the index is empty or suspected out of sync.",
+      "manual_sync": "Manual full sync",
+      "manual_sync_desc": "Indexes all GitLab issues immediately. Celery must be running.",
+      "syncing": "Queueing sync...",
+      "sync_now": "🔎 Sync now",
+      "sync_queued": "Sync task queued (ID: {task_id})",
+      "sync_failed": "Request failed"
+    },
+    "email_ingest": {
+      "title": "Email Ingest Monitoring",
+      "subtitle": "IMAP-based email ingest configuration and Celery task status",
+      "refresh": "🔄 Refresh",
+      "load_failed": "Failed to load",
+      "config_status": "Configuration",
+      "enabled": "Ingest enabled",
+      "active": "Active",
+      "inactive": "Inactive",
+      "imap_server": "IMAP server",
+      "account": "Account",
+      "schedule": "Celery Beat schedule:",
+      "manual_run": "Manual run",
+      "manual_run_desc": "Process the inbox immediately without waiting for the schedule.",
+      "running": "Running...",
+      "run_now": "▶ Run now",
+      "queued": "Task queued (ID: {task_id})",
+      "error_prefix": "Error: {msg}",
+      "trigger_failed": "Run failed",
+      "disabled_title": "Email ingest is disabled",
+      "disabled_hint": "Set IMAP_ENABLED=true and IMAP_HOST, IMAP_USER, IMAP_PASSWORD environment variables."
+    },
+    "failed_notifications": {
+      "title": "Failed Notifications",
+      "subtitle": "Notifications that permanently failed after retries",
+      "refresh": "🔄 Refresh",
+      "load_failed": "Failed to load",
+      "none": "No failed notifications."
     }
+  },
+  "error_page": {
+    "title_404": "404 — Page not found",
+    "sr_404": "404 error — Page not found",
+    "not_found_heading": "Page not found",
+    "not_found_body": "The page you requested does not exist or has been moved.\nPlease check the URL or use the links below.",
+    "cta_home": "🏠 Dashboard",
+    "cta_new_ticket": "✏️ New ticket",
+    "cta_help": "❓ Help",
+    "error_sr": "A system error occurred",
+    "error_heading": "An error occurred",
+    "error_body": "There was a problem displaying this page.",
+    "error_id": "Error ID: {id}"
   }
 }

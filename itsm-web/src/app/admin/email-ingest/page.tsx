@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { API_BASE } from '@/lib/constants'
+import { useTranslations } from 'next-intl'
 import { adminFetch } from '@/lib/adminFetch'
 import { errorMessage } from '@/lib/utils'
 
@@ -15,11 +15,12 @@ interface IngestStatus {
 
 
 export default function EmailIngestPage() {
+  const t = useTranslations('admin.email_ingest')
   const [status, setStatus] = useState<IngestStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [triggering, setTriggering] = useState(false)
-  const [triggerResult, setTriggerResult] = useState<string | null>(null)
+  const [triggerResult, setTriggerResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
   async function load() {
     setLoading(true)
@@ -28,12 +29,13 @@ export default function EmailIngestPage() {
       const data = await adminFetch('/admin/email-ingest/status')
       setStatus(data)
     } catch (e: unknown) {
-      setError(errorMessage(e, '불러오기 실패'))
+      setError(errorMessage(e, t('load_failed')))
     } finally {
       setLoading(false)
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [])
 
   async function handleTrigger() {
@@ -41,9 +43,9 @@ export default function EmailIngestPage() {
     setTriggerResult(null)
     try {
       const res = await adminFetch('/admin/email-ingest/trigger', { method: 'POST' })
-      setTriggerResult(`태스크 큐에 등록됨 (ID: ${(res as { task_id: string }).task_id})`)
+      setTriggerResult({ ok: true, msg: t('queued', { task_id: (res as { task_id: string }).task_id }) })
     } catch (e: unknown) {
-      setTriggerResult(`오류: ${errorMessage(e, '실행 실패')}`)
+      setTriggerResult({ ok: false, msg: t('error_prefix', { msg: errorMessage(e, t('trigger_failed')) }) })
     } finally {
       setTriggering(false)
     }
@@ -57,17 +59,17 @@ export default function EmailIngestPage() {
             <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
-            이메일 수신 모니터링
+            {t('title')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            IMAP 기반 이메일 수신 설정 및 Celery 태스크 상태
+            {t('subtitle')}
           </p>
         </div>
         <button
           onClick={load}
           className="text-sm border dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
         >
-          🔄 새로고침
+          {t('refresh')}
         </button>
       </div>
 
@@ -84,29 +86,28 @@ export default function EmailIngestPage() {
         </div>
       ) : status ? (
         <>
-          {/* 설정 상태 */}
           <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">설정 상태</h3>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">{t('config_status')}</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
                 <span className={`w-3 h-3 rounded-full shrink-0 ${status.enabled ? 'bg-green-500' : 'bg-gray-400'}`} />
                 <div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">수신 활성화</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">{t('enabled')}</div>
                   <div className={`text-sm font-semibold ${status.enabled ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
-                    {status.enabled ? '활성' : '비활성'}
+                    {status.enabled ? t('active') : t('inactive')}
                   </div>
                 </div>
               </div>
               {status.enabled && (
                 <>
                   <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">IMAP 서버</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{t('imap_server')}</div>
                     <div className="text-sm font-mono text-gray-800 dark:text-gray-100 mt-0.5 truncate">
                       {status.imap_host || '—'}
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">계정</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{t('account')}</div>
                     <div className="text-sm font-mono text-gray-800 dark:text-gray-100 mt-0.5 truncate">
                       {status.imap_user || '—'}
                     </div>
@@ -117,17 +118,16 @@ export default function EmailIngestPage() {
             {status.enabled && status.schedule && (
               <div className="mt-3 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                 <span>⏱</span>
-                <span>Celery Beat 스케줄: <strong className="text-gray-700 dark:text-gray-300">{status.schedule}</strong></span>
+                <span>{t('schedule')} <strong className="text-gray-700 dark:text-gray-300">{status.schedule}</strong></span>
               </div>
             )}
           </div>
 
-          {/* 수동 실행 */}
           {status.enabled && (
             <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">수동 실행</h3>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t('manual_run')}</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                스케줄을 기다리지 않고 즉시 받은편지함을 처리합니다.
+                {t('manual_run_desc')}
               </p>
               <div className="flex items-center gap-3">
                 <button
@@ -135,29 +135,25 @@ export default function EmailIngestPage() {
                   disabled={triggering}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {triggering ? '실행 중...' : '▶ 지금 실행'}
+                  {triggering ? t('running') : t('run_now')}
                 </button>
                 {triggerResult && (
-                  <span className={`text-sm ${triggerResult.startsWith('오류') ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}>
-                    {triggerResult}
+                  <span className={`text-sm ${triggerResult.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                    {triggerResult.msg}
                   </span>
                 )}
               </div>
             </div>
           )}
 
-          {/* 비활성 안내 */}
           {!status.enabled && (
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-5">
               <div className="flex items-start gap-3">
                 <span className="text-2xl">📭</span>
                 <div>
-                  <h3 className="font-semibold text-amber-800 dark:text-amber-300 text-sm">이메일 수신이 비활성화되어 있습니다</h3>
+                  <h3 className="font-semibold text-amber-800 dark:text-amber-300 text-sm">{t('disabled_title')}</h3>
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                    환경 변수 <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">IMAP_ENABLED=true</code> 및{' '}
-                    <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">IMAP_HOST</code>,{' '}
-                    <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">IMAP_USER</code>,{' '}
-                    <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">IMAP_PASSWORD</code>를 설정하세요.
+                    {t('disabled_hint')}
                   </p>
                 </div>
               </div>

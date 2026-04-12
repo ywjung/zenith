@@ -2,6 +2,7 @@
 
 import SpinnerIcon from './SpinnerIcon'
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface ErrorStateProps {
   message?: string
@@ -18,12 +19,14 @@ interface ErrorStateProps {
  *   {error ? <ErrorState message={error} onRetry={load} /> : ...}
  */
 export default function ErrorState({
-  message = '데이터를 불러오는 중 오류가 발생했습니다.',
+  message,
   onRetry,
   compact = false,
   className = '',
 }: ErrorStateProps) {
+  const t = useTranslations('common')
   const [retrying, setRetrying] = useState(false)
+  const resolvedMessage = message ?? t('error_loading_data')
 
   async function handleRetry() {
     if (!onRetry) return
@@ -42,9 +45,9 @@ export default function ErrorState({
         ⚠️
       </div>
       <h3 className={`${compact ? 'text-sm' : 'text-base'} font-semibold text-gray-800 dark:text-gray-200 mb-1`}>
-        문제가 발생했습니다
+        {t('error_occurred')}
       </h3>
-      <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md mb-4">{message}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md mb-4">{resolvedMessage}</p>
       {onRetry && (
         <button
           type="button"
@@ -53,7 +56,7 @@ export default function ErrorState({
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
         >
           {retrying && <SpinnerIcon className="w-3.5 h-3.5" />}
-          {retrying ? '재시도 중...' : '🔄 다시 시도'}
+          {retrying ? t('retrying') : t('retry_again')}
         </button>
       )}
     </div>
