@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { fetchMultiProjectStats } from '@/lib/api'
 import type { MultiProjectStats } from '@/lib/api'
 import RequireAuth from '@/components/RequireAuth'
@@ -28,6 +29,7 @@ function ProjectInitial({ name }: { name: string }) {
 }
 
 function MultiProjectContent() {
+  const t = useTranslations('multi_project')
   const { isAgent } = useAuth()
   const [projects, setProjects] = useState<MultiProjectStats[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,7 +55,7 @@ function MultiProjectContent() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <p className="text-gray-600 dark:text-gray-400 font-medium">에이전트 이상 권한이 필요합니다.</p>
+        <p className="text-gray-600 dark:text-gray-400 font-medium">{t('no_permission')}</p>
       </div>
     )
   }
@@ -66,7 +68,7 @@ function MultiProjectContent() {
 
   const summaryCards = [
     {
-      label: '프로젝트 수', value: projects.length, unit: '개',
+      label: t('projects_count'), value: projects.length, unit: t('unit_count'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -76,7 +78,7 @@ function MultiProjectContent() {
       valueColor: 'text-gray-900 dark:text-white',
     },
     {
-      label: '전체 SLA 건수', value: totalSLA, unit: '건',
+      label: t('total_sla'), value: totalSLA, unit: t('unit_cases'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -86,7 +88,7 @@ function MultiProjectContent() {
       valueColor: 'text-gray-900 dark:text-white',
     },
     {
-      label: '활성 SLA', value: totalActive, unit: '건',
+      label: t('active_sla'), value: totalActive, unit: t('unit_cases'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -96,7 +98,7 @@ function MultiProjectContent() {
       valueColor: 'text-amber-600 dark:text-amber-400',
     },
     {
-      label: 'SLA 위반', value: totalBreached, unit: '건',
+      label: t('breached_sla'), value: totalBreached, unit: t('unit_cases'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -106,7 +108,7 @@ function MultiProjectContent() {
       valueColor: totalBreached > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400',
     },
     {
-      label: '전체 준수율', value: overallRate != null ? overallRate : '—', unit: overallRate != null ? '%' : '',
+      label: t('overall_rate'), value: overallRate != null ? overallRate : '—', unit: overallRate != null ? '%' : '',
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -119,7 +121,7 @@ function MultiProjectContent() {
       valueColor: rateColor(overallRate).text,
     },
     {
-      label: '총 기록 시간', value: Math.round(totalHours * 10) / 10, unit: 'h',
+      label: t('total_hours'), value: Math.round(totalHours * 10) / 10, unit: 'h',
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -141,22 +143,22 @@ function MultiProjectContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
             </span>
-            멀티 프로젝트 통합 뷰
+            {t('title')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            모든 GitLab 프로젝트의 SLA·시간 현황을 한눈에 확인합니다.
+            {t('subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => load(true)}
             disabled={refreshing}
-            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            새로고침
+            {t('refresh')}
           </button>
           <Link
             href="/reports"
@@ -165,7 +167,7 @@ function MultiProjectContent() {
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
-            리포트
+            {t('reports')}
           </Link>
         </div>
       </div>
@@ -190,8 +192,8 @@ function MultiProjectContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="text-gray-500 dark:text-gray-400">데이터를 불러올 수 없습니다.</p>
-          <button onClick={() => load()} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">다시 시도</button>
+          <p className="text-gray-500 dark:text-gray-400">{t('load_failed')}</p>
+          <button onClick={() => load()} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">{t('retry')}</button>
         </div>
       )}
 
@@ -199,8 +201,8 @@ function MultiProjectContent() {
       {!loading && !error && projects.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-3xl">📂</div>
-          <p className="font-medium text-gray-600 dark:text-gray-400">등록된 프로젝트 데이터가 없습니다.</p>
-          <p className="text-sm text-gray-400 dark:text-gray-500">SLA 기록이 있는 프로젝트가 여기에 표시됩니다.</p>
+          <p className="font-medium text-gray-600 dark:text-gray-400">{t('empty_title')}</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">{t('empty_desc')}</p>
         </div>
       )}
 
@@ -229,8 +231,8 @@ function MultiProjectContent() {
             {/* 프로젝트 테이블 (3/5) */}
             <div className="lg:col-span-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">프로젝트별 현황</h2>
-                <span className="text-xs text-gray-400">{projects.length}개 프로젝트</span>
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('per_project')}</h2>
+                <span className="text-xs text-gray-400">{projects.length} {t('projects_suffix')}</span>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {projects.map((p) => {
@@ -255,13 +257,13 @@ function MultiProjectContent() {
                             />
                           </div>
                           <div className="flex items-center gap-3 text-xs text-gray-400">
-                            <span>전체 <span className="text-gray-600 dark:text-gray-300 font-medium">{p.total_sla_records}</span></span>
-                            <span>활성 <span className="text-amber-600 font-medium">{p.sla_active}</span></span>
+                            <span>{t('total')} <span className="text-gray-600 dark:text-gray-300 font-medium">{p.total_sla_records}</span></span>
+                            <span>{t('active')} <span className="text-amber-600 font-medium">{p.sla_active}</span></span>
                             {p.sla_breached > 0 && (
-                              <span>위반 <span className="text-red-500 font-medium">{p.sla_breached}</span></span>
+                              <span>{t('breached')} <span className="text-red-500 font-medium">{p.sla_breached}</span></span>
                             )}
                             <span className="hidden sm:inline">
-                              <span className="text-purple-500 font-medium">{p.total_time_hours}h</span> 기록
+                              <span className="text-purple-500 font-medium">{p.total_time_hours}h</span> {t('hours_logged')}
                             </span>
                           </div>
                         </div>
@@ -275,11 +277,11 @@ function MultiProjectContent() {
             {/* 준수율 차트 (2/5) */}
             <div className="lg:col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">SLA 준수율 비교</h2>
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('rate_compare')}</h2>
               </div>
               <div className="p-4 space-y-4">
                 {projects.filter(p => p.total_sla_records > 0).length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">SLA 데이터가 없습니다.</p>
+                  <p className="text-sm text-gray-400 text-center py-4">{t('no_sla_data')}</p>
                 ) : (
                   projects.filter(p => p.total_sla_records > 0)
                     .sort((a, b) => (b.sla_compliance_rate ?? 0) - (a.sla_compliance_rate ?? 0))
@@ -327,14 +329,14 @@ function MultiProjectContent() {
                 <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">SLA 위반 프로젝트</h3>
+                <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">{t('breach_projects')}</h3>
               </div>
               <div className="flex flex-wrap gap-2">
                 {projects.filter(p => p.sla_breached > 0).map(p => (
                   <div key={p.project_id} className="flex items-center gap-2 bg-white dark:bg-gray-900 border border-red-200 dark:border-red-700 rounded-lg px-3 py-1.5">
                     <ProjectInitial name={p.project_name} />
                     <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{p.project_name}</span>
-                    <span className="text-xs font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded-full">{p.sla_breached}건</span>
+                    <span className="text-xs font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded-full">{t('breach_count', { n: p.sla_breached })}</span>
                   </div>
                 ))}
               </div>
