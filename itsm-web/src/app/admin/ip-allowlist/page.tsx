@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useConfirm } from '@/components/ConfirmProvider'
 import { useAuth } from '@/context/AuthContext'
 import { API_BASE } from '@/lib/constants'
@@ -16,6 +17,7 @@ interface Entry {
 }
 
 export default function IpAllowlistPage() {
+  const t = useTranslations('admin.ip_allowlist')
   const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const [entries, setEntries] = useState<Entry[]>([])
@@ -46,7 +48,7 @@ export default function IpAllowlistPage() {
         return r.json()
       })
       .then(data => setEntries(Array.isArray(data) ? data : []))
-      .catch(() => setMsg({ type: 'err', text: '목록을 불러오지 못했습니다.' }))
+      .catch(() => setMsg({ type: 'err', text: t('load_failed') }))
       .finally(() => setLoading(false))
   }
 
@@ -63,15 +65,15 @@ export default function IpAllowlistPage() {
       })
       if (!r.ok) {
         const e = await r.json()
-        throw new Error(e.detail ?? '추가 실패')
+        throw new Error(e.detail ?? t('add_failed'))
       }
       const added: Entry = await r.json()
       setEntries(prev => [...prev, added])
       setNewCidr('')
       setNewLabel('')
-      setMsg({ type: 'ok', text: `${added.cidr} 이(가) 추가되었습니다.` })
+      setMsg({ type: 'ok', text: t('added', { cidr: added.cidr }) })
     } catch (e: unknown) {
-      setMsg({ type: 'err', text: errorMessage(e, '추가 실패') })
+      setMsg({ type: 'err', text: errorMessage(e, t('add_failed')) })
     } finally {
       setAdding(false)
     }
@@ -89,12 +91,12 @@ export default function IpAllowlistPage() {
       const updated: Entry = await r.json()
       setEntries(prev => prev.map(e => e.id === updated.id ? updated : e))
     } catch {
-      setMsg({ type: 'err', text: '상태 변경 실패' })
+      setMsg({ type: 'err', text: t('toggle_failed') })
     }
   }
 
   async function deleteEntry(id: number, cidr: string) {
-    if (!(await confirm({ title: `${cidr} 을(를) 삭제하시겠습니까?`, variant: 'danger', confirmLabel: '확인' }))) return
+    if (!(await confirm({ title: t('delete_confirm', { cidr }), variant: 'danger' }))) return
     try {
       const r = await fetch(`${API_BASE}/admin/ip-allowlist/${id}`, {
         method: 'DELETE',
@@ -102,9 +104,9 @@ export default function IpAllowlistPage() {
       })
       if (!r.ok && r.status !== 204) throw new Error()
       setEntries(prev => prev.filter(e => e.id !== id))
-      setMsg({ type: 'ok', text: `${cidr} 이(가) 삭제되었습니다.` })
+      setMsg({ type: 'ok', text: t('deleted', { cidr }) })
     } catch {
-      setMsg({ type: 'err', text: '삭제 실패' })
+      setMsg({ type: 'err', text: t('delete_failed') })
     }
   }
 
@@ -116,7 +118,7 @@ export default function IpAllowlistPage() {
     return (
       <div className="text-center py-20">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500 dark:text-gray-400">관리자 권한이 필요합니다.</p>
+        <p className="text-gray-500 dark:text-gray-400">{t('no_permission')}</p>
       </div>
     )
   }
@@ -131,15 +133,14 @@ export default function IpAllowlistPage() {
               <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              IP 접근 제한
+              {t('title')}
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              관리자 API(<code className="font-mono bg-gray-100 dark:bg-gray-700 dark:text-gray-200 px-1 rounded">/admin/*</code>)에
-              접근 가능한 IP 대역을 관리합니다. 목록이 비어있으면 모든 IP가 허용됩니다.
+              {t('subtitle_pre')}<code className="font-mono bg-gray-100 dark:bg-gray-700 dark:text-gray-200 px-1 rounded">/admin/*</code>){t('subtitle_post')}
             </p>
             <div className="flex flex-wrap gap-3 mt-3">
               <span className="inline-flex items-center gap-1.5 text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700 px-2.5 py-1 rounded-full font-medium">
-                ✅ localhost — 항상 허용
+                {t('localhost_always')}
               </span>
               {myIp && (
                 <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border ${
@@ -147,7 +148,7 @@ export default function IpAllowlistPage() {
                     ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700'
                     : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700'
                 }`}>
-                  {myIpAllowed ? '🌐' : '⛔'} 현재 IP: {myIp}
+                  {t('my_ip', { status: myIpAllowed ? '🌐' : '⛔', ip: myIp })}
                 </span>
               )}
             </div>
@@ -158,7 +159,7 @@ export default function IpAllowlistPage() {
                 ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-700'
                 : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700'
             }`}>
-              {activeEntries.length > 0 ? `🔒 ${activeEntries.length}개 대역 제한 중` : '🔓 제한 없음 (전체 허용)'}
+              {activeEntries.length > 0 ? t('limited', { n: activeEntries.length }) : t('unrestricted')}
             </div>
           </div>
         </div>
@@ -167,8 +168,8 @@ export default function IpAllowlistPage() {
       {/* 현재 IP가 차단될 경우 경고 */}
       {myIp && activeEntries.length > 0 && !myIpAllowed && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-xl p-4 text-sm text-red-800 dark:text-red-300">
-          <div className="font-semibold mb-1">⛔ 현재 접속 IP({myIp})가 허용 목록에 없습니다</div>
-          <p>설정을 저장하면 현재 세션이 종료되고 이후 접속이 차단됩니다. 현재 IP를 허용 목록에 추가하세요.</p>
+          <div className="font-semibold mb-1">{t('my_ip_blocked_title', { ip: myIp })}</div>
+          <p>{t('my_ip_blocked_desc')}</p>
         </div>
       )}
 
@@ -186,7 +187,7 @@ export default function IpAllowlistPage() {
       {/* 추가 폼 */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-          <h3 className="font-semibold text-gray-800 dark:text-gray-100">CIDR 추가</h3>
+          <h3 className="font-semibold text-gray-800 dark:text-gray-100">{t('add_title')}</h3>
         </div>
         <div className="p-6">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -195,7 +196,7 @@ export default function IpAllowlistPage() {
               value={newCidr}
               onChange={e => setNewCidr(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addEntry()}
-              placeholder="예: 192.168.1.0/24  또는  10.0.0.5/32"
+              placeholder={t('cidr_placeholder')}
               className="flex-1 font-mono text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <input
@@ -203,7 +204,7 @@ export default function IpAllowlistPage() {
               value={newLabel}
               onChange={e => setNewLabel(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addEntry()}
-              placeholder="메모 (선택)"
+              placeholder={t('label_placeholder')}
               className="sm:w-48 text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
@@ -211,11 +212,11 @@ export default function IpAllowlistPage() {
               disabled={adding || !newCidr.trim()}
               className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
             >
-              {adding ? '추가 중…' : '+ 추가'}
+              {adding ? t('adding') : t('add')}
             </button>
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <span>예시:</span>
+            <span>{t('examples')}</span>
             {['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '203.0.113.0/24'].map(ex => (
               <button
                 key={ex}
@@ -233,10 +234,10 @@ export default function IpAllowlistPage() {
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
           <h3 className="font-semibold text-gray-800 dark:text-gray-100">
-            허용 목록
-            <span className="ml-2 text-xs font-normal text-gray-400">({entries.length}개)</span>
+            {t('allowlist_title')}
+            <span className="ml-2 text-xs font-normal text-gray-400">{t('allowlist_count', { n: entries.length })}</span>
           </h3>
-          <span className="text-xs text-gray-400 dark:text-gray-500">변경 사항은 최대 5초 내에 자동 반영됩니다</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">{t('auto_reload')}</span>
         </div>
 
         {/* localhost 고정 행 */}
@@ -245,17 +246,17 @@ export default function IpAllowlistPage() {
             <span className="w-2.5 h-2.5 rounded-full bg-white" />
           </span>
           <code className="font-mono text-sm text-gray-800 dark:text-gray-200 flex-1">127.0.0.0/8 · ::1/128</code>
-          <span className="text-xs text-gray-500 dark:text-gray-400">로컬호스트 (시스템 고정)</span>
-          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-700 px-2 py-0.5 rounded-full">항상 허용</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">{t('localhost_row')}</span>
+          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-700 px-2 py-0.5 rounded-full">{t('always_allowed')}</span>
         </div>
 
         {loading ? (
-          <div className="px-6 py-10 text-center text-sm text-gray-400">불러오는 중…</div>
+          <div className="px-6 py-10 text-center text-sm text-gray-400">{t('loading')}</div>
         ) : entries.length === 0 ? (
           <div className="px-6 py-10 text-center">
             <div className="text-3xl mb-2">🔓</div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">등록된 IP 대역이 없습니다.</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">목록이 비어있으면 모든 IP에서 관리자 API에 접근할 수 있습니다.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('empty_title')}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('empty_hint')}</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -266,7 +267,7 @@ export default function IpAllowlistPage() {
                 {/* 활성 토글 */}
                 <button
                   onClick={() => toggleActive(entry)}
-                  title={entry.is_active ? '클릭하여 비활성화' : '클릭하여 활성화'}
+                  title={entry.is_active ? t('click_to_disable') : t('click_to_enable')}
                   className="shrink-0"
                 >
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
@@ -279,7 +280,7 @@ export default function IpAllowlistPage() {
                 <code className="font-mono text-sm text-gray-800 dark:text-gray-200 min-w-[160px]">{entry.cidr}</code>
 
                 <span className="flex-1 text-sm text-gray-500 dark:text-gray-400 truncate">
-                  {entry.label ?? <span className="italic text-gray-300 dark:text-gray-600">메모 없음</span>}
+                  {entry.label ?? <span className="italic text-gray-300 dark:text-gray-600">{t('no_memo')}</span>}
                 </span>
 
                 {myIp && entry.is_active && (
@@ -288,7 +289,7 @@ export default function IpAllowlistPage() {
                       ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-700'
                       : 'bg-gray-50 dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-700'
                   }`}>
-                    {isCidrMatch(myIp, entry.cidr) ? '현재 IP 포함' : ''}
+                    {isCidrMatch(myIp, entry.cidr) ? t('my_ip_included') : ''}
                   </span>
                 )}
 
@@ -297,8 +298,8 @@ export default function IpAllowlistPage() {
                 <button
                   onClick={() => deleteEntry(entry.id, entry.cidr)}
                   className="shrink-0 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors text-lg leading-none"
-                  title="삭제"
-                 aria-label="제거">
+                  title={t('delete_title')}
+                 aria-label={t('remove_aria')}>
                   ×
                 </button>
               </div>
@@ -309,12 +310,12 @@ export default function IpAllowlistPage() {
 
       {/* 안내 */}
       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-sm text-amber-800 dark:text-amber-300">
-        <div className="font-semibold mb-1">⚠️ 주의 사항</div>
+        <div className="font-semibold mb-1">{t('warn_title')}</div>
         <ul className="space-y-1 list-disc list-inside text-amber-700 dark:text-amber-400">
-          <li>허용 목록에 <strong>현재 접속 IP</strong>가 포함되어 있는지 먼저 확인하세요.</li>
-          <li>목록이 비어있거나 모든 항목이 비활성이면 <strong>모든 IP에서 접근 가능</strong>합니다.</li>
-          <li>변경 사항은 <strong>5초 이내 자동 반영</strong>됩니다. 재시작이 필요 없습니다.</li>
-          <li>Nginx 등 리버스 프록시 환경에서는 <code className="font-mono bg-amber-100 dark:bg-amber-900/30 px-1 rounded">X-Forwarded-For</code> 헤더가 올바르게 전달되어야 합니다.</li>
+          <li>{t('warn_1_prefix')}<strong>{t('warn_1_strong')}</strong>{t('warn_1_suffix')}</li>
+          <li>{t('warn_2_prefix')}<strong>{t('warn_2_strong')}</strong>{t('warn_2_suffix')}</li>
+          <li>{t('warn_3_prefix')}<strong>{t('warn_3_strong')}</strong>{t('warn_3_suffix')}</li>
+          <li>{t('warn_4_prefix')}<code className="font-mono bg-amber-100 dark:bg-amber-900/30 px-1 rounded">X-Forwarded-For</code>{t('warn_4_suffix')}</li>
         </ul>
       </div>
     </div>
