@@ -1,7 +1,10 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { API_BASE } from '@/lib/constants'
+import { adminFetch } from '@/lib/adminFetch'
 import { useTranslations } from 'next-intl'
 
 interface AutomationRule {
@@ -40,14 +43,6 @@ const EMPTY_RULE = {
   order: 0,
 }
 
-async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...opts })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail || `HTTP ${res.status}`)
-  }
-  return res.status === 204 ? null : res.json()
-}
 
 interface AutomationLogEntry {
   id: number
@@ -80,7 +75,7 @@ function AutomationLogsModal({ rule, onClose }: { rule: AutomationRule; onClose:
   }
 
   useEffect(() => {
-    apiFetch(`/automation-rules/${rule.id}/logs?limit=50`)
+    adminFetch(`/automation-rules/${rule.id}/logs?limit=50`)
       .then(setLogs)
       .catch(() => setLogs([]))
       .finally(() => setLoading(false))
@@ -91,14 +86,14 @@ function AutomationLogsModal({ rule, onClose }: { rule: AutomationRule; onClose:
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-scaleIn">
         <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
           <div>
             <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{t('automation_rules.logs_title')}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{rule.name}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none" aria-label="닫기">×</button>
         </div>
         <div className="overflow-y-auto flex-1">
           {loading ? (
@@ -177,7 +172,7 @@ function AllLogsPanel() {
 
   function load(mo: boolean) {
     setLoading(true)
-    apiFetch(`/automation-rules/logs/recent?limit=200&matched_only=${mo}`)
+    adminFetch(`/automation-rules/logs/recent?limit=200&matched_only=${mo}`)
       .then(setLogs)
       .catch(() => setLogs([]))
       .finally(() => setLoading(false))
@@ -268,6 +263,7 @@ function AllLogsPanel() {
 }
 
 export default function AutomationRulesPage() {
+  const confirm = useConfirm()
   const t = useTranslations('admin')
 
   const TRIGGER_EVENTS = [
@@ -320,7 +316,7 @@ export default function AutomationRulesPage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await apiFetch('/automation-rules')
+      const data = await adminFetch('/automation-rules')
       setRules(data)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('automation_rules.load_failed'))
@@ -367,13 +363,13 @@ export default function AutomationRulesPage() {
         order: form.order,
       }
       if (editing) {
-        await apiFetch(`/automation-rules/${editing.id}`, {
+        await adminFetch(`/automation-rules/${editing.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         })
       } else {
-        await apiFetch('/automation-rules', {
+        await adminFetch('/automation-rules', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -389,18 +385,18 @@ export default function AutomationRulesPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm(t('automation_rules.delete_confirm'))) return
+    if (!(await confirm({ title: t('automation_rules.delete_confirm'), variant: 'danger', confirmLabel: '확인' }))) return
     try {
-      await apiFetch(`/automation-rules/${id}`, { method: 'DELETE' })
+      await adminFetch(`/automation-rules/${id}`, { method: 'DELETE' })
       setRules(r => r.filter(x => x.id !== id))
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('automation_rules.delete_failed'))
+      toast.error(e instanceof Error ? e.message : t('automation_rules.delete_failed'))
     }
   }
 
   async function handleToggle(rule: AutomationRule) {
     try {
-      const updated = await apiFetch(`/automation-rules/${rule.id}`, {
+      const updated = await adminFetch(`/automation-rules/${rule.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: !rule.is_active }),
@@ -411,7 +407,7 @@ export default function AutomationRulesPage() {
         await loadRules()
       }
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('automation_rules.toggle_failed'))
+      toast.error(e instanceof Error ? e.message : t('automation_rules.toggle_failed'))
     }
   }
 
@@ -568,13 +564,13 @@ export default function AutomationRulesPage() {
 
       {/* Form modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-scaleIn">
             <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
               <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
                 {editing ? t('automation_rules.edit_title') : t('automation_rules.new_title')}
               </h3>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
+              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none" aria-label="닫기">×</button>
             </div>
 
             <div className="overflow-y-auto flex-1 p-6 space-y-5">
@@ -666,7 +662,7 @@ export default function AutomationRulesPage() {
                           placeholder={t('automation_rules.condition_value_placeholder')}
                           className="flex-1 border dark:border-gray-600 rounded px-2 py-1.5 text-xs dark:bg-gray-800 dark:text-gray-100 focus:outline-none"
                         />
-                        <button onClick={() => removeCondition(i)} className="text-red-400 hover:text-red-600 px-1">×</button>
+                        <button onClick={() => removeCondition(i)} className="text-red-400 hover:text-red-600 px-1" aria-label="삭제">×</button>
                       </div>
                     ))}
                   </div>
@@ -701,7 +697,7 @@ export default function AutomationRulesPage() {
                             placeholder={actionDef?.placeholder || t('automation_rules.condition_value_placeholder')}
                             className="flex-1 border dark:border-gray-600 rounded px-2 py-1.5 text-xs dark:bg-gray-800 dark:text-gray-100 focus:outline-none"
                           />
-                          <button onClick={() => removeAction(i)} className="text-red-400 hover:text-red-600 px-1">×</button>
+                          <button onClick={() => removeAction(i)} className="text-red-400 hover:text-red-600 px-1" aria-label="삭제">×</button>
                         </div>
                       )
                     })}
@@ -726,7 +722,7 @@ export default function AutomationRulesPage() {
               <button
                 onClick={handleSave}
                 disabled={saving || !form.name}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? t('common.saving') : editing ? t('automation_rules.save_done_btn') : t('automation_rules.save_btn')}
               </button>

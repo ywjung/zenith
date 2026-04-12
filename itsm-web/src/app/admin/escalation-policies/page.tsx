@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { adminFetch } from '@/lib/adminFetch'
 import { useAuth } from '@/context/AuthContext'
 import { useRoleLabels } from '@/context/RoleLabelsContext'
 import RequireAuth from '@/components/RequireAuth'
+import { useConfirm } from '@/components/ConfirmProvider'
 
 interface EscalationPolicy {
   id: number
@@ -41,20 +43,6 @@ const EMPTY_FORM = {
   notify_email: '', enabled: true,
 }
 
-async function apiFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    cache: 'no-store',
-  })
-  if (res.status === 204) return null
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { detail?: string }).detail || `HTTP ${res.status}`)
-  }
-  return res.json()
-}
 
 // 사용자 선택기 컴포넌트
 function UserSelector({
@@ -135,7 +123,7 @@ function UserSelector({
               onClick={() => onSelect(null)}
               className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
               title="선택 해제"
-            >
+             aria-label="제거">
               ×
             </button>
           </div>
@@ -157,6 +145,7 @@ function UserSelector({
 }
 
 function EscalationContent() {
+  const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const ROLE_LABELS = { ...ROLE_LABELS_DEFAULT, ...useRoleLabels() }
   const [policies, setPolicies] = useState<EscalationPolicy[]>([])
@@ -170,7 +159,7 @@ function EscalationContent() {
 
   const loadPolicies = () => {
     setLoading(true)
-    apiFetch('/admin/escalation-policies')
+    adminFetch('/admin/escalation-policies')
       .then(data => setPolicies(data ?? []))
       .catch(() => setError('로드 실패'))
       .finally(() => setLoading(false))
@@ -179,7 +168,7 @@ function EscalationContent() {
   useEffect(() => {
     loadPolicies()
     // 사용자 목록 로드 (agent 이상만 표시)
-    apiFetch('/admin/users')
+    adminFetch('/admin/users')
       .then((data: { items?: SystemUser[] } | SystemUser[]) => {
         const list: SystemUser[] = Array.isArray(data) ? data : (data?.items ?? [])
         const eligible = list.filter(u => ['admin', 'agent', 'developer'].includes(u.role))
@@ -226,8 +215,8 @@ function EscalationContent() {
       notify_email: form.notify_email || null,
     }
     try {
-      if (editId) await apiFetch(`/admin/escalation-policies/${editId}`, { method: 'PUT', body: JSON.stringify(body) })
-      else await apiFetch('/admin/escalation-policies', { method: 'POST', body: JSON.stringify(body) })
+      if (editId) await adminFetch(`/admin/escalation-policies/${editId}`, { method: 'PUT', body: JSON.stringify(body) })
+      else await adminFetch('/admin/escalation-policies', { method: 'POST', body: JSON.stringify(body) })
       setShowForm(false); loadPolicies()
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장 실패')
@@ -235,9 +224,9 @@ function EscalationContent() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('이 정책을 삭제할까요?')) return
+    if (!(await confirm({ title: '이 정책을 삭제할까요?', variant: 'danger', confirmLabel: '확인' }))) return
     try {
-      await apiFetch(`/admin/escalation-policies/${id}`, { method: 'DELETE' })
+      await adminFetch(`/admin/escalation-policies/${id}`, { method: 'DELETE' })
       loadPolicies()
     } catch {
       setError('삭제 실패')
@@ -313,8 +302,8 @@ function EscalationContent() {
 
       {/* 정책 생성/편집 모달 */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scaleIn">
             <div className="p-6 border-b dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-900 z-10">
               <h2 className="text-lg font-semibold dark:text-gray-100">{editId ? '정책 편집' : '새 에스컬레이션 정책'}</h2>
             </div>
@@ -422,7 +411,7 @@ function EscalationContent() {
               <button
                 onClick={handleSave}
                 disabled={saving || !form.name || ((form.action === 'notify' || form.action === 'reassign') && !form.target_user_id)}
-                className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+                className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
               >
                 {saving ? '저장 중...' : '저장'}
               </button>

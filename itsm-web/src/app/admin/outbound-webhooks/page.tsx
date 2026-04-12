@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { adminFetch } from '@/lib/adminFetch'
 import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
+import { useConfirm } from '@/components/ConfirmProvider'
 
 interface OutboundWebhook {
   id: number
@@ -27,24 +29,11 @@ const SUPPORTED_EVENTS = [
   { value: 'sla_breach', label: 'SLA 위반' },
 ]
 
-async function apiFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    cache: 'no-store',
-  })
-  if (res.status === 204) return null
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { detail?: string }).detail || `HTTP ${res.status}`)
-  }
-  return res.json()
-}
 
 const EMPTY_FORM = { name: '', url: '', secret: '', events: [] as string[], enabled: true }
 
 function WebhooksContent() {
+  const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const [hooks, setHooks] = useState<OutboundWebhook[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,7 +47,7 @@ function WebhooksContent() {
 
   const load = () => {
     setLoading(true)
-    apiFetch('/admin/outbound-webhooks')
+    adminFetch('/admin/outbound-webhooks')
       .then(data => setHooks(data ?? []))
       .catch(() => setError('로드 실패'))
       .finally(() => setLoading(false))
@@ -84,8 +73,8 @@ function WebhooksContent() {
     setSaving(true); setError(null)
     const body = { name: form.name, url: form.url, secret: form.secret || null, events: form.events, enabled: form.enabled }
     try {
-      if (editId) await apiFetch(`/admin/outbound-webhooks/${editId}`, { method: 'PUT', body: JSON.stringify(body) })
-      else await apiFetch('/admin/outbound-webhooks', { method: 'POST', body: JSON.stringify(body) })
+      if (editId) await adminFetch(`/admin/outbound-webhooks/${editId}`, { method: 'PUT', body: JSON.stringify(body) })
+      else await adminFetch('/admin/outbound-webhooks', { method: 'POST', body: JSON.stringify(body) })
       setShowForm(false); load()
       setSuccess(editId ? '수정됐습니다.' : '웹훅이 등록됐습니다.')
       setTimeout(() => setSuccess(null), 3000)
@@ -94,9 +83,9 @@ function WebhooksContent() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('이 웹훅을 삭제할까요?')) return
+    if (!(await confirm({ title: '이 웹훅을 삭제할까요?', variant: 'danger', confirmLabel: '확인' }))) return
     try {
-      await apiFetch(`/admin/outbound-webhooks/${id}`, { method: 'DELETE' })
+      await adminFetch(`/admin/outbound-webhooks/${id}`, { method: 'DELETE' })
       load()
     } catch (e) {
       setError(e instanceof Error ? e.message : '삭제에 실패했습니다.')
@@ -106,7 +95,7 @@ function WebhooksContent() {
   const handleTest = async (id: number) => {
     setTesting(id)
     try {
-      const res = await apiFetch(`/admin/outbound-webhooks/${id}/test`, { method: 'POST' })
+      const res = await adminFetch(`/admin/outbound-webhooks/${id}/test`, { method: 'POST' })
       setSuccess(res?.success ? `테스트 발송 성공 (HTTP ${res.status})` : `테스트 발송 실패 (HTTP ${res?.status})`)
       setTimeout(() => setSuccess(null), 4000)
     } catch (e) { setError(e instanceof Error ? e.message : '테스트 실패') }
@@ -180,7 +169,7 @@ function WebhooksContent() {
                   <button
                     onClick={() => handleTest(h.id)}
                     disabled={testing === h.id}
-                    className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {testing === h.id ? '발송 중...' : '테스트'}
                   </button>
@@ -194,8 +183,8 @@ function WebhooksContent() {
       )}
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scaleIn">
             <div className="p-6 border-b dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-900">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editId ? '웹훅 편집' : '새 웹훅 등록'}</h2>
             </div>
@@ -236,7 +225,7 @@ function WebhooksContent() {
             </div>
             <div className="px-6 py-4 border-t dark:border-gray-700 flex justify-end gap-3">
               <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">취소</button>
-              <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium">
+              <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium">
                 {saving ? '저장 중...' : '저장'}
               </button>
             </div>

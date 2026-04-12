@@ -1,9 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { API_BASE } from '@/lib/constants'
+import { adminFetch } from '@/lib/adminFetch'
 import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
+import { useConfirm } from '@/components/ConfirmProvider'
 
 interface ApiKey {
   id: number
@@ -25,22 +28,9 @@ const SCOPES = [
   { value: 'webhooks:write', label: '웹훅 등록' },
 ]
 
-async function apiFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    cache: 'no-store',
-  })
-  if (res.status === 204) return null
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { detail?: string }).detail || `HTTP ${res.status}`)
-  }
-  return res.json()
-}
 
 function ApiKeysContent() {
+  const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,7 +43,7 @@ function ApiKeysContent() {
 
   const load = () => {
     setLoading(true)
-    apiFetch('/admin/api-keys')
+    adminFetch('/admin/api-keys')
       .then(data => setKeys(data ?? []))
       .catch(() => setError('로드 실패'))
       .finally(() => setLoading(false))
@@ -74,7 +64,7 @@ function ApiKeysContent() {
       expires_days: form.expires_days ? parseInt(form.expires_days) : null,
     }
     try {
-      const res = await apiFetch('/admin/api-keys', { method: 'POST', body: JSON.stringify(body) })
+      const res = await adminFetch('/admin/api-keys', { method: 'POST', body: JSON.stringify(body) })
       setNewKey(res.key)
       setShowForm(false)
       load()
@@ -83,15 +73,21 @@ function ApiKeysContent() {
   }
 
   const handleRevoke = async (id: number, name: string) => {
-    if (!confirm(`"${name}" API 키를 폐기할까요? 이 작업은 되돌릴 수 없습니다.`)) return
-    await apiFetch(`/admin/api-keys/${id}`, { method: 'DELETE' }).catch(() => {})
+    if (!(await confirm({ title: `"${name}" API 키를 폐기할까요? 이 작업은 되돌릴 수 없습니다.`, variant: 'danger', confirmLabel: '확인' }))) return
+    await adminFetch(`/admin/api-keys/${id}`, { method: 'DELETE' }).catch(() => {})
     load()
   }
 
-  const copyKey = () => {
-    if (newKey) navigator.clipboard?.writeText(newKey)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const copyKey = async () => {
+    if (!newKey) return
+    try {
+      await navigator.clipboard.writeText(newKey)
+      setCopied(true)
+      toast.success('API 키를 클립보드에 복사했습니다.')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('복사 실패 — 수동으로 복사해주세요.')
+    }
   }
 
   if (!isAdmin) return <div className="p-8 text-center text-gray-500">관리자 권한이 필요합니다.</div>
@@ -136,7 +132,7 @@ function ApiKeysContent() {
                 사용법: <code className="bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200 px-1 rounded">Authorization: Bearer {newKey.slice(0, 20)}...</code>
               </p>
             </div>
-            <button onClick={() => setNewKey(null)} className="text-amber-400 hover:text-amber-600 text-xl shrink-0">×</button>
+            <button onClick={() => setNewKey(null)} className="text-amber-400 hover:text-amber-600 text-xl shrink-0" aria-label="닫기">×</button>
           </div>
         </div>
       )}
@@ -197,8 +193,8 @@ function ApiKeysContent() {
       )}
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md animate-scaleIn">
             <div className="p-6 border-b dark:border-gray-700">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">새 API 키 생성</h2>
             </div>
@@ -235,7 +231,7 @@ function ApiKeysContent() {
             <div className="px-6 py-4 border-t dark:border-gray-700 flex justify-end gap-3">
               <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">취소</button>
               <button onClick={handleCreate} disabled={saving || !form.name || form.scopes.length === 0}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium">
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium">
                 {saving ? '생성 중...' : '키 생성'}
               </button>
             </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { adminFetch } from '@/lib/adminFetch'
 
 interface IngestStatus {
   enabled: boolean
@@ -11,14 +12,6 @@ interface IngestStatus {
   recent_results?: unknown[]
 }
 
-async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...opts })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { detail?: string }).detail || `HTTP ${res.status}`)
-  }
-  return res.status === 204 ? null : res.json()
-}
 
 export default function EmailIngestPage() {
   const [status, setStatus] = useState<IngestStatus | null>(null)
@@ -31,7 +24,7 @@ export default function EmailIngestPage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await apiFetch('/admin/email-ingest/status')
+      const data = await adminFetch('/admin/email-ingest/status')
       setStatus(data)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '불러오기 실패')
@@ -46,7 +39,7 @@ export default function EmailIngestPage() {
     setTriggering(true)
     setTriggerResult(null)
     try {
-      const res = await apiFetch('/admin/email-ingest/trigger', { method: 'POST' })
+      const res = await adminFetch('/admin/email-ingest/trigger', { method: 'POST' })
       setTriggerResult(`태스크 큐에 등록됨 (ID: ${(res as { task_id: string }).task_id})`)
     } catch (e: unknown) {
       setTriggerResult(`오류: ${e instanceof Error ? e.message : '실행 실패'}`)
@@ -139,7 +132,7 @@ export default function EmailIngestPage() {
                 <button
                   onClick={handleTrigger}
                   disabled={triggering}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {triggering ? '실행 중...' : '▶ 지금 실행'}
                 </button>

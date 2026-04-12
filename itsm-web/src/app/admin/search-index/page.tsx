@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { adminFetch } from '@/lib/adminFetch'
 
 interface GinIndex {
   name: string
@@ -15,14 +16,6 @@ interface IndexStatus {
   gin_indexes: GinIndex[]
 }
 
-async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...opts })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { detail?: string }).detail || `HTTP ${res.status}`)
-  }
-  return res.status === 204 ? null : res.json()
-}
 
 export default function SearchIndexPage() {
   const [status, setStatus] = useState<IndexStatus | null>(null)
@@ -35,7 +28,7 @@ export default function SearchIndexPage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await apiFetch('/admin/search-index/status')
+      const data = await adminFetch('/admin/search-index/status')
       setStatus(data as IndexStatus)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '불러오기 실패')
@@ -50,7 +43,7 @@ export default function SearchIndexPage() {
     setSyncing(true)
     setSyncResult(null)
     try {
-      const res = await apiFetch('/admin/search-index/sync', { method: 'POST' })
+      const res = await adminFetch('/admin/search-index/sync', { method: 'POST' })
       setSyncResult({ ok: true, message: `동기화 태스크 등록됨 (ID: ${(res as { task_id: string }).task_id})` })
       setTimeout(load, 3000)
     } catch (e: unknown) {
@@ -82,7 +75,7 @@ export default function SearchIndexPage() {
         <button
           onClick={load}
           disabled={loading}
-          className="text-sm border dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+          className="text-sm border dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           🔄 새로고침
         </button>

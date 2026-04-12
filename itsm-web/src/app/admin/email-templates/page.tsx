@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { adminFetch } from '@/lib/adminFetch'
 import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
 
@@ -31,19 +32,6 @@ const TEMPLATE_VARS: Record<string, string[]> = {
   sla_breach:     ['iid', 'portal_url'],
 }
 
-async function apiFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    cache: 'no-store',
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail || `HTTP ${res.status}`)
-  }
-  return res.json()
-}
 
 function EmailTemplatesContent() {
   const { isAdmin } = useAuth()
@@ -61,7 +49,7 @@ function EmailTemplatesContent() {
   const [success, setSuccess] = useState<string | null>(null)
 
   useEffect(() => {
-    apiFetch('/admin/email-templates')
+    adminFetch('/admin/email-templates')
       .then(setTemplates)
       .catch(() => setError('템플릿 로드 실패'))
       .finally(() => setLoading(false))
@@ -77,7 +65,7 @@ function EmailTemplatesContent() {
     if (!selected) return
     setSaving(true); setError(null)
     try {
-      const data = await apiFetch(`/admin/email-templates/${selected.event_type}`, {
+      const data = await adminFetch(`/admin/email-templates/${selected.event_type}`, {
         method: 'PUT', body: JSON.stringify({ subject, html_body: htmlBody, enabled }),
       })
       setTemplates(ts => ts.map(t => t.event_type === selected.event_type ? data : t))
@@ -92,7 +80,7 @@ function EmailTemplatesContent() {
     if (!selected) return
     setPreviewLoading(true); setPreview(null)
     try {
-      const data = await apiFetch(`/admin/email-templates/${selected.event_type}/preview`, {
+      const data = await adminFetch(`/admin/email-templates/${selected.event_type}/preview`, {
         method: 'POST', body: JSON.stringify({ subject, html_body: htmlBody, enabled }),
       })
       setPreview(data)
@@ -170,10 +158,10 @@ function EmailTemplatesContent() {
                     )}
                     {editing && (
                       <>
-                        <button onClick={handlePreview} disabled={previewLoading} className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50">
+                        <button onClick={handlePreview} disabled={previewLoading} className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                           {previewLoading ? '미리보기 중...' : '미리보기'}
                         </button>
-                        <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                        <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
                           {saving ? '저장 중...' : '저장'}
                         </button>
                         <button onClick={() => { selectTemplate(selected); setEditing(false) }} className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md hover:bg-gray-50">

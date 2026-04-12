@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/constants'
+import { adminFetch } from '@/lib/adminFetch'
 
 interface PreviewData {
   old_audit_logs: number
@@ -27,18 +28,6 @@ interface HistoryEntry {
   error?: string
 }
 
-async function apiFetch<T = unknown>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(opts?.headers ?? {}) },
-    ...opts,
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { detail?: string }).detail ?? `HTTP ${res.status}`)
-  }
-  return res.json() as Promise<T>
-}
 
 function formatNumber(n: number) {
   return n.toLocaleString('ko-KR')
@@ -87,7 +76,7 @@ export default function DbCleanupPage() {
     setPreviewLoading(true)
     setPreviewError(null)
     try {
-      const data = await apiFetch<PreviewData>('/admin/db-cleanup/preview')
+      const data = await adminFetch<PreviewData>('/admin/db-cleanup/preview')
       setPreview(data)
     } catch (e: unknown) {
       setPreviewError(e instanceof Error ? e.message : '불러오기 실패')
@@ -112,7 +101,7 @@ export default function DbCleanupPage() {
     setRunningKey(key)
     const started = Date.now()
     try {
-      const result = await apiFetch<CleanupResult>(`/admin/db-cleanup/${endpoint}`, { method: 'POST' })
+      const result = await adminFetch<CleanupResult>(`/admin/db-cleanup/${endpoint}`, { method: 'POST' })
       setHistory(prev => [
         {
           timestamp: new Date().toISOString(),
@@ -142,7 +131,7 @@ export default function DbCleanupPage() {
     setVacuumRunning(true)
     const started = Date.now()
     try {
-      const result = await apiFetch<{ duration_ms: number }>('/admin/db-cleanup/vacuum', { method: 'POST' })
+      const result = await adminFetch<{ duration_ms: number }>('/admin/db-cleanup/vacuum', { method: 'POST' })
       setHistory(prev => [
         {
           timestamp: new Date().toISOString(),
@@ -219,7 +208,7 @@ export default function DbCleanupPage() {
         <button
           onClick={loadPreview}
           disabled={previewLoading}
-          className="text-sm border dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+          className="text-sm border dark:border-gray-600 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           🔄 새로고침
         </button>
@@ -324,7 +313,7 @@ export default function DbCleanupPage() {
                         ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                         : runningKey === task.key
                           ? 'bg-red-400 text-white cursor-wait'
-                          : 'bg-red-600 hover:bg-red-700 text-white disabled:opacity-50'
+                          : 'bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed'
                     }`}
                   >
                     {runningKey === task.key ? '실행 중…' : '실행'}
@@ -410,12 +399,12 @@ export default function DbCleanupPage() {
       {/* 확인 모달 */}
       {modal.open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-fadeIn backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-modal-title"
         >
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4 animate-scaleIn">
             <div>
               <h3
                 id="confirm-modal-title"
