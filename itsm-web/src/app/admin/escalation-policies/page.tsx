@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
 import { adminFetch } from '@/lib/adminFetch'
 import { useAuth } from '@/context/AuthContext'
@@ -32,9 +33,9 @@ interface SystemUser {
   role: string
 }
 
-const TRIGGER_LABELS: Record<string, string> = { warning: '⏰ SLA 임박', breach: '🚨 SLA 위반' }
-const ACTION_LABELS: Record<string, string> = { notify: '알림 발송', reassign: '담당자 변경', upgrade_priority: '우선순위 상향' }
-const PRIORITY_LABELS: Record<string, string> = { critical: '긴급', high: '높음', medium: '보통', low: '낮음' }
+const TRIGGER_KEY: Record<string, string> = { warning: 'trigger_warning', breach: 'trigger_breach' }
+const ACTION_KEY: Record<string, string> = { notify: 'action_notify', reassign: 'action_reassign', upgrade_priority: 'action_upgrade' }
+const PRIORITY_KEY: Record<string, string> = { critical: 'prio_critical', high: 'prio_high', medium: 'prio_medium', low: 'prio_low' }
 const ROLE_LABELS_DEFAULT: Record<string, string> = { admin: '시스템관리자', agent: 'IT 관리자', pl: 'PL', developer: '개발자', user: '일반 사용자' }
 const ROLE_COLORS: Record<string, string> = { admin: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300', agent: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300', developer: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300', user: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' }
 
@@ -57,6 +58,7 @@ function UserSelector({
   onSelect: (user: SystemUser | null) => void
   roleLabels: Record<string, string>
 }) {
+  const t = useTranslations('admin.escalation')
   const selected = users.find(u => String(u.gitlab_user_id) === selectedId) ?? null
 
   return (
@@ -64,7 +66,7 @@ function UserSelector({
       {/* 드롭다운 선택 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          대상 사용자 <span className="text-red-500">*</span>
+          {t('target_user')} <span className="text-red-500">*</span>
         </label>
         <select
           value={selectedId}
@@ -75,7 +77,7 @@ function UserSelector({
           }}
           className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
-          <option value="">— 사용자 선택 —</option>
+          <option value="">{t('user_select_placeholder')}</option>
           {users.map(u => (
             <option key={u.gitlab_user_id} value={String(u.gitlab_user_id)}>
               {u.name || u.username} ({roleLabels[u.role] ?? u.role})
@@ -123,8 +125,8 @@ function UserSelector({
               type="button"
               onClick={() => onSelect(null)}
               className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-              title="선택 해제"
-             aria-label="제거">
+              title={t('deselect_title')}
+             aria-label={t('remove_aria')}>
               ×
             </button>
           </div>
@@ -133,12 +135,12 @@ function UserSelector({
             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
-            GitLab 계정 정보가 자동 입력됩니다. 위 드롭다운에서 변경할 수 있습니다.
+            {t('gitlab_auto_hint')}
           </p>
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 px-4 py-3 text-sm text-gray-400 dark:text-gray-500 text-center">
-          사용자를 선택하면 GitLab 정보가 자동으로 입력됩니다.
+          {t('user_select_hint')}
         </div>
       )}
     </div>
@@ -146,6 +148,7 @@ function UserSelector({
 }
 
 function EscalationContent() {
+  const t = useTranslations('admin.escalation')
   const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const ROLE_LABELS = { ...ROLE_LABELS_DEFAULT, ...useRoleLabels() }
@@ -162,7 +165,7 @@ function EscalationContent() {
     setLoading(true)
     adminFetch('/admin/escalation-policies')
       .then(data => setPolicies(data ?? []))
-      .catch(() => setError('로드 실패'))
+      .catch(() => setError(t('load_failed')))
       .finally(() => setLoading(false))
   }
 
@@ -175,7 +178,7 @@ function EscalationContent() {
         const eligible = list.filter(u => ['admin', 'agent', 'developer'].includes(u.role))
         setUsers(eligible)
       })
-      .catch(() => { setError('담당자 목록을 불러오지 못했습니다.') })
+      .catch(() => { setError(t('users_load_failed')) })
   }, [])
 
   const openCreate = () => {
@@ -220,21 +223,21 @@ function EscalationContent() {
       else await adminFetch('/admin/escalation-policies', { method: 'POST', body: JSON.stringify(body) })
       setShowForm(false); loadPolicies()
     } catch (e) {
-      setError(errorMessage(e, '저장 실패'))
+      setError(errorMessage(e, t('save_failed')))
     } finally { setSaving(false) }
   }
 
   const handleDelete = async (id: number) => {
-    if (!(await confirm({ title: '이 정책을 삭제할까요?', variant: 'danger', confirmLabel: '확인' }))) return
+    if (!(await confirm({ title: t('delete_confirm'), variant: 'danger' }))) return
     try {
       await adminFetch(`/admin/escalation-policies/${id}`, { method: 'DELETE' })
       loadPolicies()
     } catch {
-      setError('삭제 실패')
+      setError(t('delete_failed'))
     }
   }
 
-  if (!isAdmin) return <div className="p-8 text-center text-gray-500">관리자 권한이 필요합니다.</div>
+  if (!isAdmin) return <div className="p-8 text-center text-gray-500">{t('no_permission')}</div>
 
   return (
     <div>
@@ -244,24 +247,24 @@ function EscalationContent() {
             <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
-            SLA 에스컬레이션 정책
+            {t('title')}
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">SLA 위반/임박 시 자동으로 실행할 액션을 정의합니다.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
         </div>
         <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium">
-          + 새 정책
+          {t('new_policy')}
         </button>
       </div>
 
       {error && <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 text-sm rounded-lg">{error}</div>}
 
       {loading ? (
-        <div className="text-center py-12 text-gray-400">로딩 중...</div>
+        <div className="text-center py-12 text-gray-400">{t('loading')}</div>
       ) : (
         <div className="space-y-3">
           {policies.length === 0 && (
             <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500">
-              등록된 에스컬레이션 정책이 없습니다.
+              {t('empty')}
             </div>
           )}
           {policies.map(p => (
@@ -270,16 +273,16 @@ function EscalationContent() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className="font-semibold text-gray-900 dark:text-gray-100">{p.name}</span>
-                    {!p.enabled && <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">비활성</span>}
+                    {!p.enabled && <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">{t('inactive_badge')}</span>}
                   </div>
                   <div className="flex flex-wrap gap-3 text-sm text-gray-600 dark:text-gray-400">
-                    <span>트리거: <strong>{TRIGGER_LABELS[p.trigger] ?? p.trigger}</strong></span>
-                    {p.priority && <span>우선순위: <strong>{PRIORITY_LABELS[p.priority] ?? p.priority}</strong></span>}
-                    {p.delay_minutes > 0 && <span>지연: <strong>{p.delay_minutes}분</strong></span>}
-                    <span>액션: <strong>{ACTION_LABELS[p.action] ?? p.action}</strong></span>
+                    <span>{t('trigger_label')} <strong>{TRIGGER_KEY[p.trigger] ? t(TRIGGER_KEY[p.trigger] as 'trigger_warning') : p.trigger}</strong></span>
+                    {p.priority && <span>{t('priority_label')} <strong>{PRIORITY_KEY[p.priority] ? t(PRIORITY_KEY[p.priority] as 'prio_critical') : p.priority}</strong></span>}
+                    {p.delay_minutes > 0 && <span>{t('delay_label')} <strong>{t('delay_minutes', { n: p.delay_minutes })}</strong></span>}
+                    <span>{t('action_label')} <strong>{ACTION_KEY[p.action] ? t(ACTION_KEY[p.action] as 'action_notify') : p.action}</strong></span>
                     {p.target_user_name && (
                       <span className="flex items-center gap-1">
-                        대상:
+                        {t('target_label')}
                         <strong className="flex items-center gap-1">
                           <span className="w-4 h-4 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center font-bold">
                             {p.target_user_name.slice(0, 1)}
@@ -288,12 +291,12 @@ function EscalationContent() {
                         </strong>
                       </span>
                     )}
-                    {p.notify_email && <span>이메일: <strong>{p.notify_email}</strong></span>}
+                    {p.notify_email && <span>{t('email_label')} <strong>{p.notify_email}</strong></span>}
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <button onClick={() => openEdit(p)} className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg hover:bg-gray-50">편집</button>
-                  <button onClick={() => handleDelete(p.id)} className="text-xs px-3 py-1.5 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">삭제</button>
+                  <button onClick={() => openEdit(p)} className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg hover:bg-gray-50">{t('edit')}</button>
+                  <button onClick={() => handleDelete(p.id)} className="text-xs px-3 py-1.5 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">{t('delete')}</button>
                 </div>
               </div>
             </div>
@@ -306,7 +309,7 @@ function EscalationContent() {
         <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scaleIn">
             <div className="p-6 border-b dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-900 z-10">
-              <h2 className="text-lg font-semibold dark:text-gray-100">{editId ? '정책 편집' : '새 에스컬레이션 정책'}</h2>
+              <h2 className="text-lg font-semibold dark:text-gray-100">{editId ? t('edit_title') : t('new_title')}</h2>
             </div>
 
             <div className="p-6 space-y-5">
@@ -314,11 +317,11 @@ function EscalationContent() {
 
               {/* 정책 이름 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">정책 이름 <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('policy_name')} <span className="text-red-500">*</span></label>
                 <input
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="예: [긴급] SLA 위반 즉시 관리자 알림"
+                  placeholder={t('policy_name_placeholder')}
                   className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -326,28 +329,28 @@ function EscalationContent() {
               {/* 트리거 + 우선순위 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">트리거 <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('trigger_header')} <span className="text-red-500">*</span></label>
                   <select
                     value={form.trigger}
                     onChange={e => setForm(f => ({ ...f, trigger: e.target.value }))}
                     className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="breach">🚨 SLA 위반</option>
-                    <option value="warning">⏰ SLA 임박 (60분 전)</option>
+                    <option value="breach">{t('trigger_breach_full')}</option>
+                    <option value="warning">{t('trigger_warning_full')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">우선순위</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('priority_header')}</label>
                   <select
                     value={form.priority}
                     onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
                     className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">전체 (모든 우선순위)</option>
-                    <option value="critical">🔴 긴급</option>
-                    <option value="high">🟠 높음</option>
-                    <option value="medium">🟡 보통</option>
-                    <option value="low">⚪ 낮음</option>
+                    <option value="">{t('priority_all')}</option>
+                    <option value="critical">{t('prio_critical_full')}</option>
+                    <option value="high">{t('prio_high_full')}</option>
+                    <option value="medium">{t('prio_medium_full')}</option>
+                    <option value="low">{t('prio_low_full')}</option>
                   </select>
                 </div>
               </div>
@@ -355,20 +358,20 @@ function EscalationContent() {
               {/* 액션 + 지연 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">액션 <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('action_header')} <span className="text-red-500">*</span></label>
                   <select
                     value={form.action}
                     onChange={e => setForm(f => ({ ...f, action: e.target.value }))}
                     className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="notify">🔔 알림 발송</option>
-                    <option value="reassign">👤 담당자 변경</option>
-                    <option value="upgrade_priority">⬆️ 우선순위 자동 상향</option>
+                    <option value="notify">{t('action_notify_full')}</option>
+                    <option value="reassign">{t('action_reassign_full')}</option>
+                    <option value="upgrade_priority">{t('action_upgrade_full')}</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    지연 <span className="text-gray-400 dark:text-gray-500 font-normal">(분, 0=즉시)</span>
+                    {t('delay_header')} <span className="text-gray-400 dark:text-gray-500 font-normal">{t('delay_hint')}</span>
                   </label>
                   <input
                     type="number"
@@ -401,20 +404,20 @@ function EscalationContent() {
                   onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))}
                   className="w-4 h-4 text-blue-600 rounded"
                 />
-                <label htmlFor="enabled-form" className="text-sm text-gray-700 dark:text-gray-300">정책 활성화</label>
+                <label htmlFor="enabled-form" className="text-sm text-gray-700 dark:text-gray-300">{t('enabled_label')}</label>
               </div>
             </div>
 
             <div className="px-6 py-4 border-t dark:border-gray-700 sticky bottom-0 bg-white dark:bg-gray-900 flex justify-end gap-3">
               <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 rounded-lg hover:bg-gray-50">
-                취소
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !form.name || ((form.action === 'notify' || form.action === 'reassign') && !form.target_user_id)}
                 className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
               >
-                {saving ? '저장 중...' : '저장'}
+                {saving ? t('saving') : t('save')}
               </button>
             </div>
           </div>
@@ -425,6 +428,7 @@ function EscalationContent() {
 }
 
 export default function EscalationPoliciesPage() {
+  const t = useTranslations('admin.escalation')
   return (
     <RequireAuth>
       <EscalationContent />
