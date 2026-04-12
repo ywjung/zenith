@@ -3,8 +3,10 @@
  * 여러 페이지에서 동일하게 사용되는 값들의 단일 진실 원천(Single Source of Truth).
  */
 
+// API 베이스 경로 — /api/v1이 정식, /api는 레거시 하위호환.
+// 백엔드에서 양쪽 경로를 동일 라우터로 서빙하므로 프론트는 v1만 사용.
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
+  process.env.NEXT_PUBLIC_API_BASE_URL || '/api/v1'
 
 // ---------------------------------------------------------------------------
 // 우선순위

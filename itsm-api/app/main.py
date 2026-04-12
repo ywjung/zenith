@@ -879,10 +879,45 @@ def serve_storage_object(
 
 _v1.include_router(_storage_router)
 
-# /api/v1/... (버전 명시 경로)
+# /api/v1/... (버전 명시 경로 — 신규 클라이언트 권장)
 app.include_router(_v1, prefix="/api/v1")
-# /...         (레거시 경로 — 하위 호환)
+# /...         (레거시 경로 — 하위 호환, Deprecation 헤더로 마이그레이션 유도)
 app.include_router(_v1)
+
+# 레거시 경로 사용 시 RFC 8594 Deprecation/Sunset 헤더 부착
+# 외부 클라이언트가 응답 헤더로 마이그레이션 필요 인지 가능
+try:
+    from starlette.middleware.base import BaseHTTPMiddleware as _DeprBaseMW
+    from starlette.requests import Request as _DeprRequest
+
+    # 레거시 접두사(/api/v1 이 아니면서 API 라우터로 매칭되는 경로들)
+    _LEGACY_API_PREFIXES = (
+        "/auth", "/tickets", "/kb", "/admin", "/users", "/reports", "/notifications",
+        "/templates", "/changes", "/problems", "/portal", "/watchers", "/approvals",
+        "/service-catalog", "/faq", "/automations", "/custom-fields", "/recurring-tickets",
+        "/push", "/webhooks", "/storage", "/links", "/time", "/quick-replies",
+        "/dashboard", "/ip-allowlist", "/ticket-types", "/forwards", "/filters",
+        "/notification-rules", "/ai-settings",
+    )
+
+    class _DeprecationMiddleware(_DeprBaseMW):
+        async def dispatch(self, request: _DeprRequest, call_next):
+            response = await call_next(request)
+            path = request.url.path
+            # /api/v1/... 는 통과
+            if path.startswith("/api/v1/"):
+                return response
+            # 레거시 경로 매칭 시 deprecation 헤더 부착
+            if any(path.startswith(p) for p in _LEGACY_API_PREFIXES):
+                response.headers["Deprecation"] = "true"
+                response.headers["Sunset"] = "Wed, 31 Dec 2026 23:59:59 GMT"
+                response.headers["Link"] = '</api/v1' + path + '>; rel="successor-version"'
+            return response
+
+    app.add_middleware(_DeprecationMiddleware)
+    logger.info("Legacy API deprecation middleware enabled (Sunset: 2026-12-31)")
+except Exception as _depr_err:
+    logger.warning("Deprecation middleware init failed: %s", _depr_err)
 
 # I-2: Prometheus metrics
 try:
