@@ -61,10 +61,47 @@ def test_private_ip_172_16_blocked():
     assert ok is False
 
 
-def test_allow_internal_bypasses_check():
+def test_allow_internal_now_uses_explicit_allowlist():
+    """SEC #2: 이전엔 allow_internal=True가 모든 내부 IP를 통과시켰지만,
+    이제는 명시적 allowlist (localhost/127.0.0.1/host.docker.internal/ollama)만 허용."""
     from app.security import is_safe_external_url
-    ok, reason = is_safe_external_url("http://192.168.1.100/hook", allow_internal=True)
-    assert ok is True
+    # 임의 사설 IP는 dev에서도 차단
+    ok, _ = is_safe_external_url("http://192.168.1.100/hook", allow_internal=True)
+    assert ok is False
+    # 사설 대역 다른 IP도 차단
+    ok, _ = is_safe_external_url("http://10.0.0.5/", allow_internal=True)
+    assert ok is False
+
+
+def test_dev_allowlist_permits_localhost():
+    """SEC #2: 등재된 localhost/127.0.0.1/host.docker.internal는 dev에서 허용."""
+    from app.security import is_safe_external_url
+    for host in ["localhost", "127.0.0.1", "host.docker.internal", "ollama"]:
+        ok, reason = is_safe_external_url(f"http://{host}:11434/api/tags", allow_internal=True)
+        assert ok is True, f"{host} should be allowed in dev: {reason}"
+
+
+def test_dev_allowlist_blocks_cloud_metadata():
+    """SEC #2: AWS/GCP cloud metadata IP는 dev allowlist에서도 차단."""
+    from app.security import is_safe_external_url
+    ok, reason = is_safe_external_url("http://169.254.169.254/latest/meta-data/", allow_internal=True)
+    assert ok is False
+    assert reason  # 차단 이유 메시지 포함
+
+
+def test_dev_allowlist_blocks_internal_services():
+    """SEC #2: redis/etcd/postgres 같은 내부 서비스 hostname도 dev allowlist에 없으면 차단."""
+    from app.security import is_safe_external_url
+    for host in ["redis", "etcd", "postgres", "minio"]:
+        ok, _ = is_safe_external_url(f"http://{host}:6379/", allow_internal=True)
+        assert ok is False, f"{host} should NOT be in dev allowlist"
+
+
+def test_dev_allowlist_still_blocks_bad_scheme():
+    """SEC #2: allowlist에 있어도 file:// 같은 위험 스킴은 차단."""
+    from app.security import is_safe_external_url
+    ok, reason = is_safe_external_url("file://localhost/etc/passwd", allow_internal=True)
+    assert ok is False
 
 
 def test_empty_url_blocked():

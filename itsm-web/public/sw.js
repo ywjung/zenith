@@ -1,4 +1,4 @@
-// ZENITH ITSM Service Worker v6
+// ZENITH ITSM Service Worker v7
 // Strategy:
 //   - _next/static/ : Cache First (content-hashed, truly immutable)
 //   - /icons/, /manifest.json, /favicon.ico : Stale-While-Revalidate
@@ -7,7 +7,7 @@
 //   - Everything else: pass-through (no caching)
 //     → prevents stale RSC payloads / page-chunk mismatch after deploys
 
-const CACHE_NAME = 'zenith-v6';
+const CACHE_NAME = 'zenith-v7';
 
 // ── Install ───────────────────────────────────────────────────────────────────
 self.addEventListener('install', () => {
@@ -48,7 +48,10 @@ self.addEventListener('fetch', (event) => {
           '<div><div style="font-size:4rem;margin-bottom:1rem">🔌</div>' +
           '<h1 style="font-size:1.25rem;font-weight:700;margin:0 0 0.5rem">서버에 연결할 수 없습니다</h1>' +
           '<p style="font-size:0.875rem;color:#6b7280;margin:0 0 1.5rem">네트워크 연결을 확인하거나 잠시 후 다시 시도해주세요.</p>' +
-          '<button onclick="location.reload()" style="padding:0.5rem 1.5rem;background:#2563eb;color:#fff;border:none;border-radius:0.5rem;font-size:0.875rem;cursor:pointer">🔄 새로고침</button></div></body></html>',
+          '<button onclick="location.reload()" style="padding:0.5rem 1.5rem;background:#2563eb;color:#fff;border:none;border-radius:0.5rem;font-size:0.875rem;cursor:pointer">🔄 새로고침</button>' +
+          '<p id="s" style="font-size:0.75rem;color:#9ca3af;margin:1rem 0 0">서버 복구 시 자동 새로고침…</p></div>' +
+          '<script>(function(){var n=0;function p(){fetch("/favicon.ico",{cache:"no-store"}).then(function(r){if(r.ok)location.reload();else t()}).catch(t);function t(){n++;document.getElementById("s").textContent="재시도 "+n+"회 · 복구 대기 중";setTimeout(p,3000)}}window.addEventListener("online",p);setTimeout(p,3000)})()</script>' +
+          '</body></html>',
           { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         )
       )

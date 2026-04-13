@@ -24,6 +24,18 @@ def get_resolution_note(
     _user: dict = Depends(get_current_user),
 ):
     """티켓 해결 노트 조회."""
+    # SEC #1 (IDOR): 티켓 view 권한 검증
+    from .helpers import _can_user_view_issue
+    from ... import gitlab_client as _gl
+    try:
+        issue = _gl.get_issue(iid, project_id=project_id)
+        if not _can_user_view_issue(issue, _user):
+            raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+
     from ...models import ResolutionNote
     pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
     rn = (

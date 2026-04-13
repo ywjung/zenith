@@ -1,4 +1,5 @@
 @import 'tippy.js/dist/tippy.css';
+@import 'highlight.js/styles/github-dark.css';
 
 @tailwind base;
 @tailwind components;
@@ -41,15 +42,127 @@
   from { opacity: 0; transform: translateX(20px); }
   to { opacity: 1; transform: translateX(0); }
 }
+@keyframes slideInUp {
+  from { opacity: 0; transform: translate(-50%, 24px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
 .animate-fadeIn { animation: fadeIn 150ms ease-out; }
 .animate-scaleIn { animation: scaleIn 180ms cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-slideInRight { animation: slideInRight 200ms ease-out; }
+.animate-slideInUp { animation: slideInUp 280ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* prefers-reduced-motion 사용자: 모든 애니메이션 즉시화 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 버튼 내부 진행바 (저장/제출 중) */
+@keyframes buttonProgress {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.btn-progress::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.85), transparent);
+  animation: buttonProgress 1.2s ease-in-out infinite;
+}
+
+/* 알림 배지 펄스 (외곽 ring 확장) */
+@keyframes badgePulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  70%  { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.animate-badge-pulse {
+  animation: badgePulse 1.8s cubic-bezier(0.66, 0, 0, 1) infinite;
+}
+
+/* Skeleton shimmer (animate-pulse 보다 고급 느낌) */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(229, 231, 235, 0.6) 0%,
+    rgba(243, 244, 246, 0.95) 50%,
+    rgba(229, 231, 235, 0.6) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.dark .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(55, 65, 81, 0.5) 0%,
+    rgba(75, 85, 99, 0.75) 50%,
+    rgba(55, 65, 81, 0.5) 100%
+  );
+  background-size: 800px 100%;
+}
 
 @layer base {
   /* 페이지 최상위 배경 · 기본 텍스트 */
   html,
   body {
     @apply bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100;
+  }
+
+  /* 전역 smooth scroll — 앵커 링크/scrollIntoView/Scroll-to-top 모두 부드러움
+     prefers-reduced-motion 사용자는 별도 미디어 쿼리에서 auto로 override */
+  html {
+    scroll-behavior: smooth;
+    /* 상단 sticky 요소 높이만큼 anchor offset */
+    scroll-padding-top: 80px;
+  }
+
+  /* 키보드 사용자 전용 focus-visible ring (마우스 클릭 시에는 노출되지 않음)
+     인터랙티브 요소 전반에 일관된 파란색 outline 적용 */
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:not([tabindex="-1"]):focus-visible {
+    outline: 2px solid #3b82f6; /* blue-500 */
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .dark button:focus-visible,
+  .dark a:focus-visible,
+  .dark [role="button"]:focus-visible {
+    outline-color: #60a5fa; /* blue-400 */
+  }
+
+  /* 테마 전환 부드러운 fade — 다음 요소들에 선별 적용
+     (전역 * transition은 hover lag을 만들기 때문에 색상/배경/border만) */
+  html,
+  body,
+  header,
+  main,
+  aside,
+  section,
+  article,
+  nav,
+  .bg-white,
+  .dark .dark\:bg-gray-800,
+  .dark .dark\:bg-gray-900,
+  .dark .dark\:bg-gray-950 {
+    transition: background-color 300ms ease, color 300ms ease, border-color 300ms ease;
   }
 
   /* 기본 입력 요소 다크 스타일 */
@@ -64,17 +177,47 @@
     @apply dark:text-gray-500;
   }
 
+  /* 스크롤바 — 라이트 */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f3f4f6; /* gray-100 */
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #d1d5db; /* gray-300 */
+    border-radius: 4px;
+    border: 1px solid #f3f4f6;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af; /* gray-400 */
+  }
+
   /* 스크롤바 다크 */
   .dark ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
   .dark ::-webkit-scrollbar-track {
     background: #111827; /* gray-900 */
   }
   .dark ::-webkit-scrollbar-thumb {
     background: #374151; /* gray-700 */
-    border-radius: 3px;
+    border-radius: 4px;
+    border: 1px solid #111827;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #4b5563; /* gray-600 */
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db #f3f4f6;
+  }
+  .dark * {
+    scrollbar-color: #374151 #111827;
   }
 }
 
@@ -307,6 +450,15 @@
 @media print {
   /* 헤더, 사이드바, 액션 버튼 등 UI 크롬 숨김 */
   .print-hidden { display: none !important; }
+
+  /* sticky 컨테이너는 인쇄 시 일반 흐름으로 복귀 */
+  .print-hidden-sticky {
+    position: static !important;
+    backdrop-filter: none !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
 
   /* 강제 흰 배경 + 검정 텍스트 */
   body, html {

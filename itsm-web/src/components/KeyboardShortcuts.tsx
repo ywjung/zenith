@@ -40,6 +40,64 @@ export default function KeyboardShortcuts() {
         return
       }
 
+      // 'c' → 댓글 입력창 포커스 (티켓 상세에서)
+      if (e.key === 'c') {
+        const wrapper = document.querySelector<HTMLElement>('[data-comment-input]')
+        if (wrapper) {
+          e.preventDefault()
+          wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          const editable = wrapper.querySelector<HTMLElement>('[contenteditable="true"]')
+          editable?.focus()
+          return
+        }
+      }
+
+      // 'e' → 티켓 편집 (티켓 상세에서)
+      if (e.key === 'e') {
+        const editBtn = document.querySelector<HTMLButtonElement>('[data-ticket-edit-btn]')
+        if (editBtn) {
+          e.preventDefault()
+          editBtn.click()
+          return
+        }
+      }
+
+      // 's' → 상태 변경 (티켓 상세에서 — 인라인 상태 드롭다운 열기)
+      if (e.key === 's') {
+        const statusSelect = document.querySelector<HTMLSelectElement>('[data-ticket-status-select]')
+        if (statusSelect) {
+          e.preventDefault()
+          statusSelect.focus()
+          statusSelect.click()
+          return
+        }
+      }
+
+      // 'j' / 'k' → 다음/이전 댓글 스크롤 (티켓 상세에서)
+      if (e.key === 'j' || e.key === 'k') {
+        const items = Array.from(document.querySelectorAll<HTMLElement>('[data-comment-item]'))
+        if (items.length === 0) return
+        e.preventDefault()
+        // 현재 화면 가운데와 가장 가까운 항목 인덱스 찾기
+        const center = window.innerHeight / 2
+        let currentIdx = 0
+        let bestDist = Infinity
+        items.forEach((el, i) => {
+          const r = el.getBoundingClientRect()
+          const c = r.top + r.height / 2
+          const dist = Math.abs(c - center)
+          if (dist < bestDist) { bestDist = dist; currentIdx = i }
+        })
+        const nextIdx = e.key === 'j'
+          ? Math.min(items.length - 1, currentIdx + 1)
+          : Math.max(0, currentIdx - 1)
+        items[nextIdx]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // 강조 효과
+        items[nextIdx]?.classList.add('ring-2', 'ring-blue-400', 'rounded-lg')
+        setTimeout(() => items[nextIdx]?.classList.remove('ring-2', 'ring-blue-400', 'rounded-lg'), 1200)
+        return
+      }
+
       if (gModeRef.current) {
         clearTimeout(gTimerRef.current)
         setGMode(false)
@@ -61,6 +119,20 @@ export default function KeyboardShortcuts() {
         return
       }
       if (e.key === 'n') { router.push('/tickets/new'); return }
+
+      // '[' / ']' → 티켓 상세에서 이전/다음 티켓으로 이동 (IID 기반).
+      if ((e.key === '[' || e.key === ']') && typeof window !== 'undefined') {
+        const m = window.location.pathname.match(/^\/tickets\/(\d+)$/)
+        if (m) {
+          const cur = parseInt(m[1], 10)
+          const target = e.key === ']' ? cur + 1 : cur - 1
+          if (target >= 1) {
+            e.preventDefault()
+            router.push(`/tickets/${target}`)
+          }
+          return
+        }
+      }
     }
     window.addEventListener('keydown', handler)
     return () => {
@@ -84,6 +156,10 @@ export default function KeyboardShortcuts() {
     { key: 'g → p', desc: t('shortcuts.portal') },
     { key: 'g → h', desc: t('shortcuts.help') },
     { key: 'n', desc: t('shortcuts.new_ticket') },
+    { key: 'c', desc: '댓글 입력창 포커스 (티켓 상세)' },
+    { key: 'e', desc: '티켓 편집 (티켓 상세)' },
+    { key: 's', desc: '다음 상태로 전환 (티켓 상세)' },
+    { key: 'j / k', desc: '다음/이전 댓글 스크롤 (티켓 상세)' },
     { key: 'r', desc: t('shortcuts.refresh') },
     { key: '/', desc: t('shortcuts.search_focus') },
     { key: '⌘K / Ctrl+K', desc: t('shortcuts.global_search') },
@@ -92,11 +168,11 @@ export default function KeyboardShortcuts() {
   ]
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" onClick={() => setShowHelp(false)}>
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center animate-fadeIn" onClick={() => setShowHelp(false)}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 overflow-hidden animate-scaleIn" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
           <h2 className="text-base font-bold text-gray-900 dark:text-white">{t('shortcuts.title')}</h2>
-          <button onClick={() => setShowHelp(false)} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-lg leading-none">✕</button>
+          <button onClick={() => setShowHelp(false)} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-lg leading-none" aria-label="닫기">✕</button>
         </div>
         <div className="p-4 space-y-1">
           {shortcuts.map(s => (

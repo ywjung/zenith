@@ -210,7 +210,7 @@ function EditKBContent() {
               {tags.map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 rounded-full px-2.5 py-1">
                   #{tag}
-                  <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== tag))} className="hover:text-red-500 ml-0.5">×</button>
+                  <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== tag))} className="hover:text-red-500 ml-0.5" aria-label="제거">×</button>
                 </span>
               ))}
             </div>
@@ -246,7 +246,7 @@ function EditKBContent() {
             <button
               type="submit"
               disabled={submitting}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? t('saving_btn') : t('save_btn')}
             </button>

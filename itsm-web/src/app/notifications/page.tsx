@@ -131,7 +131,7 @@ function TabPrefs() {
           {status === 'error'   && <span className="text-red-600 dark:text-red-400 font-medium">{t('notifications.save_error')}</span>}
         </div>
         <button type="button" onClick={handleSave} disabled={saving || loading}
-          className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           {saving ? t('notifications.saving') : t('common.save')}
         </button>
       </div>
@@ -147,6 +147,7 @@ function TabWatches() {
   const [loading, setLoading] = useState(true)
   const [unwatching, setUnwatching] = useState<Set<number>>(new Set())
   const [error, setError] = useState('')
+  const [watchFilter, setWatchFilter] = useState<'all' | 'active' | 'closed'>('active')
 
   const load = () => {
     setLoading(true)
@@ -214,8 +215,38 @@ function TabWatches() {
     )
   }
 
+  const activeCount = watches.filter(w => w.state !== 'closed').length
+  const closedCount = watches.filter(w => w.state === 'closed').length
+  const filteredWatches = watchFilter === 'active'
+    ? watches.filter(w => w.state !== 'closed')
+    : watchFilter === 'closed'
+      ? watches.filter(w => w.state === 'closed')
+      : watches
+
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+      {/* 상태별 필터 칩 */}
+      <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center gap-2 flex-wrap">
+        {([
+          { v: 'all', label: '전체', count: watches.length },
+          { v: 'active', label: '진행 중', count: activeCount },
+          { v: 'closed', label: '종료됨', count: closedCount },
+        ] as const).map(({ v, label, count }) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setWatchFilter(v)}
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+              watchFilter === v
+                ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium'
+                : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}
+          >
+            {label} <span className="tabular-nums opacity-75">{count}</span>
+          </button>
+        ))}
+      </div>
+
       {/* 헤더 */}
       <div className="hidden sm:grid grid-cols-[56px_1fr_96px_80px_128px_96px] items-center gap-4 px-5 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
         <span>#</span>
@@ -227,7 +258,7 @@ function TabWatches() {
       </div>
 
       <ul className="divide-y divide-gray-100 dark:divide-gray-700/60">
-        {watches.map(w => {
+        {filteredWatches.map(w => {
           const isClosed = w.state === 'closed'
           const isUnwatching = unwatching.has(w.ticket_iid)
           const href = w.project_id

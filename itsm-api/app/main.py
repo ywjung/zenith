@@ -855,6 +855,31 @@ _v1.include_router(problems_router)
 _v1.include_router(notification_rules_router)
 _v1.include_router(ai_settings_router)
 
+# 클라이언트 사이드 예외 수집 (ErrorBoundary에서 fire-and-forget POST)
+from fastapi import APIRouter as _ClientErrRouter, Request as _ClientErrRequest
+_client_errors_router = _ClientErrRouter(tags=["observability"])
+
+@_client_errors_router.post("/client-errors", status_code=204)
+async def report_client_error(request: _ClientErrRequest):
+    """프론트 ErrorBoundary가 보낸 예외를 로거에 기록. 본문 4KB 제한."""
+    try:
+        raw = await request.body()
+        if len(raw) > 4096:
+            raw = raw[:4096]
+        import json as _j, logging as _l
+        payload = _j.loads(raw or b"{}")
+        _l.getLogger("client_error").warning(
+            "[client-error] path=%s msg=%s ua=%s",
+            payload.get("path"), payload.get("message"), payload.get("ua"),
+            extra={"stack": payload.get("stack"), "component_stack": payload.get("component_stack")},
+        )
+    except Exception:
+        pass
+    from fastapi.responses import Response as _Resp
+    return _Resp(status_code=204)
+
+_v1.include_router(_client_errors_router)
+
 # MinIO 오브젝트 스토리지 프록시 (인증 필요)
 from fastapi import Depends as _Depends
 from fastapi.responses import Response as _Response

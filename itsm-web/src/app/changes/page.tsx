@@ -243,7 +243,7 @@ function ChangesContent() {
                           {typeLabel(cr.change_type)}
                         </span>
                         <span className={`text-xs font-medium ${RISK_COLORS[cr.risk_level] ?? ''}`}>
-                          {t('risk_level', { level: cr.risk_level.toUpperCase() })}
+                          {t('risk_level', { level: t(`risk_${cr.risk_level}` as 'risk_low') })}
                         </span>
                       </div>
                       <Link
@@ -255,9 +255,9 @@ function ChangesContent() {
                       <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
                         <span>{t('requester', { name: cr.requester_name ?? cr.requester_username })}</span>
                         {cr.scheduled_start_at && (
-                          <span>{t('scheduled', { date: formatDate(cr.scheduled_start_at) })}</span>
+                          <span>{t('scheduled', { date: formatDate(cr.scheduled_start_at, 'full') })}</span>
                         )}
-                        <span>{t('created', { date: formatDate(cr.created_at ?? '') })}</span>
+                        <span>{t('created', { date: formatDate(cr.created_at ?? '', 'full') })}</span>
                       </div>
                     </div>
 

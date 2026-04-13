@@ -19,6 +19,15 @@ _BLOCKED_PREFIXES = (
 _ALLOWED_SCHEMES = {"http", "https"}
 
 
+# SEC #2: 개발 환경에서만 명시적으로 허용되는 내부 호스트 (Docker compose 전용)
+_DEV_INTERNAL_ALLOWLIST = frozenset({
+    "localhost",
+    "127.0.0.1",
+    "host.docker.internal",
+    "ollama",  # docker-compose service name
+})
+
+
 def is_safe_external_url(url: str, *, allow_internal: bool = False) -> tuple[bool, str]:
     """URL이 외부 공개망을 가리키는지 검증한다.
 
@@ -28,15 +37,20 @@ def is_safe_external_url(url: str, *, allow_internal: bool = False) -> tuple[boo
 
     Args:
         url: 검증할 URL
-        allow_internal: True면 내부 IP도 허용 (개발 환경용)
+        allow_internal: True여도 _DEV_INTERNAL_ALLOWLIST에 등재된 호스트만 허용.
+                        예전엔 무조건 우회였지만 SSRF 우회 위험으로 명시적 allowlist로 변경.
     """
-    if allow_internal:
-        return True, ""
-
     try:
         parsed = urllib.parse.urlparse(url)
     except Exception as e:
         return False, f"URL 파싱 실패: {e}"
+
+    # SEC #2: 개발 환경 내부 허용 — 등재된 호스트만 통과 (cloud metadata 등 차단)
+    if allow_internal and parsed.hostname and parsed.hostname.lower() in _DEV_INTERNAL_ALLOWLIST:
+        # 스킴 검증은 항상 수행
+        if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
+            return False, f"허용되지 않는 스킴: {parsed.scheme}"
+        return True, ""
 
     # 스킴 검증
     if parsed.scheme.lower() not in _ALLOWED_SCHEMES:

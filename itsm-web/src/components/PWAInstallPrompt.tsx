@@ -21,6 +21,14 @@ export default function PWAInstallPrompt() {
       navigator.serviceWorker
         .register('/sw.js')
         .catch((err) => logger.warn('[SW] Registration failed:', err))
+      // 신규 SW가 활성화되면(controllerchange) 현재 페이지를 자동 새로고침 →
+      // 버전 전환 시 사용자가 수동 재접속하지 않아도 최신 자원 수신.
+      let _reloaded = false
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (_reloaded) return
+        _reloaded = true
+        window.location.reload()
+      })
     }
 
     // Already dismissed or installed
@@ -58,7 +66,7 @@ export default function PWAInstallPrompt() {
       role="dialog"
       aria-modal="false"
       aria-label="Install app"
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4 sm:px-0"
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4 sm:px-0 animate-slideInUp"
     >
       <div className="flex items-center gap-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 shadow-xl px-4 py-3">
         {/* App icon */}

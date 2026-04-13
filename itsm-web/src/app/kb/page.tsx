@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { fetchKBArticles } from '@/lib/api'
 import type { KBArticle } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
+import EmptyState from '@/components/EmptyState'
 import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
 import { formatName, formatDate } from '@/lib/utils'
@@ -137,19 +138,19 @@ function KBListContent() {
           {q && (
             <span className="inline-flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 rounded-full px-2.5 py-1">
               {t('filter_search')} &ldquo;{q}&rdquo;
-              <button onClick={() => { setQ(''); setQInput(''); setPage(1) }} className="hover:text-red-500 ml-0.5">✕</button>
+              <button onClick={() => { setQ(''); setQInput(''); setPage(1) }} className="hover:text-red-500 ml-0.5" aria-label="닫기">✕</button>
             </span>
           )}
           {category && (
             <span className="inline-flex items-center gap-1 text-xs bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 rounded-full px-2.5 py-1">
               {getEmoji(category)} {getLabel(category)}
-              <button onClick={() => { setCategory(''); setPage(1) }} className="hover:text-red-500 ml-0.5">✕</button>
+              <button onClick={() => { setCategory(''); setPage(1) }} className="hover:text-red-500 ml-0.5" aria-label="닫기">✕</button>
             </span>
           )}
           {selectedTag && (
             <span className="inline-flex items-center gap-1 text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700 rounded-full px-2.5 py-1">
               #{selectedTag}
-              <button onClick={() => { setSelectedTag(''); setPage(1) }} className="hover:text-red-500 ml-0.5">✕</button>
+              <button onClick={() => { setSelectedTag(''); setPage(1) }} className="hover:text-red-500 ml-0.5" aria-label="닫기">✕</button>
             </span>
           )}
           <button onClick={clearAll} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 ml-1">{t('filter_reset')}</button>
@@ -199,14 +200,14 @@ function KBListContent() {
               ))}
             </div>
           ) : articles.length === 0 ? (
-            <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500">
-              <div className="text-4xl mb-3">📭</div>
-              <p>{t('no_articles')}</p>
-              {hasFilter && (
-                <button onClick={clearAll} className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                  {t('reset_filters')}
-                </button>
-              )}
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
+              <EmptyState
+                icon={hasFilter ? '🔍' : '📚'}
+                title={t('no_articles')}
+                description={hasFilter ? '다른 검색어나 카테고리를 시도해보세요.' : '첫 KB 문서를 작성해 팀과 지식을 공유해보세요.'}
+                actionLabel={hasFilter ? t('reset_filters') : undefined}
+                onAction={hasFilter ? clearAll : undefined}
+              />
             </div>
           ) : (
             <div className="space-y-2">

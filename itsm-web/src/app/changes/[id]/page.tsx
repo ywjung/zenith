@@ -195,7 +195,7 @@ function ChangeDetailContent() {
             </div>
             <div className="text-xs text-gray-400 dark:text-gray-500 text-right shrink-0">
               <p>{t('requester_label_inline')} <span className="text-gray-700 dark:text-gray-300 font-medium">{cr.requester_name ?? cr.requester_username}</span></p>
-              <p className="mt-0.5">{formatDate(cr.created_at ?? '')}</p>
+              <p className="mt-0.5">{formatDate(cr.created_at ?? '', 'full')}</p>
             </div>
           </div>
         </div>
@@ -336,8 +336,8 @@ function ChangeDetailContent() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
             <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">{t('request_info')}</h3>
             <InfoRow icon="👤" label={t('label_requester')}>{cr.requester_name ?? cr.requester_username}</InfoRow>
-            <InfoRow icon="📅" label={t('label_created')}>{formatDate(cr.created_at ?? '')}</InfoRow>
-            <InfoRow icon="🔄" label={t('label_updated')}>{formatDate(cr.updated_at ?? '')}</InfoRow>
+            <InfoRow icon="📅" label={t('label_created')}>{formatDate(cr.created_at ?? '', 'full')}</InfoRow>
+            <InfoRow icon="🔄" label={t('label_updated')}>{formatDate(cr.updated_at ?? '', 'full')}</InfoRow>
             {cr.related_ticket_iid && (
               <InfoRow icon="🔗" label={t('label_related')}>
                 <Link href={`/tickets/${cr.related_ticket_iid}`} className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
@@ -351,10 +351,10 @@ function ChangeDetailContent() {
           {(cr.scheduled_start_at || cr.scheduled_end_at || cr.actual_start_at || cr.actual_end_at) && (
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
               <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">{t('schedule_info')}</h3>
-              {cr.scheduled_start_at && <InfoRow icon="▶️" label={t('label_scheduled_start')}>{formatDate(cr.scheduled_start_at)}</InfoRow>}
-              {cr.scheduled_end_at   && <InfoRow icon="⏹️" label={t('label_scheduled_end')}>{formatDate(cr.scheduled_end_at)}</InfoRow>}
-              {cr.actual_start_at    && <InfoRow icon="🟢" label={t('label_actual_start')}>{formatDate(cr.actual_start_at)}</InfoRow>}
-              {cr.actual_end_at      && <InfoRow icon="🏁" label={t('label_actual_end')}>{formatDate(cr.actual_end_at)}</InfoRow>}
+              {cr.scheduled_start_at && <InfoRow icon="▶️" label={t('label_scheduled_start')}>{formatDate(cr.scheduled_start_at, 'full')}</InfoRow>}
+              {cr.scheduled_end_at   && <InfoRow icon="⏹️" label={t('label_scheduled_end')}>{formatDate(cr.scheduled_end_at, 'full')}</InfoRow>}
+              {cr.actual_start_at    && <InfoRow icon="🟢" label={t('label_actual_start')}>{formatDate(cr.actual_start_at, 'full')}</InfoRow>}
+              {cr.actual_end_at      && <InfoRow icon="🏁" label={t('label_actual_end')}>{formatDate(cr.actual_end_at, 'full')}</InfoRow>}
             </div>
           )}
 
@@ -365,7 +365,7 @@ function ChangeDetailContent() {
                 {cr.status === 'rejected' ? t('rejection_info') : t('approval_info')}
               </h3>
               {cr.approver_username && <InfoRow icon="👨‍⚖️" label={t('label_approver')}>{cr.approver_name ?? cr.approver_username}</InfoRow>}
-              {cr.approved_at       && <InfoRow icon="📅" label={t('label_approved_at')}>{formatDate(cr.approved_at)}</InfoRow>}
+              {cr.approved_at       && <InfoRow icon="📅" label={t('label_approved_at')}>{formatDate(cr.approved_at, 'full')}</InfoRow>}
               {cr.approval_comment  && <InfoRow icon="💬" label={t('label_comment')}>{cr.approval_comment}</InfoRow>}
             </div>
           )}

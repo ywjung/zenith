@@ -30,7 +30,9 @@ export default function InlineAssigneeSelect({
   const [saving, setSaving] = useState(false)
   const [members, setMembers] = useState<ProjectMember[]>([])
   const [loadingMembers, setLoadingMembers] = useState(false)
+  const [query, setQuery] = useState('')
   const wrapRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -46,6 +48,8 @@ export default function InlineAssigneeSelect({
     e.stopPropagation()
     if (open) { setOpen(false); return }
     setOpen(true)
+    setQuery('')
+    setTimeout(() => searchRef.current?.focus(), 50)
     if (members.length === 0 && projectId) {
       setLoadingMembers(true)
       try {
@@ -92,9 +96,19 @@ export default function InlineAssigneeSelect({
       </button>
       {open && (
         <div
-          className="absolute left-0 top-full mt-1 z-30 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[180px] max-h-[240px] overflow-y-auto animate-fadeIn"
+          className="absolute left-0 top-full mt-1 z-30 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[220px] max-h-[300px] overflow-y-auto animate-fadeIn"
           onClick={(e) => e.stopPropagation()}
         >
+          <div className="px-2 pt-1 pb-1.5 sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder={t('assign_search_placeholder')}
+              className="w-full text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
           <button
             type="button"
             onClick={() => handleAssign(null)}
@@ -104,8 +118,11 @@ export default function InlineAssigneeSelect({
           </button>
           {loadingMembers ? (
             <div className="px-3 py-2 text-xs text-gray-400">{t('assign_loading')}</div>
-          ) : (
-            members.map(m => (
+          ) : (() => {
+            const q = query.trim().toLowerCase()
+            const filtered = q ? members.filter(m => m.name.toLowerCase().includes(q) || m.username.toLowerCase().includes(q)) : members
+            if (filtered.length === 0) return <div className="px-3 py-2 text-xs text-gray-400">{t('assign_no_results')}</div>
+            return filtered.map(m => (
               <button
                 key={m.id}
                 type="button"
@@ -121,7 +138,7 @@ export default function InlineAssigneeSelect({
                 {m.id === assigneeId && <span className="text-blue-500 ml-auto">✓</span>}
               </button>
             ))
-          )}
+          })()}
         </div>
       )}
     </div>

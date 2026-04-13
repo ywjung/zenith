@@ -20,6 +20,59 @@ export default function NotificationBell() {
   const reconnectAttemptsRef = useRef(0)
   const eventSourceRef = useRef<EventSource | null>(null)
 
+  // 미읽 알림 수를 브라우저 탭 제목에 표시 (탭 비활성 상태에서도 가시성 확보)
+  useEffect(() => {
+    const baseTitle = document.title.replace(/^\(\d+\+?\)\s*/, '')
+    if (unreadCount > 0) {
+      document.title = `(${unreadCount > 99 ? '99+' : unreadCount}) ${baseTitle}`
+    } else {
+      document.title = baseTitle
+    }
+  }, [unreadCount])
+
+  // Favicon에 빨간 dot 오버레이 (unread > 0 시)
+  useEffect(() => {
+    const FAVICON_ID = 'dynamic-favicon'
+    let link = document.querySelector<HTMLLinkElement>(`#${FAVICON_ID}`)
+    if (!link) {
+      link = document.createElement('link')
+      link.id = FAVICON_ID
+      link.rel = 'icon'
+      link.type = 'image/png'
+      document.head.appendChild(link)
+    }
+    if (unreadCount === 0) {
+      link.href = '/icon'
+      return
+    }
+    // canvas로 favicon 생성
+    const canvas = document.createElement('canvas')
+    canvas.width = 32
+    canvas.height = 32
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    // 배경 (앱 색상)
+    ctx.fillStyle = '#1d4ed8' // blue-700
+    ctx.beginPath()
+    ctx.roundRect(0, 0, 32, 32, 6)
+    ctx.fill()
+    // 별/글자
+    ctx.fillStyle = '#fcd34d' // amber-300
+    ctx.font = 'bold 18px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('Z', 16, 17)
+    // 빨간 dot
+    ctx.fillStyle = '#ef4444' // red-500
+    ctx.beginPath()
+    ctx.arc(24, 8, 7, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    link.href = canvas.toDataURL('image/png')
+  }, [unreadCount])
+
   const loadNotifications = async (signal?: AbortSignal) => {
     setLoading(true)
     try {
@@ -42,6 +95,7 @@ export default function NotificationBell() {
 
       es.onopen = () => {
         reconnectAttemptsRef.current = 0
+        window.dispatchEvent(new CustomEvent('sse:connected'))
       }
 
       es.onmessage = (e) => {
@@ -61,6 +115,7 @@ export default function NotificationBell() {
         eventSourceRef.current = null
         if (signal.aborted) return
         reconnectAttemptsRef.current++
+        window.dispatchEvent(new CustomEvent('sse:reconnecting', { detail: { attempt: reconnectAttemptsRef.current } }))
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30000)
         reconnectRef.current = setTimeout(() => { if (!signal.aborted) connectSSE(signal) }, delay)
       }
@@ -134,7 +189,11 @@ export default function NotificationBell() {
       >
         <span className="text-xl">🔔</span>
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+          <span
+            className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-badge-pulse"
+            aria-live="polite"
+            aria-label={`읽지 않은 알림 ${unreadCount}개`}
+          >
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -165,10 +224,10 @@ export default function NotificationBell() {
               notifications.map((n) => (
                 <div
                   key={n.id}
-                  className={`px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 last:border-b-0 transition-colors ${
+                  className={`px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 last:border-b-0 transition-all border-l-2 ${
                     !n.is_read
-                      ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
-                      : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border-l-blue-500'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700/40 border-l-transparent opacity-75 hover:opacity-100'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -176,7 +235,9 @@ export default function NotificationBell() {
                       {n.link ? (
                         <Link
                           href={n.link}
-                          className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate block hover:text-blue-600 dark:hover:text-blue-400"
+                          className={`text-sm truncate block hover:text-blue-600 dark:hover:text-blue-400 ${
+                            !n.is_read ? 'font-semibold text-gray-900 dark:text-gray-100' : 'font-normal text-gray-600 dark:text-gray-400'
+                          }`}
                           onClick={() => {
                             if (!n.is_read) handleMarkRead(n.id)
                             setOpen(false)
@@ -185,19 +246,22 @@ export default function NotificationBell() {
                           {n.title}
                         </Link>
                       ) : (
-                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">{n.title}</p>
+                        <p className={`text-sm truncate ${!n.is_read ? 'font-semibold text-gray-900 dark:text-gray-100' : 'font-normal text-gray-600 dark:text-gray-400'}`}>{n.title}</p>
                       )}
                       {n.body && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{n.body}</p>
                       )}
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{formatTime(n.created_at)}</p>
                     </div>
-                    {!n.is_read && (
+                    {!n.is_read ? (
                       <button
                         onClick={() => handleMarkRead(n.id)}
-                        className="shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1.5"
+                        className="shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1.5 hover:scale-150 transition-transform"
                         title={t('mark_read_title')}
+                        aria-label={t('mark_read_title')}
                       />
+                    ) : (
+                      <span className="shrink-0 text-[10px] text-gray-300 dark:text-gray-600 mt-1.5" title="읽음" aria-label="읽음">✓</span>
                     )}
                   </div>
                 </div>

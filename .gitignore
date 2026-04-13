@@ -14,6 +14,7 @@ nginx/htpasswd/grafana
 # 도구 캐시
 .playwright-mcp/
 .serena/
+.claude/
 
 # Python
 __pycache__/

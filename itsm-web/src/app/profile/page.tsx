@@ -1,11 +1,14 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
 import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
+import AvatarComp from '@/components/Avatar'
 import { ROLE_LABELS } from '@/lib/constants'
 import SessionManager from '@/components/SessionManager'
 import { uploadAvatar, deleteAvatar, fetchPushVapidKey, fetchPushStatus, subscribePush, unsubscribePush, listNotificationRules, createNotificationRule, updateNotificationRule, deleteNotificationRule } from '@/lib/api'
@@ -268,18 +271,16 @@ function ProfileContent() {
       {/* 프로필 카드 */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <div className="flex items-center gap-4">
-          {/* 아바타 (업로드 가능) */}
+          {/* 아바타 (업로드 가능) — AIRGAP: 외부 URL(gravatar) 차단, 로컬 업로드 또는 이니셜 */}
           <div className="relative group shrink-0">
-            {avatarUrl ? (
+            {avatarUrl && (avatarUrl.startsWith('/') || avatarUrl.startsWith('data:')) ? (
               <img
                 src={avatarUrl}
                 alt={user.name}
                 className="w-16 h-16 rounded-full object-cover ring-2 ring-gray-200 dark:ring-gray-700"
               />
             ) : (
-              <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold">
-                {(user.name || user.username).charAt(0).toUpperCase()}
-              </div>
+              <AvatarComp name={user.name || user.username} username={user.username} size="xl" className="ring-2 ring-gray-200 dark:ring-gray-700" />
             )}
 
             {/* 호버 오버레이 */}
@@ -342,26 +343,28 @@ function ProfileContent() {
           <h3 className="font-semibold text-gray-800 dark:text-gray-100">{t('stats_title')}</h3>
         </div>
         <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700">
-          <div className="px-6 py-5 text-center">
+          <Link href="/?assignee=me" className="group px-6 py-5 text-center hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors active:scale-[0.98]">
+            <div className="text-3xl mb-1 select-none" aria-hidden="true">📋</div>
             {statsLoading ? (
               <div className="h-8 w-12 mx-auto bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
             ) : (
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">
+              <p className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                 {stats?.created ?? 0}
               </p>
             )}
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('created_tickets')}</p>
-          </div>
-          <div className="px-6 py-5 text-center">
+          </Link>
+          <Link href="/?status=closed" className="group px-6 py-5 text-center hover:bg-green-50/50 dark:hover:bg-green-900/10 transition-colors active:scale-[0.98]">
+            <div className="text-3xl mb-1 select-none" aria-hidden="true">✅</div>
             {statsLoading ? (
               <div className="h-8 w-12 mx-auto bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
             ) : (
-              <p className="text-3xl font-bold text-green-600 dark:text-green-400">
+              <p className="text-3xl font-bold text-green-600 dark:text-green-400 tabular-nums group-hover:scale-110 transition-transform inline-block">
                 {stats?.resolved ?? 0}
               </p>
             )}
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('resolved_tickets')}</p>
-          </div>
+          </Link>
         </div>
       </div>
 
@@ -427,7 +430,7 @@ function ProfileContent() {
               <button
                 onClick={savePrefs}
                 disabled={prefsSaving}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
               >
                 {prefsSaving ? t('saving') : t('save')}
               </button>
@@ -456,7 +459,7 @@ function ProfileContent() {
             <button
               onClick={togglePushSubscription}
               disabled={pushLoading}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                 ${pushSubscribed
                   ? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
@@ -539,8 +542,8 @@ function ProfileContent() {
 
       {/* 알림 규칙 편집 모달 */}
       {showRuleModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md animate-scaleIn">
             <div className="p-5 border-b dark:border-gray-700">
               <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{editRule ? '알림 규칙 수정' : '새 알림 규칙'}</h3>
             </div>
@@ -596,12 +599,12 @@ function ProfileContent() {
                     }
                     setShowRuleModal(false)
                   } catch (err) {
-                    alert(err instanceof Error ? err.message : '저장 실패')
+                    toast.error(err instanceof Error ? err.message : '저장 실패')
                   } finally {
                     setRuleSaving(false)
                   }
                 }}
-                className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+                className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >{ruleSaving ? '저장 중...' : '저장'}</button>
             </div>
           </div>

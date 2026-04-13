@@ -62,9 +62,10 @@ def list_tickets(
     sla: Optional[str] = None,
     search: Optional[str] = None,
     created_by_username: Optional[str] = Query(default=None),
+    assignee_username: Optional[str] = Query(default=None, description="담당자 필터. '__none__' 전달 시 미배정 티켓만 조회."),
     project_id: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1, le=10000, description="1~10000 범위. 그 이상은 키셋 페이지네이션 또는 필터 사용 권장."),
-    per_page: int = Query(default=20, ge=1, le=100),
+    per_page: int = Query(default=20, ge=1, le=500),
     sort_by: str = Query(default="created_at", description="정렬 기준: created_at|updated_at|priority|title"),
     order: str = Query(default="desc", description="정렬 방향: asc|desc"),
     created_after: Optional[str] = Query(default=None, description="등록일 시작 (ISO 8601, 예: 2026-01-01)"),
@@ -149,6 +150,7 @@ def list_tickets(
             role=role, user=_user_suffix, state=state,
             cat=category or "", prio=priority or "", sla=sla or "",
             q=search or "", cbu=created_by_username or "",
+            au=assignee_username or "",
             pg=page, pp=per_page, sb=sort_by, od=order,
             ca=created_after or "", cb=created_before or "",
         )
@@ -160,7 +162,7 @@ def list_tickets(
         # ── DB 기반 빠른 경로: role=user 또는 created_by_username 필터 ──
         # TicketSearchIndex에서 조건에 맞는 iid를 먼저 조회하여
         # GitLab API 전체 조회(get_all_issues)를 회피한다.
-        _use_db_fast_path = (role == "user" or bool(created_by_username)) and not sla
+        _use_db_fast_path = (role == "user" or bool(created_by_username) or bool(assignee_username)) and not sla
         if _use_db_fast_path:
             from ...models import TicketSearchIndex as _TSI
             from sqlalchemy import cast, literal
@@ -173,6 +175,13 @@ def list_tickets(
             target_author = created_by_username or (_user.get("username") if role == "user" else None)
             if target_author:
                 q = q.filter(_TSI.author_username == target_author)
+
+            # 담당자 필터 — '__none__'은 미배정 티켓
+            if assignee_username:
+                if assignee_username == "__none__":
+                    q = q.filter((_TSI.assignee_username.is_(None)) | (_TSI.assignee_username == ""))
+                else:
+                    q = q.filter(_TSI.assignee_username == assignee_username)
 
             # 상태 필터 (라벨 기반)
             if gl_state == "opened":

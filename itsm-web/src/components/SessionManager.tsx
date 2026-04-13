@@ -241,7 +241,7 @@ export default function SessionManager() {
                   <button
                     onClick={() => handleRevoke(s.id)}
                     disabled={revoking === s.id}
-                    className="shrink-0 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                    className="shrink-0 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {revoking === s.id ? t('revoking_btn') : t('revoke_btn')}
                   </button>
@@ -261,7 +261,7 @@ export default function SessionManager() {
           <button
             onClick={handleRevokeAllOthers}
             disabled={revoking === 'all'}
-            className="shrink-0 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
+            className="shrink-0 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {revoking === 'all' ? t('revoking_all_btn') : t('revoke_all_btn')}
           </button>

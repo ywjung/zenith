@@ -43,11 +43,15 @@ export default function PortalPage() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ ticket_iid: number; track_url: string } | null>(null)
 
+  const [catalogError, setCatalogError] = useState(false)
   useEffect(() => {
+    setCatalogError(false)
     fetch(`${API_BASE}/service-catalog/public`)
       .then(r => r.ok ? r.json() : [])
       .then(setCatalogItems)
-      .catch(() => {})
+      .catch(() => {
+        setCatalogError(true)
+      })
   }, [])
 
   function selectCatalog(item: CatalogItem) {
@@ -150,6 +154,26 @@ export default function PortalPage() {
               <button onClick={clearCatalog} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">{t('portal.catalog_reset')}</button>
             )}
           </div>
+
+          {/* 카탈로그 로드 실패 안내 */}
+          {catalogError && (
+            <div className="mb-3 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs rounded-lg flex items-center gap-2">
+              <span>⚠️ 서비스 카탈로그를 불러오지 못했습니다.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCatalogError(false)
+                  fetch(`${API_BASE}/service-catalog/public`)
+                    .then(r => r.ok ? r.json() : [])
+                    .then(setCatalogItems)
+                    .catch(() => setCatalogError(true))
+                }}
+                className="underline hover:text-amber-900 dark:hover:text-amber-200"
+              >
+                다시 시도
+              </button>
+            </div>
+          )}
 
           {/* 카탈로그 카드 그리드 */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -344,7 +368,7 @@ export default function PortalPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="bg-blue-600 text-white px-8 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="bg-blue-600 text-white px-8 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? t('portal.submitting') : t('portal.submit_btn')}
             </button>

@@ -176,6 +176,10 @@ def get_ticket_stats(
                             q = q.filter(~_jc(_TSI.labels_json, _json.dumps([nl])))
                     return q.count()
 
+                _unassigned = _base.filter(
+                    _TSI.state == "opened",
+                    (_TSI.assignee_username.is_(None)) | (_TSI.assignee_username == ""),
+                ).count()
                 _result = {
                     "all":              _db_count("all"),
                     "open":             _db_count("opened", not_labels=_all_statuses),
@@ -187,6 +191,7 @@ def get_ticket_stats(
                     "ready_for_release":_db_count("opened", label=status_to_label("ready_for_release")),
                     "released":         _db_count("opened", label=status_to_label("released")),
                     "closed":           _db_count("closed"),
+                    "unassigned":       _unassigned,
                 }
                 if _r:
                     _r.setex(_cache_key, 300, _json.dumps(_result))
@@ -226,6 +231,10 @@ def get_ticket_stats(
                         q = q.filter(~_jc2(_TSI.labels_json, _json.dumps([nl])))
                 return q.count()
 
+            _unassigned = _base.filter(
+                _TSI.state == "opened",
+                (_TSI.assignee_username.is_(None)) | (_TSI.assignee_username == ""),
+            ).count()
             _result = {
                 "all":              _db_count("all"),
                 "open":             _db_count("opened", not_labels=_all_statuses),
@@ -237,6 +246,7 @@ def get_ticket_stats(
                 "ready_for_release":_db_count("opened", label=status_to_label("ready_for_release")),
                 "released":         _db_count("opened", label=status_to_label("released")),
                 "closed":           _db_count("closed"),
+                "unassigned":       _unassigned,
             }
         finally:
             _db.close()
@@ -280,6 +290,107 @@ def get_ticket_stats(
     except Exception as e:
         logger.error("GitLab stats error: %s", e)
         raise HTTPException(status_code=502, detail="통계를 불러오는 중 오류가 발생했습니다.")
+
+
+@search_router.get("/kanban", response_model=dict)
+def list_kanban_tickets(
+    project_id: Optional[str] = Query(default=None),
+    include_closed: bool = Query(default=True, description="false 시 state=closed 제외 (대규모 조직용 경량 모드)"),
+    limit: int = Query(default=2000, ge=1, le=5000),
+    _user: dict = Depends(get_current_user),
+):
+    """칸반 보드 전용 경량 엔드포인트 — TicketSearchIndex + SLARecord 단일 쿼리.
+
+    기존 `/tickets/`는 티켓마다 GitLab API를 호출해 N × 40ms 지연이 발생한다.
+    칸반은 보드 카드 렌더에 필요한 10개 필드만 사용하므로 DB에서 직접 조립한다.
+
+    Redis SWR 캐시: TTL 30s. 배정/상태 변경 시 `_invalidate_ticket_list_cache`가
+    `itsm:tl:*` 키 삭제 → 버전 카운터 증가로 자동 무효화.
+    """
+    from ...models import TicketSearchIndex as _TSI, SLARecord as _SLA, UserRole as _UR
+    from ...database import SessionLocal
+    from .helpers import label_to_priority, label_to_status
+    from sqlalchemy import cast, literal, func
+    from sqlalchemy.dialects.postgresql import JSONB as _JSONB
+    from datetime import datetime as _dt, timezone as _tz
+
+    role = _user.get("role", "user")
+    pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
+
+    _ver = 0
+    _r = _get_redis()
+    if _r:
+        _ver = int(_r.get(f"itsm:tickets:v:{pid}") or 0)
+        _cache_key = f"itsm:kanban:{pid}:v{_ver}:r{role}:u{_user.get('sub','') if role in ('user','developer') else ''}:ic{int(include_closed)}:l{limit}"
+        _cached = _r.get(_cache_key)
+        if _cached:
+            return _json.loads(_cached)
+
+    def _jc(col, val):
+        return col.op("@>")(cast(literal(val), _JSONB))
+
+    t0 = _dt.now()
+    with SessionLocal() as db:
+        q = (
+            db.query(
+                _TSI.iid, _TSI.title, _TSI.state, _TSI.labels_json,
+                _TSI.assignee_username, _TSI.author_username, _TSI.created_at, _TSI.project_id,
+                _SLA.sla_deadline, _SLA.breached,
+                _UR.name.label("assignee_name"),
+            )
+            .outerjoin(_SLA, (_SLA.gitlab_issue_iid == _TSI.iid) & (_SLA.project_id == _TSI.project_id))
+            .outerjoin(_UR, _UR.username == _TSI.assignee_username)
+            .filter(_TSI.project_id == pid)
+            # 일반 티켓만 (problem/change 등 별도 관리되는 티켓 제외)
+            .filter(~_jc(_TSI.labels_json, '["problem"]'))
+        )
+        if not include_closed:
+            q = q.filter(_TSI.state == "opened")
+
+        # 역할별 가시성: user는 본인 작성, developer는 본인 배정 티켓만.
+        if role == "user":
+            q = q.filter(_TSI.author_username == _user.get("username", ""))
+        elif role == "developer":
+            q = q.filter(_TSI.assignee_username == _user.get("username", ""))
+
+        q = q.order_by(_TSI.created_at.desc()).limit(limit)
+        rows = q.all()
+
+    tickets = []
+    for r in rows:
+        labels = r.labels_json or []
+        cat = None
+        prio = "medium"
+        status = "open"
+        for lb in labels:
+            if not isinstance(lb, str):
+                continue
+            if lb.startswith("cat::"):
+                cat = lb[5:]
+            elif lb.startswith("prio::"):
+                prio = label_to_priority(lb)
+            elif lb.startswith("status::"):
+                status = label_to_status(lb)
+        tickets.append({
+            "iid": r.iid,
+            "title": r.title,
+            "state": r.state,
+            "status": "closed" if r.state == "closed" else status,
+            "priority": prio,
+            "category": cat,
+            "assignee_name": r.assignee_name or r.assignee_username or None,
+            "assignee_username": r.assignee_username,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "sla_deadline": r.sla_deadline.isoformat() if r.sla_deadline else None,
+            "sla_breached": bool(r.breached) if r.breached is not None else False,
+            "project_id": r.project_id,
+        })
+
+    elapsed_ms = int((_dt.now() - t0).total_seconds() * 1000)
+    result = {"tickets": tickets, "total": len(tickets), "elapsed_ms": elapsed_ms}
+    if _r:
+        _r.setex(_cache_key, 30, _json.dumps(result))
+    return result
 
 
 @search_router.get("/requesters", response_model=list)

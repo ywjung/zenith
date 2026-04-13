@@ -192,9 +192,9 @@ def test_create_api_key_duplicate_name(client, admin_cookies):
 
 # ── filter options ────────────────────────────────────────────────────────────
 
-def test_get_filter_options(client):
-    """인증 없이도 필터 옵션 조회가 가능해야 한다."""
-    resp = client.get("/admin/filter-options")
+def test_get_filter_options(client, admin_cookies):
+    """인증된 사용자가 필터 옵션을 조회할 수 있어야 한다."""
+    resp = client.get("/admin/filter-options", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()
     assert "statuses" in data

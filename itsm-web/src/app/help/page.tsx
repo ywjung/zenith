@@ -1,5 +1,15 @@
 'use client'
 
+/**
+ * 도움말 페이지 — 5800+ 줄의 인라인 가이드 콘텐츠.
+ *
+ * ⚠️ 유지보수 가이드:
+ * - 데이터 상수 (TABS, QUICK_LINKS, REGISTRATION_STEPS 등)는 이 파일 상단에 집중
+ * - 프로세스/기능 변경 시 ALL_FEATURES 배열에서 해당 항목만 수정
+ * - 향후 CMS 또는 API 기반으로 전환하면 이 파일 전체를 동적 렌더링으로 교체 가능
+ * - i18n 전환 시 모든 한국어 문자열을 messages/ko.json의 help.* 키로 이동 필요
+ */
+
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { fetchFaqItems, type FaqItem as ApiFaqItem } from '@/lib/api'

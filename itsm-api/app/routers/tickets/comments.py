@@ -212,6 +212,12 @@ def get_comments(
     _user: dict = Depends(get_current_user),
 ):
     try:
+        # SEC #1 (IDOR): 티켓 view 권한 검증
+        from .helpers import _can_user_view_issue
+        issue = gitlab_client.get_issue(iid, project_id=project_id)
+        if not _can_user_view_issue(issue, _user):
+            raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+
         notes = gitlab_client.get_notes(iid, project_id=project_id)
         return [
             {
@@ -220,11 +226,14 @@ def get_comments(
                 "author_name": n["author"]["name"],
                 "author_avatar": n["author"].get("avatar_url"),
                 "created_at": n["created_at"],
+                "updated_at": n.get("updated_at"),
                 "internal": n.get("confidential", False),
             }
             for n in notes
             if not n.get("system", False)
         ]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("GitLab get_comments %d error: %s", iid, e)
         raise HTTPException(status_code=502, detail="댓글 조회 중 오류가 발생했습니다.")

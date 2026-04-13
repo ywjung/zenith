@@ -60,18 +60,13 @@ test.describe('티켓 목록 접근', () => {
   });
 
   test('티켓 항목 클릭 시 상세 페이지로 이동한다', async ({ page }) => {
-    // 테이블 행 또는 리스트 아이템 클릭
-    const firstRow = page.locator('tr[class*="cursor"], tr:has(td a), [role="listitem"] a').first();
-    const hasRow = await firstRow.isVisible().catch(() => false);
-    if (!hasRow) {
-      // 티켓 없는 경우 스킵
-      return;
-    }
-    await firstRow.click({ force: true });
-    await page.waitForTimeout(500);
-    // 티켓 상세 또는 관련 페이지에 있어야 함
-    const url = page.url();
-    expect(url).toMatch(/tickets\/\d+|issue|detail/);
+    // 테이블 내 티켓 링크 클릭 (td 안의 a 태그)
+    const ticketLink = page.locator('td a[href*="/tickets/"]').first();
+    const hasLink = await ticketLink.isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasLink) return; // 티켓 없는 경우 스킵
+    await ticketLink.click();
+    await page.waitForURL(/\/tickets\/\d+/, { timeout: 10000 });
+    expect(page.url()).toMatch(/tickets\/\d+/);
   });
 });
 

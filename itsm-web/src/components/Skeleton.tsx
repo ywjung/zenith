@@ -36,7 +36,7 @@ export default function Skeleton({
   else if (typeof height === 'string') style.height = height
   return (
     <div
-      className={`animate-pulse bg-gray-200 dark:bg-gray-700 ${roundedCls} ${className}`}
+      className={`skeleton-shimmer ${roundedCls} ${className}`}
       style={style}
       aria-hidden="true"
     />

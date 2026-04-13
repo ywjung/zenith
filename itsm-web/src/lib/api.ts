@@ -166,6 +166,19 @@ export function fetchTicketStats(projectId?: string): Promise<TicketStats> {
   return request<TicketStats>(`/tickets/stats${qs}`)
 }
 
+/** 칸반 보드 전용 경량 엔드포인트 — DB에서 직접 조립, GitLab API 호출 없음. */
+export function fetchKanbanBoard(params?: {
+  project_id?: string
+  include_closed?: boolean
+  limit?: number
+}): Promise<{ tickets: Ticket[]; total: number; elapsed_ms?: number }> {
+  const qs: Record<string, string | number | null | undefined> = {}
+  if (params?.project_id) qs.project_id = params.project_id
+  if (params?.include_closed === false) qs.include_closed = 'false'
+  if (params?.limit) qs.limit = params.limit
+  return request(`/tickets/kanban${buildQuery(qs)}`)
+}
+
 export function fetchTickets(params?: {
   state?: string
   category?: string
@@ -178,6 +191,7 @@ export function fetchTickets(params?: {
   sort_by?: string
   order?: string
   created_by_username?: string
+  assignee_username?: string
   created_after?: string
   created_before?: string
 }): Promise<TicketListResponse> {

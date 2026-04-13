@@ -33,23 +33,32 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // /admin 경로: 토큰 없거나 role != admin이면 /login 리다이렉트
+  // /admin 경로: 토큰 없거나 role != admin이면 /login 리다이렉트 (원래 경로는 ?next= 에 보존)
   if (pathname.startsWith('/admin')) {
     const token = request.cookies.get('itsm_token')?.value
-    if (!token) {
+    const redirectToLogin = () => {
       const loginUrl = request.nextUrl.clone()
       loginUrl.pathname = '/login'
+      loginUrl.search = ''
+      loginUrl.searchParams.set('next', pathname + (request.nextUrl.search || ''))
       return NextResponse.redirect(loginUrl)
     }
+    if (!token) return redirectToLogin()
     const payload = decodeJwtPayload(token)
-    if (!payload || payload.role !== 'admin') {
-      const loginUrl = request.nextUrl.clone()
-      loginUrl.pathname = '/login'
-      return NextResponse.redirect(loginUrl)
-    }
+    if (!payload || payload.role !== 'admin') return redirectToLogin()
   }
 
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
+
+  // AIRGAP: 외부 도메인 제거 — 폐쇄망에서 Gravatar 등 외부 이미지 차단됨
+  // 사용자 아바타는 로컬 Avatar 컴포넌트(hash 색상 이니셜)로 대체
+  const isDev = process.env.NODE_ENV !== 'production'
+  const imgSrc = [
+    "'self'",
+    'data:',
+    'blob:',
+    ...(isDev ? ['http://localhost:8929'] : []),
+  ].join(' ')
 
   const csp = [
     "default-src 'self'",
@@ -58,12 +67,12 @@ export function middleware(request: NextRequest) {
     // 사용자 입력의 CSS injection은 DOMPurify ALLOWED_ATTR에 'style' 미포함으로 차단됨.
     // TODO: Tailwind CSS 클래스로 모든 inline style 대체 후 'unsafe-inline' 제거 가능.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: http://localhost:8929 https://www.gravatar.com https://secure.gravatar.com",
+    `img-src ${imgSrc}`,
     "connect-src 'self'",
     "font-src 'self'",
-    // frame-src blob: PDF/이미지 미리보기(FilePreview 컴포넌트)에서 blob: URL 필요
-    "frame-src 'self' blob:",
-    // object-src: Flash·Java 플러그인 완전 차단 — blob: 허용 시 플러그인 코드 실행 가능
+    // SEC #8: frame-src 'self' only — blob: 제거. PDF preview는 same-origin proxy URL 사용.
+    "frame-src 'self'",
+    // object-src: Flash·Java 플러그인 완전 차단
     "object-src 'none'",
     "frame-ancestors 'none'",
   ].join('; ')

@@ -301,12 +301,15 @@ def notify_status_changed(ticket: dict, old_status: str, new_status: str, actor_
             recipients.append(email)
 
     if recipients:
+        # UX2 #4: 처리완료 시 만족도 평가 링크 포함
+        rating_url = f"{settings.FRONTEND_URL}/tickets/{iid}/rate" if new_status == "resolved" else ""
         ctx = {
             "iid": iid, "title": title,
             "old_status": status_map.get(old_status, old_status),
             "new_status": status_map.get(new_status, new_status),
             "actor_name": actor_name_e,
             "portal_url": f"{settings.FRONTEND_URL}/tickets/{iid}",
+            "rating_url": rating_url,
         }
         rendered = _render_email_template("status_changed", ctx)
         if rendered:

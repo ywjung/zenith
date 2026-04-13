@@ -8,6 +8,30 @@ interface Announcement {
   title: string
   content: string
   type: string
+  expires_at?: string | null
+  starts_at?: string | null
+}
+
+const DISMISS_KEY = 'announcement-dismissed-v1'
+
+function loadDismissed(): Set<number> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(DISMISS_KEY)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw) as number[]
+    return new Set(arr)
+  } catch {
+    return new Set()
+  }
+}
+
+function persistDismissed(s: Set<number>) {
+  try {
+    localStorage.setItem(DISMISS_KEY, JSON.stringify(Array.from(s)))
+  } catch {
+    // ignore
+  }
 }
 
 const TYPE_STYLES: Record<string, string> = {
@@ -20,7 +44,7 @@ const TYPE_ICONS: Record<string, string> = { info: 'ℹ️', warning: '⚠️', 
 export default function AnnouncementBanner() {
   const { user, loading } = useAuth()
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
-  const [dismissed, setDismissed] = useState<Set<number>>(new Set())
+  const [dismissed, setDismissed] = useState<Set<number>>(() => loadDismissed())
 
   useEffect(() => {
     // 미인증 상태에서는 호출하지 않음 (로그인 페이지 등)
@@ -31,8 +55,23 @@ export default function AnnouncementBanner() {
       .catch(() => {})
   }, [user, loading])
 
-  const visible = announcements.filter(a => !dismissed.has(a.id))
+  // 만료된 공지 자동 제외 + dismissed 제외
+  const now = Date.now()
+  const visible = announcements.filter(a => {
+    if (dismissed.has(a.id)) return false
+    if (a.expires_at && new Date(a.expires_at).getTime() < now) return false
+    if (a.starts_at && new Date(a.starts_at).getTime() > now) return false
+    return true
+  })
   if (visible.length === 0) return null
+
+  const handleDismiss = (id: number) => {
+    setDismissed(s => {
+      const next = new Set(Array.from(s).concat(id))
+      persistDismissed(next)
+      return next
+    })
+  }
 
   return (
     <div className="space-y-1">
@@ -43,7 +82,7 @@ export default function AnnouncementBanner() {
             <span className="font-semibold">{a.title}</span>
             {a.content && <span className="ml-2 opacity-80">{a.content}</span>}
           </div>
-          <button onClick={() => setDismissed(s => new Set(Array.from(s).concat(a.id)))} className="shrink-0 opacity-50 hover:opacity-100 text-lg leading-none">×</button>
+          <button onClick={() => handleDismiss(a.id)} className="shrink-0 opacity-50 hover:opacity-100 text-lg leading-none" aria-label="닫기">×</button>
         </div>
       ))}
     </div>

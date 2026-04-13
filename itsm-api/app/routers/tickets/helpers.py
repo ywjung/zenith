@@ -15,7 +15,7 @@ from ...config import get_settings
 from ... import gitlab_client
 from ...models import SLARecord
 from ..automation import evaluate_automation_rules  # noqa: F401
-from ...rate_limit import user_limiter, LIMIT_TICKET_CREATE, LIMIT_UPLOAD, LIMIT_COMMENT, LIMIT_SEARCH  # noqa: F401
+from ...rate_limit import user_limiter, LIMIT_TICKET_CREATE, LIMIT_UPLOAD, LIMIT_COMMENT, LIMIT_SEARCH, LIMIT_AI, LIMIT_EXPORT  # noqa: F401
 from ...redis_client import get_redis as _get_redis, scan_delete as _scan_delete
 
 
@@ -634,6 +634,38 @@ def _is_issue_assigned_to_user(issue: dict, user: dict) -> bool:
         if my_username and assignee_username == my_username:
             return True
     return False
+
+
+def _can_user_view_issue(issue: dict, user: dict) -> bool:
+    """
+    SEC: 단일 티켓 조회 권한 검증 (IDOR 방지).
+    - admin/manager/pl: 모든 티켓 조회 가능
+    - agent/developer: 모든 티켓 조회 (운영팀 워크플로우)
+    - user: 본인이 신청자(requester)인 티켓만
+    - confidential 티켓: pl 이상 또는 신청자 본인만
+
+    role 매칭은 ROLE_LEVELS에 의존하지만 순환 import 방지 위해 내부에서 import.
+    """
+    from ...rbac import ROLE_LEVELS
+    role = user.get("role", "user") or "user"
+    level = ROLE_LEVELS.get(role, 0)
+    pl_level = ROLE_LEVELS.get("pl", 0)
+    developer_level = ROLE_LEVELS.get("developer", 0)
+
+    is_confidential = bool(issue.get("confidential", False))
+    requester_username, _ = _get_issue_requester(issue)
+    is_requester = bool(requester_username) and requester_username == user.get("username", "")
+
+    # confidential: pl+ 또는 신청자 본인만
+    if is_confidential:
+        return level >= pl_level or is_requester
+
+    # 일반 티켓: developer 이상은 모두 조회 가능 (운영 워크플로우 — 다른 팀 티켓 참조 등)
+    if level >= developer_level:
+        return True
+
+    # role==user: 본인이 신청한 티켓만
+    return is_requester
 
 
 def _sla_to_dict(record) -> dict:

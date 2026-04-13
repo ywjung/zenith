@@ -1,5 +1,6 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -8,6 +9,8 @@ import { fetchKBArticle, deleteKBArticle, publishKBArticle, fetchKBArticles, fet
 import type { KBRevision } from '@/lib/api'
 import type { KBArticle } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
+import Avatar from '@/components/Avatar'
+import { useConfirm } from '@/components/ConfirmProvider'
 import { useAuth } from '@/context/AuthContext'
 import dynamic from 'next/dynamic'
 const MarkdownRenderer = dynamic(() => import('@/components/MarkdownRenderer'), { ssr: false })
@@ -52,6 +55,7 @@ function readingMinutes(content: string) {
 }
 
 function ArticleContent() {
+  const confirm = useConfirm()
   const params = useParams()
   const router = useRouter()
   const { isAgent, isAdmin } = useAuth()
@@ -92,12 +96,12 @@ function ArticleContent() {
   }, [idOrSlug])
 
   const handleDelete = async () => {
-    if (!article || !confirm(t('delete_confirm'))) return
+    if (!article || !(await confirm({ title: t('delete_confirm'), variant: 'danger', confirmLabel: '확인' }))) return
     try {
       await deleteKBArticle(article.id)
       router.push('/kb')
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('delete_failed'))
+      toast.error(e instanceof Error ? e.message : t('delete_failed'))
     }
   }
 
@@ -123,7 +127,7 @@ function ArticleContent() {
   }
 
   const handleRestore = async (rev: KBRevision) => {
-    if (!article || !confirm(t('restore_confirm', { n: rev.revision_number }))) return
+    if (!article || !(await confirm({ title: t('restore_confirm', { n: rev.revision_number }), variant: 'danger', confirmLabel: '확인' }))) return
     setRestoringId(rev.id)
     try {
       await restoreKBRevision(article.id, rev.id)
@@ -132,7 +136,7 @@ function ArticleContent() {
       setRevisions([])
       setShowRevisions(false)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('restore_failed'))
+      toast.error(e instanceof Error ? e.message : t('restore_failed'))
     } finally {
       setRestoringId(null)
     }
@@ -144,7 +148,7 @@ function ArticleContent() {
       const result = await publishKBArticle(article.id, !article.published)
       setArticle((a) => a ? { ...a, published: result.published } : a)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('toggle_failed'))
+      toast.error(e instanceof Error ? e.message : t('toggle_failed'))
     }
   }
 
@@ -198,9 +202,7 @@ function ArticleContent() {
               <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                 {article.author_name && (
                   <div className="flex items-center gap-1.5">
-                    <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                      {(article.author_name[0] ?? '?').toUpperCase()}
-                    </div>
+                    <Avatar name={article.author_name} username={article.author_name} size="sm" />
                     <span>{formatName(article.author_name)}</span>
                   </div>
                 )}
@@ -268,16 +270,25 @@ function ArticleContent() {
         </article>
 
         {/* Sidebar */}
-        <aside className="w-52 flex-shrink-0 space-y-4">
-          {/* Table of Contents */}
+        <aside className="w-52 flex-shrink-0 space-y-4 hidden lg:block">
+          {/* Table of Contents - sticky */}
           {headings.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{t('toc')}</div>
-              <nav className="space-y-0.5">
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sticky top-4">
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                <span>{t('toc')}</span>
+                <span className="text-[10px] font-normal text-gray-400">📖 {mins}분</span>
+              </div>
+              <nav className="space-y-0.5 max-h-[60vh] overflow-y-auto">
                 {headings.map((h, i) => (
                   <a
                     key={i}
                     href={`#${h.id}`}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      const el = document.getElementById(h.id)
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      window.history.replaceState(null, '', `#${h.id}`)
+                    }}
                     className={`block text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded px-2 py-1 transition-colors leading-snug ${
                       h.level === 1 ? 'font-medium' : h.level === 2 ? 'pl-4 text-gray-500 dark:text-gray-500' : 'pl-7 text-gray-400 dark:text-gray-600'
                     }`}
@@ -327,14 +338,14 @@ function ArticleContent() {
                         <button
                           onClick={() => handlePreview(rev)}
                           disabled={previewLoading}
-                          className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:underline disabled:opacity-50"
+                          className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {t('view_btn')}
                         </button>
                         <button
                           onClick={() => handleRestore(rev)}
                           disabled={restoringId === rev.id}
-                          className="text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                          className="text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {restoringId === rev.id ? '...' : t('restore_btn')}
                         </button>
@@ -386,9 +397,9 @@ function RevisionPreviewModal({ rev, onClose, onRestore }: {
 }) {
   const t = useTranslations('kb')
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 animate-fadeIn backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
+        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col animate-scaleIn"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
@@ -406,7 +417,7 @@ function RevisionPreviewModal({ rev, onClose, onRestore }: {
             >
               {t('restore_this')}
             </button>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none" aria-label="닫기">×</button>
           </div>
         </div>
         <div className="overflow-y-auto flex-1 p-6">

@@ -307,7 +307,11 @@ function BreakdownSection({ from, to }: { from: string; to: string }) {
         <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">{t('breakdown_by_category')}</h3>
           {catEntries.length === 0 ? (
-            <p className="text-sm text-gray-400 dark:text-gray-500">{t('breakdown_no_data')}</p>
+            <div className="text-center py-6">
+              <div className="text-3xl mb-2 select-none" aria-hidden="true">📊</div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('breakdown_no_data')}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">선택한 기간에 티켓이 없습니다. 날짜 범위를 넓혀보세요.</p>
+            </div>
           ) : (
             <div className="space-y-3">
               {catEntries.map(([cat, count]) => {
@@ -334,7 +338,11 @@ function BreakdownSection({ from, to }: { from: string; to: string }) {
         <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">{t('breakdown_by_priority')}</h3>
           {prioEntries.length === 0 ? (
-            <p className="text-sm text-gray-400 dark:text-gray-500">{t('breakdown_no_data')}</p>
+            <div className="text-center py-6">
+              <div className="text-3xl mb-2 select-none" aria-hidden="true">📊</div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('breakdown_no_data')}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">선택한 기간에 티켓이 없습니다. 날짜 범위를 넓혀보세요.</p>
+            </div>
           ) : (
             <div className="space-y-3">
               {prioEntries.map(([prio, count]) => {
@@ -784,8 +792,21 @@ function AgentPerformanceSection({ from, to }: { from: string; to: string }) {
   if (loading) return <div className="text-center py-12 text-gray-400 dark:text-gray-500">{t('agent_loading')}</div>
   if (data.length === 0) return <div className="text-center py-12 text-gray-400 dark:text-gray-500">{t('agent_no_data')}</div>
 
+  // 최고 실적자 하이라이트
+  const topResolver = data.reduce((best, a) => a.resolved > (best?.resolved ?? 0) ? a : best, data[0])
+  const topRated = data.reduce((best, a) => (a.avg_rating ?? 0) > (best?.avg_rating ?? 0) ? a : best, data[0])
+  const topSla = data.reduce((best, a) => (a.sla_met_rate ?? 0) > (best?.sla_met_rate ?? 0) ? a : best, data[0])
+
   return (
     <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm overflow-hidden">
+      {/* 성과 하이라이트 */}
+      {data.length >= 2 && (
+        <div className="flex flex-wrap gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
+          {topResolver && <span className="text-xs"><span className="font-medium text-green-600">🏆 최다 해결</span> {formatName(topResolver.agent_name)} ({topResolver.resolved}건)</span>}
+          {topRated && (topRated.avg_rating ?? 0) > 0 && <span className="text-xs"><span className="font-medium text-yellow-500">⭐ 최고 평점</span> {formatName(topRated.agent_name)} ({topRated.avg_rating?.toFixed(1)}점)</span>}
+          {topSla && (topSla.sla_met_rate ?? 0) > 0 && <span className="text-xs"><span className="font-medium text-purple-600">🎯 SLA 최우수</span> {formatName(topSla.agent_name)} ({topSla.sla_met_rate?.toFixed(0)}%)</span>}
+        </div>
+      )}
       <table className="w-full text-sm">
         <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
           <tr>

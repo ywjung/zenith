@@ -29,9 +29,12 @@ function LoginContent() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace('/')
+      // ?next= 로 전달된 원래 경로가 있으면 복귀 (open-redirect 방지: 같은 origin + '/' 시작만 허용).
+      const next = params.get('next')
+      const safe = next && next.startsWith('/') && !next.startsWith('//') ? next : '/'
+      router.replace(safe)
     }
-  }, [user, loading, router])
+  }, [user, loading, router, params])
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center overflow-hidden"
@@ -105,7 +108,11 @@ function LoginContent() {
               )}
 
               <a
-                href={`${API_BASE}/auth/login`}
+                href={(() => {
+                  const next = params.get('next')
+                  const safe = next && next.startsWith('/') && !next.startsWith('//') ? next : ''
+                  return `${API_BASE}/auth/login${safe ? `?next=${encodeURIComponent(safe)}` : ''}`
+                })()}
                 className="flex items-center justify-center gap-2.5 w-full py-3 px-4 rounded-xl font-semibold text-sm text-white transition-all duration-150 active:scale-[0.98]"
                 style={{
                   background: 'linear-gradient(135deg, #FC6D26 0%, #E24329 100%)',

@@ -37,13 +37,27 @@ build: ## Build and redeploy all services
 	docker compose build
 	docker compose up -d
 
-build-api: ## Build and redeploy backend only
+build-api: ## Build and redeploy backend only (+ nginx reload for fresh upstream IP)
 	docker compose build itsm-api
 	docker compose up -d itsm-api
+	docker compose restart nginx
 
-build-web: ## Build and redeploy frontend only
+build-web: ## Build and redeploy frontend only (+ nginx reload for fresh upstream IP)
 	docker compose build itsm-web
 	docker compose up -d itsm-web
+	docker compose restart nginx
+
+redeploy: ## Rebuild api+web together then reload nginx (safe default for dev)
+	docker compose build itsm-api itsm-web
+	docker compose up -d itsm-api itsm-web
+	docker compose restart nginx
+
+nginx-check: ## Render nginx template & run nginx -t (pre-merge sanity)
+	docker run --rm \
+	  -v "$(PWD)/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+	  -v "$(PWD)/nginx/templates:/etc/nginx/templates:ro" \
+	  -v "$(PWD)/nginx/conf.d:/etc/nginx/conf.d:ro" \
+	  nginx:1.27-alpine sh -c '/docker-entrypoint.d/20-envsubst-on-templates.sh && nginx -t'
 
 install: ## Install all dependencies
 	cd itsm-api && pip install -r requirements-dev.txt

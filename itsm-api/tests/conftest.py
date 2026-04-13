@@ -52,7 +52,12 @@ def _sqlite_safe_create_engine(url, **kwargs):
             kwargs.pop(k, None)
         # StaticPool: all connections share the same in-memory DB across fixtures
         kwargs["poolclass"] = StaticPool
-        kwargs.setdefault("connect_args", {}).setdefault("check_same_thread", False)
+        # PG-only connect_args (예: options="-c statement_timeout=...") 제거 후 sqlite 전용 인자만 설정
+        connect_args = dict(kwargs.get("connect_args") or {})
+        for k in ("options", "sslmode", "application_name"):
+            connect_args.pop(k, None)
+        connect_args.setdefault("check_same_thread", False)
+        kwargs["connect_args"] = connect_args
     return _original_create_engine(url, **kwargs)
 
 _sa.create_engine = _sqlite_safe_create_engine
@@ -92,6 +97,13 @@ from app.main import app  # noqa: E402
 # Single in-memory engine (StaticPool keeps the DB alive for the entire session)
 test_engine = _sqlite_safe_create_engine("sqlite:///:memory:")
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+# 일부 코드(예: auth.py)가 dependency override를 거치지 않고 `from app.database import SessionLocal`로 직접
+# import해서 사용하므로, app.database.SessionLocal/engine을 test 엔진으로 monkey-patch한다.
+# 이렇게 하지 않으면 auth.py의 UserRole 쿼리가 production engine(빈 schema)을 사용해 503을 반환한다.
+import app.database as _app_db  # noqa: E402
+_app_db.engine = test_engine
+_app_db.SessionLocal = TestSessionLocal
 
 
 @pytest.fixture(autouse=True)

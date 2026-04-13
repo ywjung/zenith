@@ -47,6 +47,7 @@ export interface Comment {
   author_name: string
   author_avatar?: string
   created_at: string
+  updated_at?: string
   internal?: boolean
 }
 
@@ -102,6 +103,7 @@ export interface TicketStats {
   ready_for_release: number
   released: number
   closed: number
+  unassigned?: number
   sla_over?: number
   sla_imminent?: number
 }

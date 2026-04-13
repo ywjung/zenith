@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -10,6 +10,94 @@ import { formatName } from '@/lib/utils'
 import NotificationBell from './NotificationBell'
 import GlobalSearch from './GlobalSearch'
 import LocaleSwitcher from './LocaleSwitcher'
+
+type UserShape = {
+  name: string
+  username: string
+  role: string
+}
+
+function UserMenu({ user, logout, t }: { user: UserShape; logout: () => void; t: ReturnType<typeof useTranslations> }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const pathname = usePathname()
+
+  // 외부 클릭 / Escape 닫기
+  useEffect(() => {
+    if (!open) return
+    const onClick = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  // 라우트 변경 시 자동 닫기
+  useEffect(() => { setOpen(false) }, [pathname])
+
+  return (
+    <div ref={wrapRef} className="relative flex items-center gap-2 border-l border-blue-500 dark:border-gray-700 pl-3">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="사용자 메뉴"
+        className="flex items-center gap-2 cursor-pointer rounded-md px-1 py-0.5 hover:bg-blue-600/40 dark:hover:bg-gray-700 transition-colors"
+      >
+        <span className="opacity-90 text-sm whitespace-nowrap">{formatName(user.name)}</span>
+        {user.role !== 'user' && (
+          <span className="text-xs bg-blue-500 dark:bg-gray-700 px-1.5 py-0.5 rounded whitespace-nowrap">
+            {t(`role.${user.role}`)}
+          </span>
+        )}
+        <span className={`text-blue-300 dark:text-gray-500 text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden animate-fadeIn">
+          <Link
+            href="/profile"
+            role="menuitem"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span>{t('nav.profile')}</span>
+          </Link>
+          <Link
+            href="/profile/sessions"
+            role="menuitem"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <span>{t('nav.sessions')}</span>
+          </Link>
+          <div className="border-t border-gray-100 dark:border-gray-700" />
+          <button
+            onClick={logout}
+            role="menuitem"
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>{t('nav.logout')}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function NavLink({ href, icon, label, dataTour }: {
   href: string
@@ -48,6 +136,27 @@ export default function Header() {
     setMobileMenuOpen(false)
     setMobileViewsOpen(false)
   }, [pathname])
+
+  // 로그인된 사용자가 칸반 외 페이지에 있을 때 idle 시점에 칸반 데이터 프리페치 →
+  // 사용자가 칸반 메뉴 클릭 시 즉시 렌더 (네트워크 RTT 제거).
+  useEffect(() => {
+    if (!user || pathname?.startsWith('/kanban')) return
+    let cancelled = false
+    const run = async () => {
+      const { prefetchKanban } = await import('@/lib/kanbanPrefetch')
+      if (cancelled) return
+      const lastProject = typeof window !== 'undefined' ? localStorage.getItem('itsm:lastProject') || undefined : undefined
+      prefetchKanban(lastProject)
+    }
+    const w = window as Window & { requestIdleCallback?: (cb: IdleRequestCallback) => number }
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(() => { run() }, { timeout: 3000 })
+      return () => { cancelled = true; (w as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(id) }
+    } else {
+      const id = setTimeout(run, 1500)
+      return () => { cancelled = true; clearTimeout(id) }
+    }
+  }, [user, pathname])
 
   function cycleTheme() {
     const next: Record<string, 'light' | 'dark' | 'system'> = {
@@ -275,48 +384,9 @@ export default function Header() {
               </button>
               <LocaleSwitcher />
 
-              {/* 프로필 드롭다운 */}
-              <div className="relative flex items-center gap-2 border-l border-blue-500 dark:border-gray-700 pl-3 group">
-                <button className="flex items-center gap-2 cursor-pointer" aria-label="사용자 메뉴">
-                  <span className="opacity-90 text-sm whitespace-nowrap">{formatName(user.name)}</span>
-                  {user.role !== 'user' && (
-                    <span className="text-xs bg-blue-500 dark:bg-gray-700 px-1.5 py-0.5 rounded whitespace-nowrap">
-                      {t(`role.${user.role}`)}
-                    </span>
-                  )}
-                  <span className="text-blue-300 dark:text-gray-500 text-xs">▾</span>
-                </button>
-                <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-150">
-                  <Link
-                    href="/profile"
-                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    <span>{t('nav.profile')}</span>
-                  </Link>
-                  <Link
-                    href="/profile/sessions"
-                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    <span>{t('nav.sessions')}</span>
-                  </Link>
-                  <div className="border-t border-gray-100 dark:border-gray-700" />
-                  <button
-                    onClick={logout}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    <span>{t('nav.logout')}</span>
-                  </button>
-                </div>
-              </div>
+              {/* 프로필 드롭다운 — 클릭 토글 + 키보드 + 외부 클릭 닫기 */}
+              <UserMenu user={user} logout={logout} t={t} />
+
             </>
           ) : (
             <>

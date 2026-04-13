@@ -13,6 +13,7 @@ import type { GitLabProject, ProjectMember, Milestone, TicketTemplate, KBArticle
 import dynamic from 'next/dynamic'
 import { toast } from 'sonner'
 import RequireAuth from '@/components/RequireAuth'
+import SpinnerIcon from '@/components/SpinnerIcon'
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false })
 import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
@@ -123,6 +124,17 @@ function NewTicketContent() {
   useEffect(() => {
     isDirtyRef.current = !!(form.title || form.description || form.employee_name)
   }, [form.title, form.description, form.employee_name])
+
+  // 자동 임시저장: 폼이 더티 상태이고 제출 전이면 2초 debounce로 localStorage 저장
+  useEffect(() => {
+    if (!isDirtyRef.current || submittedRef.current) return
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, confidential, categoryContext, savedAt: Date.now() }))
+      } catch {}
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [form, confidential, categoryContext])
 
   // 페이지 진입 시 임시저장 데이터 확인
   useEffect(() => {
@@ -291,9 +303,17 @@ function NewTicketContent() {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
+  /** 업로드 결과 URL을 표시용 URL로 변환. MinIO URL은 직접 사용, GitLab path는 proxy 래핑. */
+  function toDisplayUrl(result: { proxy_path?: string; full_path?: string; url?: string }): string {
+    const raw = result.proxy_path || result.full_path || result.url || ''
+    if (raw.startsWith('/api/storage/') || raw.startsWith('/api/v1/storage/')) return raw
+    if (/^https?:\/\//.test(raw)) return raw
+    return `/api/tickets/uploads/proxy?path=${encodeURIComponent(raw)}`
+  }
+
   async function handleDescriptionImageUpload(file: File): Promise<string> {
     const result = await uploadFile(file, form.project_id || undefined)
-    return `/api/tickets/uploads/proxy?path=${encodeURIComponent(result.proxy_path || result.full_path)}`
+    return toDisplayUrl(result)
   }
 
   function addFiles(selected: File[]) {
@@ -318,6 +338,77 @@ function NewTicketContent() {
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
+  // 윈도우 전체 드래그 시 overlay (Notion 스타일)
+  useEffect(() => {
+    let dragCounter = 0
+    function onDragEnter(e: DragEvent) {
+      e.preventDefault()
+      if (e.dataTransfer?.types.includes('Files')) {
+        dragCounter++
+        setIsDragging(true)
+      }
+    }
+    function onDragLeave(e: DragEvent) {
+      e.preventDefault()
+      dragCounter--
+      if (dragCounter <= 0) {
+        dragCounter = 0
+        setIsDragging(false)
+      }
+    }
+    function onDragOver(e: DragEvent) {
+      e.preventDefault()
+    }
+    function onDrop(e: DragEvent) {
+      e.preventDefault()
+      dragCounter = 0
+      setIsDragging(false)
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        // 큐에 자동 추가
+        addFiles(Array.from(e.dataTransfer.files))
+      }
+    }
+    window.addEventListener('dragenter', onDragEnter)
+    window.addEventListener('dragleave', onDragLeave)
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter)
+      window.removeEventListener('dragleave', onDragLeave)
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [])
+
+  // 클립보드 이미지 paste → 첨부 큐에 자동 추가
+  useEffect(() => {
+    function handlePaste(e: ClipboardEvent) {
+      // RichTextEditor 내부에서는 자체 처리되도록 contenteditable 안에서는 무시
+      const target = e.target as HTMLElement
+      if (target?.closest('[contenteditable="true"]')) return
+      const items = e.clipboardData?.items
+      if (!items) return
+      const images: File[] = []
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) {
+            const ext = file.type.split('/')[1] || 'png'
+            const renamed = new File([file], `clipboard-${Date.now()}.${ext}`, { type: file.type })
+            images.push(renamed)
+          }
+        }
+      }
+      if (images.length > 0) {
+        addFiles(images)
+        toast.success(`이미지 ${images.length}개를 첨부했습니다.`)
+      }
+    }
+    window.addEventListener('paste', handlePaste)
+    return () => window.removeEventListener('paste', handlePaste)
+  }, [])
+
   // 마크다운 툴바
   function insertMarkdown(prefix: string, suffix = '', placeholder = '텍스트') {
     const ta = document.getElementById('desc-ta') as HTMLTextAreaElement | null
@@ -338,6 +429,21 @@ function NewTicketContent() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // 클라이언트 측 사전 검증 — 첫 invalid 필드로 자동 스크롤+포커스
+    if (form.title.trim().length < 5) {
+      setError('제목은 최소 5자 이상이어야 합니다.')
+      const titleEl = document.querySelector<HTMLInputElement>('input[name="title"]')
+      titleEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setTimeout(() => titleEl?.focus(), 300)
+      return
+    }
+    if (!form.description || form.description.replace(/<[^>]*>/g, '').trim().length < 5) {
+      setError('내용을 5자 이상 입력해주세요.')
+      const descEl = document.querySelector<HTMLElement>('[contenteditable="true"]')
+      descEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setTimeout(() => descEl?.focus(), 300)
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
@@ -354,11 +460,11 @@ function NewTicketContent() {
         for (const file of files) {
           const result = await uploadFile(file, form.project_id || undefined)
           const ext = (file.name.split('.').pop() || '').toLowerCase()
-          const proxyUrl = `/api/tickets/uploads/proxy?path=${encodeURIComponent(result.proxy_path || result.full_path)}`
+          const displayUrl = toDisplayUrl(result)
           markdowns.push(
             IMAGE_EXTS.has(ext)
-              ? `![${result.name}](${proxyUrl})`
-              : `[📎 ${result.name}](${proxyUrl}&download=true)`
+              ? `![${result.name}](${displayUrl})`
+              : `[📎 ${result.name}](${displayUrl}${displayUrl.includes('?') ? '&' : '?'}download=true)`
           )
         }
         setUploadingFiles(false)
@@ -387,7 +493,13 @@ function NewTicketContent() {
       const qs = ticket.project_id ? `?project_id=${ticket.project_id}` : ''
       submittedRef.current = true
       clearDraft()
-      toast.success(`티켓 #${ticket.iid}이(가) 등록되었습니다.`)
+      // UX3 #6: 제출 성공 시 SLA 예상 시간 안내
+      const slaMap: Record<string, string> = { critical: '8시간', high: '24시간', medium: '3일', low: '7일' }
+      const slaHint = slaMap[form.priority] || '3일'
+      toast.success(`티켓 #${ticket.iid} 등록 완료`, {
+        description: `예상 처리 기한: ${slaHint} 이내`,
+        duration: 5000,
+      })
       router.push(`/tickets/${ticket.iid}${qs}`)
     } catch (err: unknown) {
       setUploadingFiles(false)
@@ -405,10 +517,21 @@ function NewTicketContent() {
   return (
     <div className="w-full">
 
+      {/* 윈도우 전체 드래그 시 fullscreen drop overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 z-[9998] bg-blue-600/20 backdrop-blur-sm pointer-events-none flex items-center justify-center animate-fadeIn">
+          <div className="bg-white dark:bg-gray-900 border-4 border-dashed border-blue-500 dark:border-blue-400 rounded-3xl px-12 py-16 text-center shadow-2xl">
+            <div className="text-6xl mb-3 select-none">📥</div>
+            <p className="text-lg font-bold text-blue-700 dark:text-blue-300">파일을 여기에 놓으세요</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">티켓 첨부 파일로 추가됩니다</p>
+          </div>
+        </div>
+      )}
+
       {/* ── 이탈 확인 모달 ── */}
       {leaveModal.show && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 overflow-hidden">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 animate-fadeIn backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 overflow-hidden animate-scaleIn">
             {/* 상단 강조 바 */}
             <div className="h-1 w-full bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400" />
             <div className="p-6">
@@ -548,7 +671,7 @@ function NewTicketContent() {
                     setForm((prev) => ({ ...prev, category: c.description || c.value }))
                     setCategoryContext('')
                   }}
-                  className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 transition-all text-center ${
+                  className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 transition-all text-center active:scale-[0.97] ${
                     form.category === (c.description || c.value)
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-sm'
                       : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -604,16 +727,35 @@ function NewTicketContent() {
                   {form.title.length}/200
                 </span>
               </div>
-              <input
-                name="title"
-                value={form.title}
-                onChange={handleChange}
-                required
-                minLength={5}
-                maxLength={200}
-                placeholder={t('subject_placeholder')}
-                className="w-full border dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="relative">
+                <input
+                  name="title"
+                  value={form.title}
+                  onChange={handleChange}
+                  onBlur={(e) => setForm(prev => ({ ...prev, title: e.target.value.trim() }))}
+                  required
+                  minLength={5}
+                  maxLength={200}
+                  autoComplete="off"
+                  spellCheck="true"
+                  placeholder={t('subject_placeholder')}
+                  aria-invalid={form.title.length > 0 && form.title.trim().length < 5}
+                  className={`w-full border dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 ${form.title.length > 0 && form.title.trim().length < 5 ? 'border-red-300 dark:border-red-600 focus:ring-red-500' : form.title.trim().length >= 5 ? 'border-green-300 dark:border-green-600 focus:ring-green-500' : 'focus:ring-blue-500'}`}
+                />
+                {form.title.trim().length >= 5 && (
+                  <span
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 pointer-events-none animate-fadeIn"
+                    aria-label="유효함"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
+              </div>
+              {form.title.length > 0 && form.title.trim().length < 5 && (
+                <p className="mt-1 text-xs text-red-500">제목은 최소 5자 이상이어야 합니다.</p>
+              )}
             </div>
 
             {/* 상세 내용 — 리치 텍스트 에디터 */}
@@ -666,7 +808,7 @@ function NewTicketContent() {
                       <span className="shrink-0">{getFileIcon(file.name)}</span>
                       <span className="truncate text-gray-700 dark:text-gray-200 flex-1">{file.name}</span>
                       <span className="text-gray-400 dark:text-gray-500 text-xs shrink-0">{formatFileSize(file.size)}</span>
-                      <button type="button" onClick={() => removeFile(idx)} className="text-gray-400 hover:text-red-500 text-xs shrink-0">✕</button>
+                      <button type="button" onClick={() => removeFile(idx)} className="text-gray-400 hover:text-red-500 text-xs shrink-0" aria-label="삭제">✕</button>
                     </li>
                   ))}
                 </ul>
@@ -726,7 +868,7 @@ function NewTicketContent() {
               {PRIORITIES.map((p) => (
                 <label
                   key={p.value}
-                  className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                  className={`cursor-pointer rounded-lg border-2 p-3 transition-all active:scale-[0.97] ${
                     form.priority === p.value ? p.active + ' shadow-sm' : p.inact + ' hover:border-gray-300 dark:hover:border-gray-500'
                   }`}
                 >
@@ -972,9 +1114,10 @@ function NewTicketContent() {
             <button
               type="submit"
               disabled={!canSubmit}
-              className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+              className={`relative overflow-hidden flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm flex items-center justify-center gap-2 ${(uploadingFiles || submitting) ? 'btn-progress' : ''}`}
             >
-              {uploadingFiles ? '📤 파일 업로드 중...' : submitting ? '등록 중...' : '✓ 티켓 등록'}
+              {(uploadingFiles || submitting) && <SpinnerIcon className="w-4 h-4" />}
+              {uploadingFiles ? '파일 업로드 중...' : submitting ? '등록 중...' : '✓ 티켓 등록'}
             </button>
             <button
               type="button"

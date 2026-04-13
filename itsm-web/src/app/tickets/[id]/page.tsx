@@ -813,7 +813,7 @@ function DescriptionWithAttachments({
       })}
       {fileParts.length > 0 && (
         <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-1.5">
-          <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">첨부 파일</p>
+          <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">{t('attachments_label')}</p>
           {fileParts.map((part, i) => (
             <AttachmentFileItem key={i} url={part.url!} name={part.name!} onImageClick={onImageClick} />
           ))}

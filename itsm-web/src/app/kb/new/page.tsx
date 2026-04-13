@@ -22,6 +22,14 @@ function NewKBContent() {
   const { serviceTypes } = useServiceTypes()
   const t = useTranslations('kb')
 
+  // KB 작성 템플릿
+  const KB_TEMPLATES = [
+    { id: 'blank', label: '빈 문서', icon: '📄', content: '' },
+    { id: 'troubleshoot', label: '문제 해결', icon: '🔧', content: '<h2>증상</h2>\n<p>어떤 문제가 발생하는지 설명해주세요.</p>\n\n<h2>원인</h2>\n<p>문제의 근본 원인을 기술합니다.</p>\n\n<h2>해결 방법</h2>\n<ol><li>첫 번째 단계</li><li>두 번째 단계</li></ol>\n\n<h2>관련 문서</h2>\n<p>참고할 수 있는 다른 KB 문서나 외부 링크</p>' },
+    { id: 'faq', label: 'FAQ', icon: '❓', content: '<h2>질문</h2>\n<p>자주 묻는 질문을 작성합니다.</p>\n\n<h2>답변</h2>\n<p>명확하고 간결한 답변을 작성합니다.</p>\n\n<h2>추가 참고</h2>\n<p>더 자세한 내용이 필요하면 이곳에 작성합니다.</p>' },
+    { id: 'howto', label: '절차 가이드', icon: '📝', content: '<h2>개요</h2>\n<p>이 절차의 목적과 대상을 설명합니다.</p>\n\n<h2>사전 조건</h2>\n<ul><li>필요한 권한 또는 도구</li></ul>\n\n<h2>절차</h2>\n<ol><li><strong>1단계:</strong> 설명</li><li><strong>2단계:</strong> 설명</li><li><strong>3단계:</strong> 설명</li></ol>\n\n<h2>확인 사항</h2>\n<p>절차 완료 후 확인할 사항을 기술합니다.</p>' },
+  ]
+  const [showTemplates, setShowTemplates] = useState(true)
   const [form, setForm] = useState({ title: '', slug: '', content: '', category: '', published: false })
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -77,6 +85,29 @@ function NewKBContent() {
         <Link href="/kb" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">{t('back_to_kb')}</Link>
       </div>
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">{t('new_article_title')}</h1>
+
+      {/* 템플릿 선택 */}
+      {showTemplates && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 mb-5">
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">📄 템플릿으로 시작하기</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {KB_TEMPLATES.map(tmpl => (
+              <button
+                key={tmpl.id}
+                type="button"
+                onClick={() => {
+                  setForm(f => ({ ...f, content: tmpl.content }))
+                  setShowTemplates(false)
+                }}
+                className="flex flex-col items-center gap-1.5 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all active:scale-95 text-center"
+              >
+                <span className="text-2xl">{tmpl.icon}</span>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{tmpl.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Title */}
@@ -195,7 +226,7 @@ function NewKBContent() {
               {tags.map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 rounded-full px-2.5 py-1">
                   #{tag}
-                  <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== tag))} className="hover:text-red-500 ml-0.5">×</button>
+                  <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== tag))} className="hover:text-red-500 ml-0.5" aria-label="제거">×</button>
                 </span>
               ))}
             </div>
@@ -231,7 +262,7 @@ function NewKBContent() {
             <button
               type="submit"
               disabled={submitting}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? t('saving_btn') : (form.published ? t('publish_btn_submit') : t('draft_save_btn'))}
             </button>

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { DragDropContext, Droppable, Draggable, DropResult, DragStart } from '@hello-pangea/dnd'
-import { fetchTickets, updateTicket, fetchProjects } from '@/lib/api'
+import { updateTicket, fetchProjects, fetchKanbanBoard } from '@/lib/api'
+import { consumeKanbanPrefetch } from '@/lib/kanbanPrefetch'
 import { formatDate } from '@/lib/utils'
 import type { Ticket, GitLabProject } from '@/types'
 import RequireAuth from '@/components/RequireAuth'
@@ -89,19 +90,12 @@ function formatSLATime(deadline: string): string {
 }
 
 const CLOSED_PREVIEW = 10
+const KANBAN_LIMIT = 2000
 
-/** 100개 제한을 넘는 프로젝트를 위해 페이지네이션으로 전체 티켓을 로드한다. */
+/** 칸반 전용 경량 엔드포인트 — DB에서 단일 쿼리로 조립. GitLab API 호출 0건. */
 async function fetchAllKanbanTickets(projectId?: string): Promise<Ticket[]> {
-  const all: Ticket[] = []
-  let page = 1
-  while (true) {
-    const res = await fetchTickets({ project_id: projectId, page, per_page: 100 })
-    all.push(...res.tickets)
-    if (all.length >= res.total || res.tickets.length < 100) break
-    page++
-    if (page > 30) break // 안전 상한: 최대 3000건
-  }
-  return all
+  const res = await fetchKanbanBoard({ project_id: projectId, limit: KANBAN_LIMIT })
+  return res.tickets
 }
 
 function KanbanContent() {
@@ -147,19 +141,41 @@ function KanbanContent() {
     if (initializedRef.current) return
     initializedRef.current = true
     const init = async () => {
-      const [projResult, ticketResult] = await Promise.allSettled([
-        fetchProjects(),
-        fetchAllKanbanTickets(),
-      ])
-      if (projResult.status === 'fulfilled' && projResult.value.length > 0) {
-        setProjects(projResult.value)
-        setSelectedProject(projResult.value[0].id)
+      // 0) Header에서 미리 받아둔 prefetch 결과가 있으면 즉시 렌더 (네트워크 0 RTT).
+      const lastProject = typeof window !== 'undefined' ? localStorage.getItem('itsm:lastProject') || undefined : undefined
+      const prefetched = await consumeKanbanPrefetch(lastProject)
+      if (prefetched) {
+        setTickets(prefetched)
+        setColOrders(buildOrders(prefetched))
+        setLoading(false)
       }
-      if (ticketResult.status === 'fulfilled') {
-        setTickets(ticketResult.value)
-        setColOrders(buildOrders(ticketResult.value))
+
+      // 1) 프로젝트 목록부터 확정해 초기 티켓 로드를 첫 프로젝트로 한정한다.
+      let firstProjectId: string | undefined
+      try {
+        const projs = await fetchProjects()
+        if (projs.length > 0) {
+          setProjects(projs)
+          firstProjectId = projs[0].id
+          setSelectedProject(firstProjectId)
+          prevProjectRef.current = firstProjectId
+          if (typeof window !== 'undefined') localStorage.setItem('itsm:lastProject', firstProjectId)
+        }
+      } catch { /* 프로젝트 로드 실패해도 티켓은 시도 */ }
+
+      // 2) prefetch가 다른 프로젝트면 새로 로드. 같은 프로젝트면 백그라운드 갱신만.
+      const needsFreshFetch = !prefetched || firstProjectId !== lastProject
+      if (needsFreshFetch) {
+        try {
+          const all = await fetchAllKanbanTickets(firstProjectId)
+          setTickets(all)
+          setColOrders(buildOrders(all))
+        } catch (e: unknown) {
+          if (!prefetched) setError(e instanceof Error ? e.message : tr('kanban.load_error'))
+        } finally {
+          setLoading(false)
+        }
       }
-      setLoading(false)
     }
     init().catch(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -511,8 +527,8 @@ function KanbanContent() {
 
       {/* 이유 입력 모달 */}
       {pendingDrop && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-sm mx-4 border border-gray-200 dark:border-gray-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fadeIn backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-sm mx-4 border border-gray-200 dark:border-gray-700 animate-scaleIn">
             <div className="flex items-start gap-3 mb-4">
               <div className="shrink-0 w-9 h-9 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center">
                 <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -648,9 +664,10 @@ function KanbanContent() {
                     </div>
 
                     {/* Column header */}
-                    <div className={`flex-none flex items-center justify-between px-3 py-2 ${col.header}`}>
+                    <div className={`flex-none flex items-center justify-between px-3 py-2 transition-colors ${overWip ? 'bg-red-100 dark:bg-red-900/40' : col.header}`}>
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 tracking-wide truncate">
+                        {overWip && <span className="text-sm shrink-0" title="WIP 한도 초과 — 작업 분산 필요" aria-label="WIP 초과">🚨</span>}
+                        <span className={`text-xs font-semibold tracking-wide truncate ${overWip ? 'text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-200'}`}>
                           {tr(`kanban.col_${col.id}`)}
                         </span>
                         {isDisabled && (
@@ -737,7 +754,7 @@ function KanbanContent() {
                                     }`}
                                   >
                                     <div className="p-2.5">
-                                      <Link href={`/tickets/${ticket.iid}`} onClick={e => snap.isDragging && e.preventDefault()}>
+                                      <Link href={`/tickets/${ticket.iid}`} onClick={e => snap.isDragging && e.preventDefault()} tabIndex={0} aria-label={`#${ticket.iid} ${ticket.title}`}>
                                         <div className="flex items-start gap-1.5 mb-1">
                                           <div className={`shrink-0 w-1.5 h-1.5 rounded-full mt-1.5 ${PRIORITY_DOT[priority] ?? 'bg-gray-300'}`} />
                                           <div className="min-w-0">

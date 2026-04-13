@@ -17,6 +17,14 @@ import { PRIORITY_ORDER, DEFAULT_PER_PAGE, API_BASE } from '@/lib/constants'
 import type { Ticket, GitLabProject, TicketStats, SavedFilter, KBArticle, NotificationItem } from '@/types'
 import { toast } from 'sonner'
 import { StatusBadge, PriorityBadge, CategoryBadge, SlaBadge } from '@/components/StatusBadge'
+import EmptyState from '@/components/EmptyState'
+import CountUp from '@/components/CountUp'
+import HighlightMatch from '@/components/HighlightMatch'
+import InlineStatusSelect from '@/components/InlineStatusSelect'
+import InlineAssigneeSelect from '@/components/InlineAssigneeSelect'
+import StarToggle from '@/components/StarToggle'
+import RecentTicketsBar from '@/components/RecentTicketsBar'
+import { isTicketUnread, isTicketNew } from '@/lib/ticketReadState'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
@@ -42,10 +50,14 @@ function HomeContent() {
   const [sla, setSla] = useState(() => searchParams.get('sla') || '')
   const [search, setSearch] = useState(() => searchParams.get('q') || '')
   const [searchInput, setSearchInput] = useState(() => searchParams.get('q') || '')
-  const [selectedRequester, setSelectedRequester] = useState(() => searchParams.get('assignee') || '')
+  // 이전 파라미터명 'assignee'는 실제로 요청자 필터였음 → 'requester'로 개명.
+  // 기존 북마크·저장 필터 호환을 위해 둘 다 읽되 저장은 'requester'로 통일.
+  const [selectedRequester, setSelectedRequester] = useState(() => searchParams.get('requester') || searchParams.get('assignee') || '')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'priority'>(() => (searchParams.get('sort') as 'newest' | 'oldest' | 'priority') || 'newest')
   const [fromDate, setFromDate] = useState(() => searchParams.get('from') || '')
   const [toDate, setToDate] = useState(() => searchParams.get('to') || '')
+  const [onlyUnassigned, setOnlyUnassigned] = useState(() => searchParams.get('unassigned') === '1')
+  const [onlyMine, setOnlyMine] = useState(() => searchParams.get('mine') === '1')
 
   const [projects, setProjects] = useState<GitLabProject[]>([])
   const [selectedProject, setSelectedProject] = useState<string>('')
@@ -55,6 +67,14 @@ function HomeContent() {
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null)
 
   const [selectedIids, setSelectedIids] = useState<Set<number>>(new Set())
+  const [lastSelectedIid, setLastSelectedIid] = useState<number | null>(null)
+  const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
+    if (typeof window === 'undefined') return 'comfortable'
+    return (localStorage.getItem('ticket-list-density') as 'comfortable' | 'compact') || 'comfortable'
+  })
+  useEffect(() => {
+    try { localStorage.setItem('ticket-list-density', density) } catch { /* ignore */ }
+  }, [density])
   const [bulkAction, setBulkAction] = useState('close')
   const [bulkValue, setBulkValue] = useState('')
   const [bulkProcessing, setBulkProcessing] = useState(false)
@@ -183,7 +203,7 @@ function HomeContent() {
     const prio = overrides.priority ?? priority
     const sl = overrides.sla ?? sla
     const q = overrides.q ?? search
-    const assignee = overrides.assignee ?? selectedRequester
+    const requester = (overrides as Record<string, string>).requester ?? overrides.assignee ?? selectedRequester
     const fd = overrides.from ?? fromDate
     const td = overrides.to ?? toDate
     const sort = overrides.sort ?? sortBy
@@ -193,9 +213,11 @@ function HomeContent() {
     if (prio) params.set('priority', prio)
     if (sl) params.set('sla', sl)
     if (q) params.set('q', q)
-    if (assignee) params.set('assignee', assignee)
+    if (requester) params.set('requester', requester)
     if (fd) params.set('from', fd)
     if (td) params.set('to', td)
+    if (onlyUnassigned) params.set('unassigned', '1')
+    if (onlyMine) params.set('mine', '1')
     if (sort && sort !== 'newest') params.set('sort', sort)
     if (proj) params.set('project', proj)
     const qs = params.toString()
@@ -215,7 +237,21 @@ function HomeContent() {
 
       if (statsResult.status === 'fulfilled') setStats(statsResult.value)
       if (filtersResult.status === 'fulfilled') setSavedFilters(filtersResult.value)
-      if (filterOptsResult.status === 'fulfilled') setFilterOptions(filterOptsResult.value)
+      if (filterOptsResult.status === 'fulfilled') {
+        const opts = filterOptsResult.value
+        setFilterOptions(opts)
+        // URL에 유효하지 않은 필터 값이 들어오면 초기화하고 토스트로 안내.
+        const invalid: string[] = []
+        if (category && !opts.categories.some(c => c.key === category)) invalid.push(`category=${category}`)
+        if (priority && !opts.priorities.some(p => p.key === priority)) invalid.push(`priority=${priority}`)
+        if (state && state !== 'all' && !opts.statuses.some(s => s.key === state)) invalid.push(`status=${state}`)
+        if (invalid.length > 0) {
+          if (invalid.some(v => v.startsWith('category='))) setCategory('')
+          if (invalid.some(v => v.startsWith('priority='))) setPriority('')
+          if (invalid.some(v => v.startsWith('status='))) setState('all')
+          toast.warning(`알 수 없는 필터 값 무시: ${invalid.join(', ')}`)
+        }
+      }
 
       // ② 프로젝트 수에 따라 selectedProject 결정
       //    1개: '' (전체) — list_tickets는 이미 '' 로 실행 중이므로 재로드 불필요
@@ -307,6 +343,7 @@ function HomeContent() {
         page,
         per_page: DEFAULT_PER_PAGE,
         created_by_username: selectedRequester || undefined,
+        assignee_username: onlyUnassigned ? '__none__' : (onlyMine && user?.username ? user.username : undefined),
         sort_by: sortBy === 'oldest' ? 'created_at' : sortBy === 'priority' ? 'priority' : 'created_at',
         order:   sortBy === 'oldest' ? 'asc' : 'desc',
         created_after:  fromDate  ? `${fromDate}T00:00:00`  : undefined,
@@ -319,7 +356,7 @@ function HomeContent() {
     } finally {
       setLoading(false)
     }
-  }, [state, category, priority, sla, search, selectedProject, page, selectedRequester, sortBy, fromDate, toDate])
+  }, [state, category, priority, sla, search, selectedProject, page, selectedRequester, onlyUnassigned, onlyMine, user?.username, sortBy, fromDate, toDate])
 
   useEffect(() => {
     load()
@@ -344,12 +381,12 @@ function HomeContent() {
     setSelectedProject(pid); setPage(1); setPriority(''); setSla(''); setSelectedRequester(''); setSelectedIids(new Set()); syncUrl({ project: pid })
   }
   function handleRequesterChange(username: string) {
-    setSelectedRequester(username); setPage(1); setSelectedIids(new Set()); syncUrl({ assignee: username })
+    setSelectedRequester(username); setPage(1); setSelectedIids(new Set()); syncUrl({ requester: username })
   }
 
   function resetAllFilters() {
     setState('all'); setCategory(''); setPriority(''); setSla(''); setSearch(''); setSearchInput('')
-    setSelectedRequester(''); setFromDate(''); setToDate('')
+    setSelectedRequester(''); setFromDate(''); setToDate(''); setOnlyUnassigned(false); setOnlyMine(false)
     setPage(1); setSelectedIids(new Set()); router.replace('/', { scroll: false })
   }
 
@@ -363,7 +400,7 @@ function HomeContent() {
     setState(newState); setCategory(newCat); setPriority(newPrio); setSla(newSla)
     setSearch(newSearch); setSearchInput(newSearch); setSelectedRequester(newReq)
     setPage(1); setSelectedIids(new Set())
-    syncUrl({ status: newState, category: newCat, priority: newPrio, sla: newSla, q: newSearch, assignee: newReq })
+    syncUrl({ status: newState, category: newCat, priority: newPrio, sla: newSla, q: newSearch, requester: newReq })
   }
 
   async function handleSaveFilter() {
@@ -388,8 +425,26 @@ function HomeContent() {
     try { await deleteSavedFilter(id); setSavedFilters(prev => prev.filter(f => f.id !== id)) } catch { /* ignore */ }
   }
 
-  function toggleSelect(iid: number) {
+  function toggleSelect(iid: number, e?: React.MouseEvent) {
+    // Shift+click — 마지막 선택부터 현재 항목까지 범위 선택
+    if (e?.shiftKey && lastSelectedIid !== null) {
+      const visible = sortedTickets.map(t => t.iid)
+      const lastIdx = visible.indexOf(lastSelectedIid)
+      const currIdx = visible.indexOf(iid)
+      if (lastIdx !== -1 && currIdx !== -1) {
+        const [from, to] = lastIdx < currIdx ? [lastIdx, currIdx] : [currIdx, lastIdx]
+        const range = visible.slice(from, to + 1)
+        setSelectedIids(prev => {
+          const n = new Set(prev)
+          range.forEach(id => n.add(id))
+          return n
+        })
+        setLastSelectedIid(iid)
+        return
+      }
+    }
     setSelectedIids(prev => { const n = new Set(prev); n.has(iid) ? n.delete(iid) : n.add(iid); return n })
+    setLastSelectedIid(iid)
   }
   function toggleSelectAll() {
     setSelectedIids(selectedIids.size === tickets.length ? new Set() : new Set(tickets.map(t => t.iid)))
@@ -433,6 +488,36 @@ function HomeContent() {
     window.open(`${API_BASE}/tickets/export/xlsx${qs ? `?${qs}` : ''}`, '_blank')
   }
 
+  const [csvPreview, setCsvPreview] = useState<string[][] | null>(null)
+
+  // CSV 파일 선택 시 미리보기 파싱
+  function handleImportFileChange(file: File | null) {
+    setImportFile(file)
+    setCsvPreview(null)
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target?.result as string
+      if (!text) return
+      const lines = text.split('\n').filter(l => l.trim())
+      const rows = lines.slice(0, 11).map(line => {
+        // 간단한 CSV 파싱 (따옴표 처리 포함)
+        const result: string[] = []
+        let current = ''
+        let inQuotes = false
+        for (const ch of line) {
+          if (ch === '"') { inQuotes = !inQuotes; continue }
+          if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; continue }
+          current += ch
+        }
+        result.push(current.trim())
+        return result
+      })
+      setCsvPreview(rows)
+    }
+    reader.readAsText(file)
+  }
+
   async function handleImportCsv() {
     if (!importFile) return
     setImportLoading(true)
@@ -441,6 +526,7 @@ function HomeContent() {
     try {
       const result = await importTicketsCSV(importFile, selectedProject || undefined)
       setImportResult(result)
+      setCsvPreview(null)
       if (result.imported > 0) {
         toast.success(`${result.imported}건의 티켓을 가져왔습니다.${result.failed?.length ? ` (실패 ${result.failed.length}건)` : ''}`)
         await load()
@@ -472,7 +558,7 @@ function HomeContent() {
         (PRIORITY_ORDER[(a.priority ?? 'medium') as keyof typeof PRIORITY_ORDER] ?? 2))
     : tickets
 
-  const hasActiveFilters = !!(category || priority || sla || search || selectedRequester || fromDate || toDate || (state && state !== 'all'))
+  const hasActiveFilters = !!(category || priority || sla || search || selectedRequester || onlyUnassigned || onlyMine || fromDate || toDate || (state && state !== 'all'))
 
   const PRIORITY_LABEL: Record<string, string> = {
     critical: t('ticket.priority.critical'),
@@ -572,6 +658,40 @@ function HomeContent() {
         </div>
       )}
 
+      {/* 최근 본 티켓 */}
+      <RecentTicketsBar />
+
+      {/* 부유 bulk action 바 — 선택 시 항상 보이는 sticky 표시 */}
+      {isAgent && selectedIids.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slideInUp print-hidden">
+          <div className="flex items-center gap-3 bg-gray-900 dark:bg-gray-800 text-white rounded-full shadow-2xl px-5 py-2.5 border border-gray-700">
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              <span className="bg-blue-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold tabular-nums">
+                {selectedIids.size}
+              </span>
+              개 선택됨
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                document.querySelector('form[data-bulk-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }}
+              className="text-xs px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-700 transition-colors font-medium"
+            >
+              일괄 작업으로 이동
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedIids(new Set())}
+              className="text-xs text-gray-300 hover:text-white transition-colors"
+              aria-label="선택 해제"
+            >
+              ✕ 해제
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 대시보드 위젯 바 */}
       <div className="mb-4">
         {/* 위젯 헤더 (편집 버튼) */}
@@ -590,24 +710,56 @@ function HomeContent() {
         {getSortedVisibleWidgets().length > 0 && (
           <div className="flex gap-3 flex-wrap">
             {getSortedVisibleWidgets().map(w => {
-              if (w.id === 'my_tickets') return (
-                <div key="my_tickets" className="flex-1 min-w-[180px] bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('dashboard.my_tickets')}</span>
-                    <span className="text-xl font-bold text-blue-600 dark:text-blue-400">{myTickets.length}</span>
-                  </div>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">{t('dashboard.assigned_to_me')}</p>
-                  {myTickets.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {myTickets.slice(0, 5).map(t => (
-                        <a key={t.iid} href={`/tickets/${t.iid}`} className="block text-xs text-blue-600 dark:text-blue-400 hover:underline truncate">
-                          #{t.iid} {t.title}
-                        </a>
-                      ))}
+              if (w.id === 'my_tickets') {
+                // 내 업무량 — 우선순위별 분류
+                const myHigh = myTickets.filter(t => t.priority === 'critical' || t.priority === 'high')
+                const myInProgress = myTickets.filter(t => t.status === 'in_progress')
+                const myWaiting = myTickets.filter(t => t.status === 'waiting')
+                return (
+                  <div key="my_tickets" className="flex-1 min-w-[220px] bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('dashboard.my_tickets')}</span>
+                      <span className="text-xl font-bold text-blue-600 dark:text-blue-400 tabular-nums"><CountUp value={myTickets.length} /></span>
                     </div>
-                  )}
-                </div>
-              )
+                    {/* 우선순위별 분류 칩 */}
+                    {myTickets.length > 0 && (
+                      <div className="flex gap-2 mb-2">
+                        {myHigh.length > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-medium">
+                            🔴 긴급/높음 {myHigh.length}
+                          </span>
+                        )}
+                        {myInProgress.length > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
+                            처리중 {myInProgress.length}
+                          </span>
+                        )}
+                        {myWaiting.length > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-medium">
+                            대기 {myWaiting.length}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {myTickets.length > 0 ? (
+                      <div className="space-y-1">
+                        {myTickets.slice(0, 5).map(t => (
+                          <a key={t.iid} href={`/tickets/${t.iid}`} title={`#${t.iid} ${t.title}`} className="block text-xs text-blue-600 dark:text-blue-400 hover:underline truncate">
+                            {(t.priority === 'critical' || t.priority === 'high') ? '🔴 ' : ''}#{t.iid} {t.title}
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{t('dashboard.none_assigned')}</p>
+                    )}
+                    {user?.username && (
+                      <Link href="/?mine=1" className="mt-2 block text-xs text-blue-500 hover:underline">
+                        내 담당 티켓 보기 →
+                      </Link>
+                    )}
+                  </div>
+                )
+              }
               if (w.id === 'sla_status') return (
                 <div key="sla_status" className="flex-1 min-w-[180px] bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm p-4">
                   <div className="flex items-center justify-between mb-1">
@@ -638,7 +790,7 @@ function HomeContent() {
                     {recentKB.length === 0 ? (
                       <p className="text-xs text-gray-400 dark:text-gray-500">{t('common.noData')}</p>
                     ) : recentKB.map(kb => (
-                      <a key={kb.id} href={`/kb/${kb.id}`} className="block text-xs text-blue-600 dark:text-blue-400 hover:underline truncate">
+                      <a key={kb.id} href={`/kb/${kb.id}`} title={kb.title} className="block text-xs text-blue-600 dark:text-blue-400 hover:underline truncate">
                         {kb.title}
                       </a>
                     ))}
@@ -649,18 +801,33 @@ function HomeContent() {
                 <div key="ticket_stats" className="flex-1 min-w-[180px] bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm p-4">
                   <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('dashboard.ticket_stats')}</span>
                   <div className="mt-2 grid grid-cols-3 gap-1 text-center">
-                    <div>
-                      <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">{stats?.open ?? 0}</div>
+                    <button
+                      type="button"
+                      onClick={() => { setState('open'); setPage(1); syncUrl({ status: 'open' }) }}
+                      title="처리 대기 상태로 필터"
+                      className="rounded-lg p-1 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 active:scale-95 transition-all"
+                    >
+                      <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400 tabular-nums"><CountUp value={stats?.open ?? 0} /></div>
                       <div className="text-[10px] text-gray-400">{t('dashboard.open')}</div>
-                    </div>
-                    <div>
-                      <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{stats?.in_progress ?? 0}</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setState('in_progress'); setPage(1); syncUrl({ status: 'in_progress' }) }}
+                      title="처리중 상태로 필터"
+                      className="rounded-lg p-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 active:scale-95 transition-all"
+                    >
+                      <div className="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums"><CountUp value={stats?.in_progress ?? 0} /></div>
                       <div className="text-[10px] text-gray-400">{t('dashboard.in_progress')}</div>
-                    </div>
-                    <div>
-                      <div className="text-lg font-bold text-green-600 dark:text-green-400">{stats?.closed ?? 0}</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setState('closed'); setPage(1); syncUrl({ status: 'closed' }) }}
+                      title="종료 상태로 필터"
+                      className="rounded-lg p-1 hover:bg-green-50 dark:hover:bg-green-900/20 active:scale-95 transition-all"
+                    >
+                      <div className="text-lg font-bold text-green-600 dark:text-green-400 tabular-nums"><CountUp value={stats?.closed ?? 0} /></div>
                       <div className="text-[10px] text-gray-400">{t('dashboard.closed')}</div>
-                    </div>
+                    </button>
                   </div>
                 </div>
               )
@@ -674,7 +841,7 @@ function HomeContent() {
                     {recentNotifications.length === 0 ? (
                       <p className="text-xs text-gray-400 dark:text-gray-500">{t('notifications.empty')}</p>
                     ) : recentNotifications.map(n => (
-                      <div key={n.id} className={`text-xs truncate ${n.is_read ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300 font-medium'}`}>
+                      <div key={n.id} title={n.title} className={`text-xs truncate ${n.is_read ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300 font-medium'}`}>
                         {n.link ? (
                           <a href={n.link} className="hover:underline">{n.title}</a>
                         ) : n.title}
@@ -730,12 +897,12 @@ function HomeContent() {
                 <div key="unassigned_tickets" className="flex-1 min-w-[180px] bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm p-4">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('dashboard.unassigned_tickets')}</span>
-                    <span className={`text-xl font-bold ${(stats?.open ?? 0) > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
-                      {stats?.open ?? 0}
+                    <span className={`text-xl font-bold ${(stats?.unassigned ?? 0) > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
+                      {stats?.unassigned ?? 0}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">오픈 티켓 현황</p>
-                  <Link href="/?status=open" className="mt-2 block text-xs text-blue-500 hover:underline">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">담당자 없는 오픈 티켓</p>
+                  <Link href="/?status=open&unassigned=1" className="mt-2 block text-xs text-blue-500 hover:underline">
                     미배정 티켓 보기 →
                   </Link>
                 </div>
@@ -926,8 +1093,39 @@ function HomeContent() {
                 onClick={() => { setFromDate(''); setToDate(''); setPage(1); syncUrl({ from: '', to: '' }) }}
                 className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500 px-1"
                 title="Clear dates"
-              >✕</button>
+               aria-label="제거">✕</button>
             )}
+            {/* 빠른 기간 칩 */}
+            <div className="flex items-center gap-1 ml-1 border-l border-gray-200 dark:border-gray-700 pl-2">
+              {[
+                { label: '오늘', days: 0 },
+                { label: '7일', days: 6 },
+                { label: '30일', days: 29 },
+              ].map(({ label, days }) => {
+                const today = new Date()
+                const to = today.toISOString().slice(0, 10)
+                const fromD = new Date(today)
+                fromD.setDate(today.getDate() - days)
+                const from = fromD.toISOString().slice(0, 10)
+                const isActive = fromDate === from && toDate === to
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      setFromDate(from); setToDate(to); setPage(1); syncUrl({ from, to })
+                    }}
+                    className={`text-xs px-2 py-1 rounded-md border transition-colors ${
+                      isActive
+                        ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Search */}
@@ -967,6 +1165,12 @@ function HomeContent() {
             {selectedRequester && (
               <FilterChip label={`${t('ticket.fields.requester')}: ${selectedRequester}`} onRemove={() => handleRequesterChange('')} />
             )}
+            {onlyUnassigned && (
+              <FilterChip label="미배정" onRemove={() => { setOnlyUnassigned(false); setPage(1); const p = new URLSearchParams(searchParams.toString()); p.delete('unassigned'); router.replace(p.toString() ? `/?${p}` : '/', { scroll: false }) }} />
+            )}
+            {onlyMine && (
+              <FilterChip label="내 담당" onRemove={() => { setOnlyMine(false); setPage(1); const p = new URLSearchParams(searchParams.toString()); p.delete('mine'); router.replace(p.toString() ? `/?${p}` : '/', { scroll: false }) }} />
+            )}
             {(fromDate || toDate) && (
               <FilterChip
                 label={`${t('filter.date_label')}: ${fromDate || '~'} ~ ${toDate || '~'}`}
@@ -979,8 +1183,8 @@ function HomeContent() {
           </div>
         )}
 
-        {/* Saved filters — agent only */}
-        {isAgent && (
+        {/* Saved filters — 모든 인증 사용자 (이전: agent only) */}
+        {user && (
           <div className="px-4 pb-3 flex flex-wrap items-center gap-2 border-t dark:border-gray-700 pt-2.5">
             {savedFilters.length > 0 && (
               <>
@@ -1001,7 +1205,7 @@ function HomeContent() {
                   {savedFilters.map(f => (
                     <span key={f.id} className="inline-flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full px-2 py-0.5">
                       <button onClick={() => applyFilter(f)} className="hover:text-blue-600 dark:hover:text-blue-400">{f.name}</button>
-                      <button onClick={() => handleDeleteFilter(f.id)} className="hover:text-red-500 font-bold leading-none">×</button>
+                      <button onClick={() => handleDeleteFilter(f.id)} className="hover:text-red-500 font-bold leading-none" aria-label="삭제">×</button>
                     </span>
                   ))}
                 </div>
@@ -1045,7 +1249,7 @@ function HomeContent() {
               )}
               {/* Bulk action — inline when items selected */}
               {isAgent && selectedIids.size > 0 && (
-                <form onSubmit={handleBulkSubmit} className="flex items-center gap-2">
+                <form onSubmit={handleBulkSubmit} data-bulk-form className="flex items-center gap-2">
                   <span className="text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded-full">
                     {selectedIids.size} selected
                   </span>
@@ -1060,8 +1264,23 @@ function HomeContent() {
                     <option value="set_status">{t('ticket.fields.status')}</option>
                   </select>
                   {bulkAction === 'assign' && (
-                    <input type="number" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
-                      placeholder="GitLab ID" className="border dark:border-gray-600 rounded px-2 py-1 text-sm w-28 dark:bg-gray-700 dark:text-gray-200 focus:outline-none" />
+                    <div className="flex items-center gap-2">
+                      <input type="number" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                        placeholder="GitLab ID" className="border dark:border-gray-600 rounded px-2 py-1 text-sm w-28 dark:bg-gray-700 dark:text-gray-200 focus:outline-none" />
+                      {extraStats?.team_workload && extraStats.team_workload.length > 0 && (
+                        <details className="text-xs">
+                          <summary className="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap">📊 업무량 참고</summary>
+                          <div className="absolute z-20 mt-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-lg p-2 space-y-0.5 min-w-[160px]">
+                            {extraStats.team_workload.slice(0, 10).map(w => (
+                              <div key={w.username} className="flex items-center justify-between gap-3 text-xs">
+                                <span className="text-gray-700 dark:text-gray-300 truncate">{w.username}</span>
+                                <span className="font-mono text-gray-500 dark:text-gray-400 tabular-nums">{w.count}건</span>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
                   )}
                   {bulkAction === 'set_priority' && (
                     <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} required
@@ -1077,6 +1296,7 @@ function HomeContent() {
                     <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} required
                       className="border dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 dark:text-gray-200 focus:outline-none">
                       <option value="">Select</option>
+                      <option value="open">🔄 재오픈 (접수됨)</option>
                       <option value="approved">{t('ticket.status.approved')}</option>
                       <option value="in_progress">{t('ticket.status.in_progress')}</option>
                       <option value="waiting">{t('ticket.status.waiting')}</option>
@@ -1087,7 +1307,7 @@ function HomeContent() {
                     </select>
                   )}
                   <button type="submit" disabled={bulkProcessing}
-                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50">
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     {bulkProcessing ? t('common.loading') : t('common.confirm')}
                   </button>
                   <button type="button" onClick={() => setSelectedIids(new Set())} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">{t('common.cancel')}</button>
@@ -1097,6 +1317,16 @@ function HomeContent() {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Density toggle */}
+              <button
+                type="button"
+                onClick={() => setDensity(d => d === 'comfortable' ? 'compact' : 'comfortable')}
+                title={density === 'comfortable' ? '컴팩트 모드로 전환' : '편안한 모드로 전환'}
+                aria-label="행 밀도 전환"
+                className="border dark:border-gray-600 rounded px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+              >
+                {density === 'comfortable' ? '☰' : '≡'}
+              </button>
               {/* Sort */}
               <select
                 value={sortBy}
@@ -1163,21 +1393,27 @@ function HomeContent() {
               </tbody>
             </table>
           ) : sortedTickets.length === 0 ? (
-            <div className="text-center py-20 text-gray-400 dark:text-gray-500">
-              <div className="text-5xl mb-4">📭</div>
-              <p className="text-base mb-4">{hasActiveFilters ? 'No tickets match your filters.' : 'No tickets yet.'}</p>
-              {hasActiveFilters ? (
-                <button onClick={resetAllFilters} className="text-sm text-blue-600 hover:underline">{t('common.reset')} filters</button>
-              ) : (
-                <Link href="/tickets/new" className="inline-block bg-blue-600 text-white px-5 py-2 rounded-md text-sm hover:bg-blue-700">
-                  + {t('ticket.new')}
-                </Link>
-              )}
-            </div>
+            hasActiveFilters ? (
+              <EmptyState
+                icon="🔍"
+                title="필터에 일치하는 티켓이 없습니다"
+                description="필터 조건을 변경하거나 초기화해보세요."
+                actionLabel={`${t('common.reset')} filters`}
+                onAction={resetAllFilters}
+              />
+            ) : (
+              <EmptyState
+                icon="📭"
+                title="아직 등록된 티켓이 없습니다"
+                description="첫 IT 지원 요청을 등록해보세요."
+                actionLabel={`+ ${t('ticket.new')}`}
+                actionHref="/tickets/new"
+              />
+            )
           ) : (
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+              <thead className="sticky top-0 z-10 shadow-sm">
+                <tr className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                   {isAgent && (
                     <th className="w-10 px-4 py-2.5 text-left">
                       <input
@@ -1205,17 +1441,22 @@ function HomeContent() {
                     ? `/tickets/${ticket.iid}?project_id=${ticket.project_id}`
                     : `/tickets/${ticket.iid}`
                   const isSelected = selectedIids.has(ticket.iid)
+                  const unread = isTicketUnread(ticket.iid, ticket.updated_at)
+                  const isNew = isTicketNew(ticket.created_at)
                   return (
                     <tr
                       key={`${ticket.project_id}-${ticket.iid}`}
-                      className={`group transition-colors ${
-                        isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/60'
+                      className={`group transition-colors ${density === 'compact' ? '[&>td]:!py-1.5' : ''} ${
+                        isSelected ? 'bg-blue-50 dark:bg-blue-900/20'
+                        : unread ? 'bg-blue-50/30 dark:bg-blue-900/10 border-l-2 border-l-blue-400 hover:bg-blue-50/60 dark:hover:bg-blue-900/20'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-800/60'
                       }`}
                     >
                       {isAgent && (
                         <td
-                          className="w-10 px-4 py-3 cursor-pointer"
-                          onClick={e => { e.stopPropagation(); toggleSelect(ticket.iid) }}
+                          className="w-10 px-4 py-3 cursor-pointer select-none"
+                          onClick={e => { e.stopPropagation(); toggleSelect(ticket.iid, e) }}
+                          title="Shift+클릭으로 범위 선택"
                         >
                           <input
                             type="checkbox"
@@ -1227,14 +1468,19 @@ function HomeContent() {
                         </td>
                       )}
                       <td className="w-16 px-3 py-3">
-                        <Link href={ticketHref} className="font-mono text-xs text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400">
-                          #{ticket.iid}
-                        </Link>
+                        <div className="flex items-center gap-1">
+                          <StarToggle iid={ticket.iid} size="sm" />
+                          <Link href={ticketHref} className="font-mono text-xs text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400">
+                            #{ticket.iid}
+                          </Link>
+                        </div>
                       </td>
                       <td className="px-3 py-3 max-w-0">
                         <Link href={ticketHref} className="block">
-                          <p className="font-medium text-gray-800 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
-                            {ticket.title}
+                          <p className={`font-medium truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 ${unread ? 'text-gray-900 dark:text-white' : 'text-gray-800 dark:text-gray-100'}`}>
+                            {isNew && <span className="inline-block text-[9px] font-bold bg-blue-500 text-white rounded px-1 py-px mr-1.5 align-middle">NEW</span>}
+                            {!isNew && unread && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 align-middle shrink-0" title="업데이트됨" />}
+                            <HighlightMatch text={ticket.title} query={search} />
                           </p>
                           {ticket.employee_name && (
                             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{t('ticket.fields.requester')}: {ticket.employee_name}</p>
@@ -1242,7 +1488,16 @@ function HomeContent() {
                         </Link>
                       </td>
                       <td className="w-24 px-3 py-3">
-                        <StatusBadge status={ticket.status} />
+                        {isAgent ? (
+                          <InlineStatusSelect
+                            iid={ticket.iid}
+                            projectId={ticket.project_id}
+                            currentStatus={ticket.status ?? 'open'}
+                            onChanged={() => load()}
+                          />
+                        ) : (
+                          <StatusBadge status={ticket.status} />
+                        )}
                       </td>
                       <td className="w-20 px-3 py-3 hidden sm:table-cell">
                         <PriorityBadge priority={ticket.priority} />
@@ -1251,14 +1506,24 @@ function HomeContent() {
                         <CategoryBadge category={ticket.category} />
                       </td>
                       <td className="w-28 px-3 py-3 hidden md:table-cell">
-                        {ticket.assignee_name ? (
-                          <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">{formatName(ticket.assignee_name)}</span>
+                        {isAgent ? (
+                          <InlineAssigneeSelect
+                            iid={ticket.iid}
+                            projectId={ticket.project_id}
+                            assigneeName={ticket.assignee_name}
+                            assigneeId={ticket.assignee_id}
+                            onChanged={() => load()}
+                          />
                         ) : (
-                          <span className="text-xs text-gray-300 dark:text-gray-600">{t('common.unassigned')}</span>
+                          ticket.assignee_name ? (
+                            <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">{formatName(ticket.assignee_name)}</span>
+                          ) : (
+                            <span className="text-xs text-gray-300 dark:text-gray-600">{t('common.unassigned')}</span>
+                          )
                         )}
                       </td>
                       <td className="w-28 px-3 py-3 hidden lg:table-cell">
-                        <SlaBadge priority={ticket.priority} createdAt={ticket.created_at} state={ticket.state} slaDeadline={ticket.sla_deadline} />
+                        <SlaBadge priority={ticket.priority} createdAt={ticket.created_at} state={ticket.state} slaDeadline={ticket.sla_deadline} paused={ticket.status === 'waiting'} />
                       </td>
                       <td className="w-20 px-3 py-3 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap hidden sm:table-cell">
                         {formatDate(ticket.created_at)}
@@ -1276,6 +1541,15 @@ function HomeContent() {
             <div className="flex items-center justify-between px-4 py-3 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
               <span className="text-xs text-gray-400 dark:text-gray-500">{page} / {totalPages}</span>
               <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={page === 1}
+                  title="첫 페이지"
+                  aria-label="첫 페이지"
+                  className="px-2 py-1 text-xs border dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ⏮
+                </button>
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page === 1}
@@ -1308,6 +1582,15 @@ function HomeContent() {
                 >
                   {t('common.next')} →
                 </button>
+                <button
+                  onClick={() => setPage(totalPages)}
+                  disabled={page === totalPages}
+                  title="마지막 페이지"
+                  aria-label="마지막 페이지"
+                  className="px-2 py-1 text-xs border dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ⏭
+                </button>
               </div>
             </div>
           )}
@@ -1316,15 +1599,15 @@ function HomeContent() {
 
       {/* CSV 가져오기 모달 */}
       {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fadeIn backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scaleIn">
             {/* 헤더 */}
             <div className="flex items-center justify-between px-5 py-4 border-b dark:border-gray-700">
               <h2 className="text-base font-semibold text-gray-900 dark:text-white">CSV 티켓 가져오기</h2>
               <button
                 onClick={closeImportModal}
                 className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"
-              >
+               aria-label="제거">
                 ✕
               </button>
             </div>
@@ -1353,13 +1636,43 @@ function HomeContent() {
                   type="file"
                   accept=".csv"
                   onChange={e => {
-                    setImportFile(e.target.files?.[0] ?? null)
+                    handleImportFileChange(e.target.files?.[0] ?? null)
                     setImportResult(null)
                     setImportError(null)
                   }}
                   className="block w-full text-sm text-gray-600 dark:text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-900/30 dark:file:text-blue-400 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50"
                 />
               </div>
+
+              {/* CSV 미리보기 */}
+              {csvPreview && csvPreview.length > 0 && !importResult && (
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-700 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">📋 미리보기 (최대 10행)</span>
+                    <span className="text-[10px] text-gray-400">{csvPreview.length - 1}행 데이터</span>
+                  </div>
+                  <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-blue-50 dark:bg-blue-900/20">
+                          {csvPreview[0]?.map((h, i) => (
+                            <th key={i} className="px-2 py-1.5 text-left font-semibold text-blue-700 dark:text-blue-300 whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {csvPreview.slice(1).map((row, ri) => (
+                          <tr key={ri} className="hover:bg-gray-100 dark:hover:bg-gray-700/50">
+                            {row.map((cell, ci) => (
+                              <td key={ci} className="px-2 py-1 text-gray-700 dark:text-gray-300 max-w-[200px] truncate">{cell || <span className="text-gray-300 dark:text-gray-600">-</span>}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* 에러 */}
               {importError && (
@@ -1403,7 +1716,7 @@ function HomeContent() {
               <button
                 onClick={handleImportCsv}
                 disabled={!importFile || importLoading}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
               >
                 {importLoading && (
                   <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -1425,7 +1738,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
   return (
     <span className="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full px-2.5 py-0.5 font-medium">
       {label}
-      <button onClick={onRemove} className="hover:text-blue-900 dark:hover:text-blue-100 font-bold leading-none ml-0.5">×</button>
+      <button onClick={onRemove} className="hover:text-blue-900 dark:hover:text-blue-100 font-bold leading-none ml-0.5" aria-label="제거">×</button>
     </span>
   )
 }

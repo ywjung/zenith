@@ -198,12 +198,14 @@ def _create_refresh_token(db: Session, gitlab_user_id: str, gitlab_refresh_token
 @router.get("/login")
 @(limiter.limit(LIMIT_LOGIN) if limiter else lambda f: f)
 @(login_limiter.limit(LIMIT_LOGIN_PER_USER) if login_limiter else lambda f: f)
-def login(request: Request):
+def login(request: Request, next: str = ""):
     settings = get_settings()
     needs_reauth = request.cookies.get("itsm_reauth") == "1"
     scope = "openid read_user api" if needs_reauth else "read_user api"
     # C-3: state 값을 httponly 쿠키에 저장해 callback에서 검증
     state = secrets.token_urlsafe(32)
+    # 로그인 후 복귀 경로 — open-redirect 방지: '/'로 시작하고 '//'가 아닌 경우만 허용.
+    safe_next = next if (next and next.startswith("/") and not next.startswith("//")) else ""
     params: dict = {
         "client_id": settings.GITLAB_OAUTH_CLIENT_ID,
         "redirect_uri": settings.GITLAB_OAUTH_REDIRECT_URI,
@@ -220,6 +222,12 @@ def login(request: Request):
         httponly=True, max_age=300, samesite="lax",
         secure=settings.COOKIE_SECURE,
     )
+    if safe_next:
+        response.set_cookie(
+            "oauth_next", safe_next,
+            httponly=True, max_age=300, samesite="lax",
+            secure=settings.COOKIE_SECURE,
+        )
     if needs_reauth:
         response.delete_cookie("itsm_reauth")
     return response
@@ -273,8 +281,12 @@ def callback(request: Request, code: str = "", error: str = "", state: str = "",
         store_gitlab_token(_jti, access_token, TOKEN_EXPIRE_HOURS * 3600)
     refresh_raw = _create_refresh_token(db, str(user["id"]), gitlab_refresh_token=gitlab_refresh_token)
 
-    response = RedirectResponse("/")
+    # 로그인 전 요청한 경로가 있으면 복귀 (open-redirect 재검증).
+    _next = request.cookies.get("oauth_next", "")
+    _safe_next = _next if (_next and _next.startswith("/") and not _next.startswith("//")) else "/"
+    response = RedirectResponse(_safe_next)
     response.delete_cookie("oauth_state")  # C-3: 사용한 state 쿠키 즉시 삭제
+    response.delete_cookie("oauth_next")
     response.set_cookie(
         "itsm_token",
         token,

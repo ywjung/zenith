@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { fetchCalendarTickets, fetchHolidays, type CalendarTicket, type HolidayItem } from '@/lib/api'
 import RequireAuth from '@/components/RequireAuth'
@@ -144,6 +145,7 @@ function SlidePanel({
 
 function CalendarContent() {
   const t = useTranslations('calendar')
+  const router = useRouter()
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -334,6 +336,8 @@ function CalendarContent() {
               <div
                 key={dateStr}
                 onClick={() => setSelectedDate(isSelected ? null : dateStr)}
+                onDoubleClick={() => router.push(`/tickets/new?sla_due_date=${dateStr}`)}
+                title="더블클릭으로 새 티켓 생성"
                 className={`
                   min-h-[96px] border-b border-r border-gray-100 dark:border-gray-800 p-1.5 cursor-pointer transition-colors
                   ${isSelected
