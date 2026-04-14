@@ -241,7 +241,11 @@ def list_tickets(
 
             _attach_sla_deadlines(tickets_page, db)
             _result = {"tickets": tickets_page, "total": total, "page": page, "per_page": per_page}
-            if _r:
+            # GitLab 전체 장애 방어: page_rows 있으나 page_issues 0이면 캐시 스킵.
+            _all_failed = len(page_rows) > 0 and len(tickets_page) == 0
+            if _all_failed:
+                logger.warning("list_tickets fast-path: GitLab 전체 실패 (%d iids) — 캐시 스킵", len(page_rows))
+            elif _r:
                 _r.setex(_list_cache_key, 180, _json.dumps(_result))
             return _result
 
@@ -399,7 +403,15 @@ def list_tickets(
             "page": page,
             "per_page": per_page,
         }
-        if _r:
+        # 캐시 독립성: page_rows가 있는데 page_issues가 비어있으면 GitLab 전체 장애로 간주 → 캐시 스킵.
+        # 180초간 빈 응답이 유지되어 사용자가 "티켓 없음"을 보게 되는 사고 방지.
+        _all_failed = len(page_rows) > 0 and len(tickets_page) == 0
+        if _all_failed:
+            logger.warning(
+                "list_tickets: GitLab 상세 조회 전부 실패 (%d iids) — 캐시 스킵",
+                len(page_rows),
+            )
+        elif _r:
             _r.setex(_list_cache_key, 180, _json.dumps(_result))
         return _result
     except Exception as e:
