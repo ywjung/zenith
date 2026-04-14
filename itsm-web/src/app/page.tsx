@@ -450,6 +450,25 @@ function HomeContent() {
     setSelectedIids(selectedIids.size === tickets.length ? new Set() : new Set(tickets.map(t => t.iid)))
   }
 
+  // 일괄 작업 키보드 단축키: 입력창 외에서 A=전체선택, Esc=선택 해제 (agent+만).
+  useEffect(() => {
+    if (!isAgent) return
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return
+      if ((e.target as HTMLElement).isContentEditable) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === 'a' && tickets.length > 0) {
+        e.preventDefault()
+        setSelectedIids(new Set(tickets.map(t => t.iid)))
+      } else if (e.key === 'Escape' && selectedIids.size > 0) {
+        setSelectedIids(new Set())
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isAgent, tickets, selectedIids.size])
+
   async function handleBulkSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (selectedIids.size === 0 || !selectedProject) return

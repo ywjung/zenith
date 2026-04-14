@@ -99,11 +99,7 @@ async function request<T>(path: string, init?: RequestInit & { timeoutMs?: numbe
         clearTimeout(retryTimer)
       }
     }
-    // /help, /portal 같은 공개 페이지에서는 리다이렉트 하지 않음
-    const PUBLIC_PATHS = ['/login', '/help', '/portal']
-    if (typeof window !== 'undefined' && !PUBLIC_PATHS.some(p => window.location.pathname.startsWith(p))) {
-      window.location.href = '/login'
-    }
+    handleAuthExpired()
     throw new Error('로그인이 필요합니다.')
   }
   if (!res.ok) {
@@ -117,7 +113,28 @@ async function request<T>(path: string, init?: RequestInit & { timeoutMs?: numbe
 
 // Prevent concurrent refresh attempts.
 // Stored on window (not module scope) to avoid SSR singleton leaking across requests.
-type _WinWithRefresh = typeof window & { __itsmRefreshPromise?: Promise<boolean> | null }
+type _WinWithRefresh = typeof window & { __itsmRefreshPromise?: Promise<boolean> | null; __itsmAuthExpiredHandled?: boolean }
+
+/**
+ * 401 + refresh 실패 시 사용자에게 세션 만료를 알리고 /login?next=<현재경로>로 이동.
+ * 동시 다발 요청이 모두 401을 받아도 한 번만 토스트/리다이렉트 하도록 플래그 가드.
+ */
+async function handleAuthExpired(): Promise<void> {
+  if (typeof window === 'undefined') return
+  const PUBLIC_PATHS = ['/login', '/help', '/portal']
+  if (PUBLIC_PATHS.some(p => window.location.pathname.startsWith(p))) return
+  const win = window as _WinWithRefresh
+  if (win.__itsmAuthExpiredHandled) return
+  win.__itsmAuthExpiredHandled = true
+  try {
+    const { toast } = await import('sonner')
+    toast.error('세션이 만료되었습니다. 다시 로그인해주세요.')
+  } catch { /* toast 로드 실패해도 리다이렉트는 수행 */ }
+  const next = window.location.pathname + window.location.search
+  const safe = next.startsWith('/') && !next.startsWith('//') ? next : '/'
+  // 짧은 지연으로 토스트가 잠깐 보이게 한 후 이동.
+  setTimeout(() => { window.location.href = `/login?next=${encodeURIComponent(safe)}` }, 800)
+}
 
 async function tryRefreshToken(): Promise<boolean> {
   // SSR: cookies unavailable, skip
@@ -240,10 +257,7 @@ export async function deleteTicket(iid: number, projectId?: string): Promise<voi
       })
     }
     if (res.status === 401) {
-      const PUBLIC_PATHS = ['/login', '/help', '/portal']
-      if (typeof window !== 'undefined' && !PUBLIC_PATHS.some(p => window.location.pathname.startsWith(p))) {
-        window.location.href = '/login'
-      }
+      handleAuthExpired()
       throw new Error('로그인이 필요합니다.')
     }
   }
@@ -354,11 +368,7 @@ export async function uploadFile(
   }
 
   if (res.status === 401) {
-    // /help, /portal 같은 공개 페이지에서는 리다이렉트 하지 않음
-    const PUBLIC_PATHS = ['/login', '/help', '/portal']
-    if (typeof window !== 'undefined' && !PUBLIC_PATHS.some(p => window.location.pathname.startsWith(p))) {
-      window.location.href = '/login'
-    }
+    handleAuthExpired()
     throw new Error('로그인이 필요합니다.')
   }
   if (!res.ok) {

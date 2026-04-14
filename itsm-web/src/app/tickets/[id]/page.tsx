@@ -919,8 +919,25 @@ function TicketDetailContent() {
   const [pipelineResult, setPipelineResult] = useState<{id: number; web_url: string; status: string} | null>(null)
   const [pipelineError, setPipelineError] = useState<string | null>(null)
   const [pipelines, setPipelines] = useState<{id: number; ref: string; status: string; web_url: string; created_at: string}[]>([])
-  const [newComment, setNewComment] = useState('')
+  // 댓글 드래프트: 마운트 시 localStorage에서 복원해 실수 새로고침/이동 시에도 내용 보존.
+  const [newComment, setNewComment] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    try { return localStorage.getItem(`itsm:draft:${iid}`) || '' } catch { return '' }
+  })
   const [isInternal, setIsInternal] = useState(false)
+
+  // 드래프트 자동 저장 (5초 debounce). 공백이면 삭제.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !iid) return
+    const timer = setTimeout(() => {
+      try {
+        const plain = newComment.replace(/<[^>]*>/g, '').trim()
+        if (plain) localStorage.setItem(`itsm:draft:${iid}`, newComment)
+        else localStorage.removeItem(`itsm:draft:${iid}`)
+      } catch { /* quota 초과 등 무시 */ }
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [newComment, iid])
   const [commenting, setCommenting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -990,26 +1007,27 @@ function TicketDetailContent() {
 
   useEffect(() => {
     if (!iid) return
-    // Phase 1: 렌더링에 필요한 코어 데이터 + project_id 비의존 보조 데이터 병렬 fetch
-    // (watchers/quickReplies/devProjects는 ticket 응답을 기다릴 필요가 없음)
+    // Phase 1a: project_id 비의존 보조 호출을 즉시 발사 (ticket 응답 대기 불필요)
+    // → Promise.all의 .then() 블록에서 체인하던 것을 바깥으로 빼 진정한 병렬 실행.
+    if (user) {
+      fetchWatchers(iid).then((watchers) => {
+        setIsWatching(watchers.some((w) => w.user_id === user.sub))
+      }).catch(() => {})
+    }
+    if (isAgent) {
+      fetchDevProjects().then(setDevProjects).catch(() => {})
+      fetchQuickReplies().then((replies) => {
+        setQuickReplies(replies.length > 0 ? replies : BUILTIN_QUICK_REPLIES)
+      }).catch(() => {})
+    }
+
+    // Phase 1b: 렌더링에 필요한 코어 데이터 병렬 fetch
     Promise.all([fetchTicket(iid, projectId), fetchComments(iid, projectId), getMyRating(iid)])
       .then(([t, c, r]) => {
         ticketEtag.current = t.updated_at ?? ''
         setTicket(t)
         setComments(c)
         setRating(r)
-        // project_id 비의존 호출을 즉시 발사 (ticket 응답 대기 불필요)
-        if (user) {
-          fetchWatchers(iid).then((watchers) => {
-            setIsWatching(watchers.some((w) => w.user_id === user.sub))
-          }).catch(() => {})
-        }
-        if (isAgent) {
-          fetchDevProjects().then(setDevProjects).catch(() => {})
-          fetchQuickReplies().then((replies) => {
-            setQuickReplies(replies.length > 0 ? replies : BUILTIN_QUICK_REPLIES)
-          }).catch(() => {})
-        }
         // 최근 본 티켓에 추가 + 읽음 처리
         pushRecentTicket({ iid: t.iid, title: t.title, status: t.status, project_id: t.project_id })
         markTicketRead(t.iid)
@@ -1483,6 +1501,7 @@ function TicketDetailContent() {
       setNewComment('')
       setCommentFiles([])
       setIsInternal(false)
+      try { localStorage.removeItem(`itsm:draft:${iid}`) } catch { /* noop */ }
     } catch (err) {
       setCommentError(err instanceof Error ? err.message : t('err_comment_add'))
     } finally {

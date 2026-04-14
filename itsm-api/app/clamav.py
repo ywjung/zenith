@@ -62,7 +62,9 @@ def scan_bytes(content: bytes, filename: str) -> tuple[bool, str]:
     try:
         import clamd as _clamd
 
-        cd = _clamd.ClamdNetworkSocket(host=host, port=port)
+        # 명시 타임아웃(10s)으로 ClamAV 장애 시 업로드 무한 대기 방지.
+        # 기본값이 환경에 따라 다르므로 고정값으로 설정.
+        cd = _clamd.ClamdNetworkSocket(host=host, port=port, timeout=10)
         import io
         result = cd.instream(io.BytesIO(content))
         # result 형식: {'stream': ('OK', None)} 또는 {'stream': ('FOUND', 'Eicar-Test-Signature')}
