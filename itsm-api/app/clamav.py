@@ -59,6 +59,16 @@ def scan_bytes(content: bytes, filename: str) -> tuple[bool, str]:
         host = os.environ.get("CLAMAV_HOST", "itsm-clamav-1")
         port = int(os.environ.get("CLAMAV_PORT", "3310"))
 
+    from .circuit_breaker import clamav_cb, CircuitOpenError
+
+    # CB open이면 즉시 fail-open — 장애 시 무한 대기 방지.
+    try:
+        clamav_cb.check()
+    except CircuitOpenError as cb_exc:
+        logger.warning("ClamAV CB open (fail-open): file=%s %s", filename, cb_exc)
+        clamav_scans_total.labels(result="unavailable").inc()
+        return True, "unavailable"
+
     try:
         import clamd as _clamd
 
@@ -69,6 +79,7 @@ def scan_bytes(content: bytes, filename: str) -> tuple[bool, str]:
         result = cd.instream(io.BytesIO(content))
         # result 형식: {'stream': ('OK', None)} 또는 {'stream': ('FOUND', 'Eicar-Test-Signature')}
         status, virus_name = result.get("stream", ("OK", None))
+        clamav_cb.record_success()
         if status == "OK":
             clamav_scans_total.labels(result="clean").inc()
             logger.debug("ClamAV scan clean: %s", filename)
@@ -88,6 +99,7 @@ def scan_bytes(content: bytes, filename: str) -> tuple[bool, str]:
         clamav_scans_total.labels(result="unavailable").inc()
         return True, "unavailable"
     except Exception as exc:
+        clamav_cb.record_failure()
         logger.warning(
             "ClamAV 연결 실패 (fail-open) — 스캔 건너뜀: file=%s host=%s:%d error=%s",
             filename, host, port, exc,

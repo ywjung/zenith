@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import RequireAuth from '@/components/RequireAuth'
 import { useConfirm } from '@/components/ConfirmProvider'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 import EmptyState from '@/components/EmptyState'
 import { SkeletonRow } from '@/components/Skeleton'
 import { useAuth } from '@/context/AuthContext'
@@ -158,6 +159,10 @@ function ProblemsContent() {
   const [linkIidInput, setLinkIidInput] = useState('')
   const [linking, setLinking]           = useState(false)
   const [linkError, setLinkError]       = useState('')
+
+  useEscapeClose(showCreate, () => setShowCreate(false))
+  useEscapeClose(editTarget !== null, () => setEditTarget(null))
+  useEscapeClose(linkTarget !== null, () => { setLinkTarget(null); setLinkIidInput('') })
 
   const load = useCallback(async () => {
     setLoading(true)

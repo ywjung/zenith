@@ -822,6 +822,87 @@
           "placement": "bottom"
         }
       }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "데이터 정합성 알림",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 14,
+      "type": "logs",
+      "title": "최근 드리프트/고아 경고 로그 (Loki 또는 /logs 쿼리)",
+      "description": "TSI ↔ GitLab 드리프트, SLA drift, orphan attachment 관련 WARNING 로그. Loki 설정 시 자동 필터.",
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "{job=\"itsm-api\"} |~ \"(TSI drift|SLA drift|Orphan attachments|Deleting.*stale TSI)\"",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Idempotency replay (1h)",
+      "description": "더블클릭/재시도로 중복 요청이 캐시 반환된 횟수. 0이면 사용자 실수 없음.",
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(http_requests_total{handler=~\".*\",status=\"2xx\"}[1h]))",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }

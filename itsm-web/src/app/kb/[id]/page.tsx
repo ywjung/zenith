@@ -2,6 +2,7 @@
 
 import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -396,6 +397,7 @@ function RevisionPreviewModal({ rev, onClose, onRestore }: {
   onRestore: (rev: KBRevision) => void
 }) {
   const t = useTranslations('kb')
+  useEscapeClose(true, onClose)
   return (
     <div className="fixed inset-0 bg-black/60 animate-fadeIn backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div

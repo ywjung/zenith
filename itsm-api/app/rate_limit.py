@@ -62,10 +62,13 @@ try:
             return "memory://"
 
     _storage = _redis_url()
+    # 주의: headers_enabled=True를 쓰면 slowapi._inject_headers가 핸들러 반환값에
+    # isinstance(Response) 체크를 한다. FastAPI에서 response_model=dict 핸들러는
+    # dict를 반환하므로 이 검사가 실패해 500이 발생한다.
+    # X-RateLimit-* 헤더 UX가 필요하면 별도 미들웨어에서 request.state에 기록된
+    # rate limit 정보를 읽어 주입해야 한다. 지금은 안전을 위해 기본값(False)을 사용.
     limiter = Limiter(key_func=get_remote_address, storage_uri=_storage)
-    # User-keyed limiter for authenticated endpoints
     user_limiter = Limiter(key_func=_get_user_or_ip, storage_uri=_storage)
-    # Username-keyed limiter for login endpoints (계정별 브루트포스 방지)
     login_limiter = Limiter(key_func=_get_login_username, storage_uri=_storage)
     logger.debug("slowapi limiter created with storage: %s", _storage.split("@")[-1])
 except Exception as _e:  # noqa: BLE001

@@ -292,6 +292,71 @@ def get_ticket_stats(
         raise HTTPException(status_code=502, detail="통계를 불러오는 중 오류가 발생했습니다.")
 
 
+@search_router.get("/{iid}/related", response_model=list)
+def list_related_tickets(
+    iid: int,
+    project_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=3, ge=1, le=10),
+    _user: dict = Depends(get_current_user),
+):
+    """이 티켓과 유사한 과거 티켓 — pg_trgm 제목 유사도 기반 상위 N건.
+
+    목적: 중복 조사 제거, 해결 방법 재사용.
+    """
+    from ...models import TicketSearchIndex as _TSI
+    from ...database import SessionLocal
+    from sqlalchemy import text
+
+    pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
+    with SessionLocal() as db:
+        src = db.query(_TSI).filter(_TSI.iid == iid, _TSI.project_id == pid).first()
+        if not src or not src.title:
+            return []
+        # pg_trgm similarity() 함수로 제목 유사도 순위. 본인 티켓 제외. 최근 180일 창.
+        # pg_trgm 미설치·권한 문제·SQLite 등에서는 500 대신 빈 리스트로 graceful degradation.
+        try:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT iid, title, state, labels_json, created_at,
+                           similarity(title, :q) AS score
+                    FROM ticket_search_index
+                    WHERE project_id = :pid
+                      AND iid != :iid
+                      AND created_at > now() - interval '180 days'
+                      AND title % :q
+                    ORDER BY score DESC, updated_at DESC
+                    LIMIT :lim
+                    """
+                ),
+                {"q": src.title, "pid": pid, "iid": iid, "lim": limit},
+            ).mappings().all()
+        except Exception as e:
+            import logging as _lg
+            _lg.getLogger(__name__).warning(
+                "Related tickets query failed (pg_trgm missing?): %s", e
+            )
+            return []
+
+    out = []
+    for r in rows:
+        labels = r["labels_json"] or []
+        status = "open"
+        for lb in labels:
+            if isinstance(lb, str) and lb.startswith("status::"):
+                status = label_to_status(lb)
+                break
+        out.append({
+            "iid": r["iid"],
+            "title": r["title"],
+            "state": r["state"],
+            "status": "closed" if r["state"] == "closed" else status,
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            "score": float(r["score"]),
+        })
+    return out
+
+
 @search_router.get("/kanban", response_model=dict)
 def list_kanban_tickets(
     project_id: Optional[str] = Query(default=None),

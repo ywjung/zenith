@@ -943,7 +943,11 @@ def test_bulk_update_set_priority(client, pl_cookies):
 
 
 def test_bulk_update_with_error(client, pl_cookies):
-    """Partial failure in bulk update (covers lines 2255-2272)."""
+    """Partial failure in bulk update → 207 Multi-Status.
+
+    이전에는 부분 실패 시 200을 반환했지만, 구조화된 errors/summary를 보존하기 위해
+    207 Multi-Status로 변경됨. 2xx이라 프론트 request()가 body를 그대로 넘긴다.
+    """
     def _update_side_effect(iid, **kwargs):
         if iid == 43:
             raise Exception("gitlab error")
@@ -958,9 +962,11 @@ def test_bulk_update_with_error(client, pl_cookies):
             json={"iids": [42, 43], "action": "close", "project_id": "1"},
             cookies=pl_cookies,
         )
-    assert resp.status_code == 200
+    assert resp.status_code == 207
     data = resp.json()
     assert len(data["errors"]) > 0
+    assert data["summary"]["succeeded"] >= 1
+    assert data["summary"]["failed"] >= 1
 
 
 # ─── POST /tickets/{iid}/resolution/convert-to-kb (lines 1930-1981) ──────────

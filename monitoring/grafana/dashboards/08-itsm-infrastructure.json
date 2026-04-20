@@ -1,0 +1,230 @@
+{
+  "uid": "itsm-infrastructure",
+  "title": "ITSM 인프라 헬스",
+  "tags": ["itsm", "infrastructure", "ops"],
+  "timezone": "Asia/Seoul",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" }
+      },
+      {
+        "name": "interval",
+        "type": "interval",
+        "auto": true,
+        "auto_count": 30,
+        "auto_min": "30s",
+        "query": "30s,1m,5m,10m,30m,1h",
+        "current": { "text": "auto", "value": "$__auto_interval_interval" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "row", "title": "외부 의존성 — GitLab Circuit Breaker",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "collapsed": false
+    },
+    {
+      "id": 2, "type": "stat", "title": "CB 상태",
+      "description": "GitLab API 장애 감지 시 1로 오픈. 30초 후 half-open 재시도.",
+      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "textMode": "value" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "정상", "color": "green" }, "1": { "text": "장애", "color": "red" } } }
+          ]
+        }
+      },
+      "targets": [ { "expr": "gitlab_circuit_breaker_open", "refId": "A" } ]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "연속 실패 수",
+      "gridPos": { "x": 4, "y": 1, "w": 10, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 20 } } },
+      "targets": [ { "expr": "gitlab_circuit_breaker_consecutive_failures", "refId": "A", "legendFormat": "failures" } ]
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "CB 상태 전이 (open/closed)",
+      "gridPos": { "x": 14, "y": 1, "w": 10, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [ { "expr": "sum by (to) (rate(gitlab_circuit_breaker_transitions_total[$interval]))", "refId": "A", "legendFormat": "{{to}}" } ]
+    },
+    {
+      "id": 5, "type": "row", "title": "데이터베이스 — 연결 풀",
+      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 1 }, "collapsed": false
+    },
+    {
+      "id": 6, "type": "stat", "title": "풀 사용률",
+      "description": "checked_out / (pool_size + overflow_limit)",
+      "gridPos": { "x": 0, "y": 10, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.6 }, { "color": "red", "value": 0.85 } ] }
+        }
+      },
+      "targets": [ { "expr": "sqlalchemy_pool_checked_out / sqlalchemy_pool_size_configured", "refId": "A" } ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "연결 풀 시계열",
+      "gridPos": { "x": 6, "y": 10, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 15, "stacking": { "mode": "normal" } } } },
+      "targets": [
+        { "expr": "sqlalchemy_pool_checked_out", "refId": "A", "legendFormat": "checked_out" },
+        { "expr": "sqlalchemy_pool_checked_in", "refId": "B", "legendFormat": "checked_in" },
+        { "expr": "sqlalchemy_pool_overflow", "refId": "C", "legendFormat": "overflow" }
+      ]
+    },
+    {
+      "id": 8, "type": "stat", "title": "슬로우 쿼리 (5m)",
+      "description": ">500ms 쿼리 발생 수",
+      "gridPos": { "x": 18, "y": 10, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": { "reduceOptions": { "calcs": ["sum"] }, "colorMode": "value" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "red", "value": 20 } ] }
+        }
+      },
+      "targets": [ { "expr": "sum(increase(db_slow_queries_total[5m]))", "refId": "A" } ]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "슬로우 쿼리 추이 (endpoint별)",
+      "gridPos": { "x": 0, "y": 18, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [ { "expr": "sum by (path) (rate(db_slow_queries_total[$interval]))", "refId": "A", "legendFormat": "{{path}}" } ]
+    },
+    {
+      "id": 10, "type": "row", "title": "요청 처리 — HTTP & Rate Limit",
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 1 }, "collapsed": false
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "응답 코드 분포 (2xx/4xx/5xx)",
+      "gridPos": { "x": 0, "y": 27, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } } },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total{status=\"2xx\"}[$interval]))", "refId": "A", "legendFormat": "2xx" },
+        { "expr": "sum(rate(http_requests_total{status=\"3xx\"}[$interval]))", "refId": "B", "legendFormat": "3xx" },
+        { "expr": "sum(rate(http_requests_total{status=\"4xx\"}[$interval]))", "refId": "C", "legendFormat": "4xx" },
+        { "expr": "sum(rate(http_requests_total{status=\"5xx\"}[$interval]))", "refId": "D", "legendFormat": "5xx" }
+      ]
+    },
+    {
+      "id": 12, "type": "timeseries", "title": "429 Rate Limited 요청 — endpoint별",
+      "gridPos": { "x": 12, "y": 27, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [ { "expr": "sum by (endpoint) (rate(http_rate_limited_requests_total[$interval]))", "refId": "A", "legendFormat": "{{endpoint}}" } ]
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "P50/P95/P99 레이턴시",
+      "gridPos": { "x": 0, "y": 35, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum by (le) (rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\"}[$interval])))", "refId": "A", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\"}[$interval])))", "refId": "B", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_highr_seconds_bucket{job=\"itsm-api\"}[$interval])))", "refId": "C", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "id": 14, "type": "row", "title": "보안 — ClamAV 파일 스캔",
+      "gridPos": { "x": 0, "y": 43, "w": 24, "h": 1 }, "collapsed": false
+    },
+    {
+      "id": 15, "type": "stat", "title": "감염 탐지 (24h)",
+      "gridPos": { "x": 0, "y": 44, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": { "reduceOptions": { "calcs": ["sum"] }, "colorMode": "value" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        }
+      },
+      "targets": [ { "expr": "sum(increase(clamav_infected_files_total[24h]))", "refId": "A" } ]
+    },
+    {
+      "id": 16, "type": "stat", "title": "ClamAV 미가용 (5m)",
+      "description": "ClamAV 연결 실패 = fail-open 모드로 스캔 없이 업로드 허용",
+      "gridPos": { "x": 6, "y": 44, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": { "reduceOptions": { "calcs": ["sum"] }, "colorMode": "value" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 10 } ] }
+        }
+      },
+      "targets": [ { "expr": "sum(increase(clamav_scans_total{result=\"unavailable\"}[5m]))", "refId": "A" } ]
+    },
+    {
+      "id": 17, "type": "timeseries", "title": "스캔 결과 분포",
+      "gridPos": { "x": 12, "y": 44, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 15, "stacking": { "mode": "normal" } } } },
+      "targets": [ { "expr": "sum by (result) (rate(clamav_scans_total[$interval]))", "refId": "A", "legendFormat": "{{result}}" } ]
+    },
+    {
+      "id": 18, "type": "row", "title": "백그라운드 작업 — Celery",
+      "gridPos": { "x": 0, "y": 52, "w": 24, "h": 1 }, "collapsed": false
+    },
+    {
+      "id": 19, "type": "timeseries", "title": "Celery 태스크 실패율 (task별)",
+      "gridPos": { "x": 0, "y": 53, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [ { "expr": "sum by (task_name) (rate(celery_task_failures_total[$interval]))", "refId": "A", "legendFormat": "{{task_name}}" } ]
+    },
+    {
+      "id": 20, "type": "row", "title": "Python 프로세스",
+      "gridPos": { "x": 0, "y": 61, "w": 24, "h": 1 }, "collapsed": false
+    },
+    {
+      "id": 21, "type": "timeseries", "title": "메모리 · CPU · FD",
+      "gridPos": { "x": 0, "y": 62, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "expr": "process_resident_memory_bytes{job=\"itsm-api\"} / 1024 / 1024", "refId": "A", "legendFormat": "RSS (MB)" },
+        { "expr": "rate(process_cpu_seconds_total{job=\"itsm-api\"}[$interval]) * 100", "refId": "B", "legendFormat": "CPU %" },
+        { "expr": "process_open_fds{job=\"itsm-api\"}", "refId": "C", "legendFormat": "open FDs" }
+      ]
+    },
+    {
+      "id": 22, "type": "timeseries", "title": "Python GC 수집 빈도",
+      "gridPos": { "x": 12, "y": 62, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [ { "expr": "sum by (generation) (rate(python_gc_collections_total[$interval]))", "refId": "A", "legendFormat": "gen{{generation}}" } ]
+    },
+    {
+      "id": 23, "type": "row", "title": "클라이언트 에러 수집 (ErrorBoundary)",
+      "gridPos": { "x": 0, "y": 70, "w": 24, "h": 1 }, "collapsed": false
+    },
+    {
+      "id": 24, "type": "timeseries", "title": "프론트 client-error 수신율",
+      "description": "브라우저 ErrorBoundary가 /api/client-errors로 POST한 클라이언트 예외 수",
+      "gridPos": { "x": 0, "y": 71, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total{handler=~\".*client-errors.*\"}[$interval]))", "refId": "A", "legendFormat": "client-errors / s" }
+      ]
+    }
+  ]
+}

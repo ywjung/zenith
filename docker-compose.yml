@@ -184,6 +184,9 @@ services:
   itsm-api:
     image: ${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}
     restart: unless-stopped
+    # gunicorn --graceful-timeout 60s + 백그라운드 스레드 55s 대기 → 최대 ~70s 필요.
+    # 기본 stop_grace_period(10s) 초과 시 SIGKILL로 in-flight 요청 중단 → 사용자 500.
+    stop_grace_period: 90s
     ulimits:
       nofile:
         soft: 65536

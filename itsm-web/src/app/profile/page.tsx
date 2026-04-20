@@ -11,6 +11,7 @@ import RequireAuth from '@/components/RequireAuth'
 import AvatarComp from '@/components/Avatar'
 import { ROLE_LABELS } from '@/lib/constants'
 import SessionManager from '@/components/SessionManager'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 import { uploadAvatar, deleteAvatar, fetchPushVapidKey, fetchPushStatus, subscribePush, unsubscribePush, listNotificationRules, createNotificationRule, updateNotificationRule, deleteNotificationRule } from '@/lib/api'
 import type { NotificationRule, NotificationRuleCreate } from '@/lib/api'
 
@@ -155,6 +156,8 @@ function ProfileContent() {
   const [notifRules, setNotifRules] = useState<NotificationRule[]>([])
   const [showRuleModal, setShowRuleModal] = useState(false)
   const [editRule, setEditRule] = useState<NotificationRule | null>(null)
+
+  useEscapeClose(showRuleModal, () => setShowRuleModal(false))
   const [ruleForm, setRuleForm] = useState<NotificationRuleCreate>({
     name: '', enabled: true,
     match_priorities: [], match_categories: [], match_states: [],

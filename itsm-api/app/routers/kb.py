@@ -444,7 +444,14 @@ def update_article(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_agent),
 ):
-    article = db.query(KBArticle).filter(KBArticle.id == article_id).first()
+    # with_for_update로 동시 수정 직렬화 — 같은 article에 대한 두 동시 update가
+    # 동일 revision_number로 INSERT해 이력이 어긋나는 문제 방지.
+    article = (
+        db.query(KBArticle)
+        .filter(KBArticle.id == article_id)
+        .with_for_update()
+        .first()
+    )
     if not article:
         raise HTTPException(status_code=404, detail="아티클을 찾을 수 없습니다.")
 

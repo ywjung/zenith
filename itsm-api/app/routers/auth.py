@@ -560,6 +560,8 @@ def me(user: dict = Depends(get_current_user)):
         "avatar_url": user.get("avatar_url"),
         "organization": user.get("organization", ""),
         "role": user.get("role", "user"),
+        # JWT exp 노출 — 프론트가 만료 전 사용자에게 세션 연장 모달 표시.
+        "exp": user.get("exp"),
     }
 
 

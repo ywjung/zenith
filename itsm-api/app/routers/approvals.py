@@ -81,7 +81,20 @@ def create_approval_request(
     except Exception:
         raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
 
-    # 이미 대기 중인 요청이 있으면 중복 생성 방지 — FOR UPDATE로 동시 요청 직렬화
+    # 동시 생성 경합 방지 — PostgreSQL advisory lock으로 티켓 단위 직렬화.
+    # `with_for_update()`는 비어있는 결과 집합에 락을 걸 수 없어 두 동시 트랜잭션이
+    # 모두 "기존 없음"을 보고 각자 INSERT → 중복 pending 생성. advisory_xact_lock은
+    # 트랜잭션 커밋/롤백 시 자동 해제되므로 데드락 위험 없이 직렬화 가능.
+    # SQLite 등에선 무시(exec 실패 → try/except로 무해 폴백).
+    try:
+        from sqlalchemy import text as _text
+        # 안정적인 32-bit 해시 (ticket_iid + project_id) — advisory lock 1-arg 버전
+        _lock_key = abs(hash((int(body.ticket_iid), str(body.project_id)))) % (2**31)
+        db.execute(_text("SELECT pg_advisory_xact_lock(:k)"), {"k": _lock_key})
+    except Exception as _lock_err:
+        logger.debug("Advisory lock skipped (non-PG dialect?): %s", _lock_err)
+
+    # 이미 대기 중인 요청이 있으면 중복 생성 방지
     existing = (
         db.query(ApprovalRequest)
         .filter(
@@ -89,7 +102,6 @@ def create_approval_request(
             ApprovalRequest.project_id == body.project_id,
             ApprovalRequest.status == "pending",
         )
-        .with_for_update()
         .first()
     )
     if existing:

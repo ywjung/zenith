@@ -10,6 +10,7 @@ import { SkeletonRow } from '@/components/Skeleton'
 import { listChanges, getChangeStats, transitionChange, type ChangeRequest } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { formatDate, errorMessage } from '@/lib/utils'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 
 const STATUS_KEYS = ['draft', 'submitted', 'reviewing', 'approved', 'rejected', 'implementing', 'implemented', 'failed', 'cancelled'] as const
 
@@ -56,6 +57,8 @@ function ChangesContent() {
   const [transitioning, setTransitioning] = useState<number | null>(null)
   const [commentModal, setCommentModal] = useState<{ id: number; status: string; label: string } | null>(null)
   const [commentInput, setCommentInput] = useState('')
+
+  useEscapeClose(commentModal !== null, () => setCommentModal(null))
 
   const COMMENT_REQUIRED = new Set(['approved', 'rejected', 'implemented', 'failed'])
   const actionLabel = (s: string) => {

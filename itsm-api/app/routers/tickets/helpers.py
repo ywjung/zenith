@@ -20,6 +20,31 @@ from ...redis_client import get_redis as _get_redis, scan_delete as _scan_delete
 
 
 # ---------------------------------------------------------------------------
+# Optimistic locking ETag 정규화
+# ---------------------------------------------------------------------------
+
+def compute_issue_etag(issue: dict) -> str:
+    """GitLab issue dict에서 안정적인 ETag 해시를 계산한다.
+
+    updated_at 문자열을 직접 노출하면 (1) 포맷 변경(`.000Z` 유무, timezone 차이)으로
+    false-409가 날 수 있고, (2) 내부 타임스탬프가 불필요하게 외부로 새어나간다.
+    단축 해시(12 hex)로 정규화해 비교를 견고하게 하고 PII/내부 시각을 숨긴다.
+
+    Returns: 12자 hex string (collision 확률 매우 낮음, 충돌 시 409로 안전 측 fail).
+    """
+    # 이슈 상태를 결정짓는 핵심 필드만 해시 입력에 포함.
+    # 다른 필드가 바뀌어도 영향 받지 않도록 (e.g., 뷰 카운터).
+    key = "|".join([
+        str(issue.get("updated_at") or ""),
+        str(issue.get("state") or ""),
+        # title/labels 변경도 감지 (updated_at만으로 놓치는 케이스 방어)
+        str(issue.get("title") or ""),
+        ",".join(sorted(issue.get("labels") or [])),
+    ])
+    return _hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+
+
+# ---------------------------------------------------------------------------
 # 자동화 규칙 액션 실행 헬퍼
 # ---------------------------------------------------------------------------
 

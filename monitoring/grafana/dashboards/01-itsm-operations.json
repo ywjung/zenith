@@ -1357,6 +1357,209 @@
           }
         }
       ]
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "GitLab CB",
+      "description": "0=정상, 1=Circuit Breaker 오픈(GitLab API 차단). itsm-infrastructure 대시보드 참조.",
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "정상",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "장애",
+                  "color": "red"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "gitlab_circuit_breaker_open",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "DB 풀 사용률",
+      "description": "checked_out / pool_size",
+      "gridPos": {
+        "x": 4,
+        "y": 42,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.6
+              },
+              {
+                "color": "red",
+                "value": 0.85
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sqlalchemy_pool_checked_out / sqlalchemy_pool_size_configured",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "429 (10m)",
+      "description": "지난 10분 rate-limited 요청 총합",
+      "gridPos": {
+        "x": 8,
+        "y": 42,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(http_rate_limited_requests_total[10m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "슬로우 쿼리 (10m)",
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(db_slow_queries_total[10m]))",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }

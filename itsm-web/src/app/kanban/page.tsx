@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { DragDropContext, Droppable, Draggable, DropResult, DragStart } from '@hello-pangea/dnd'
 import { updateTicket, fetchProjects, fetchKanbanBoard } from '@/lib/api'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 import { consumeKanbanPrefetch } from '@/lib/kanbanPrefetch'
 import { formatDate } from '@/lib/utils'
 import type { Ticket, GitLabProject } from '@/types'
@@ -122,6 +123,11 @@ function KanbanContent() {
   const [changeReason, setChangeReason] = useState('')
   const [syncFailed, setSyncFailed] = useState(false)
   const REASON_REQUIRED = new Set(['waiting', 'reopened'])
+
+  useEscapeClose(pendingDrop !== null, () => {
+    setPendingDrop(null)
+    setChangeReason('')
+  })
 
   const load = useCallback(async () => {
     setLoading(true)

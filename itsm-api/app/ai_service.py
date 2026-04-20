@@ -80,7 +80,9 @@ def _call_openai(api_key: str, model: str, prompt: str) -> str:
         from openai import OpenAI
     except ImportError:
         raise RuntimeError("openai 패키지가 설치되지 않았습니다. pip install openai")
-    client = OpenAI(api_key=api_key)
+    # OpenAI SDK 기본 timeout은 10분 — 사용자 대기 UX 관점에서 너무 길다.
+    # 사용자 직접 호출(분류/요약)이 있는 경로이므로 60초로 제한.
+    client = OpenAI(api_key=api_key, timeout=60.0)
     try:
         resp = client.chat.completions.create(
             model=model,

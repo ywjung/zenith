@@ -23,16 +23,69 @@ const REQUEST_TIMEOUT_MS = 30_000
 /** AI 요청 타임아웃 — 대형 로컬 모델(35B+)은 응답에 60s 이상 소요될 수 있음 */
 const AI_TIMEOUT_MS = 120_000
 
+/** HTTP 상태 코드별 사용자 친화 메시지. 서버가 detail을 제공하면 우선 사용. */
+function statusFallbackMessage(status: number): string {
+  // 클라이언트 에러 — 사용자 액션 유도
+  if (status === 400) return '요청 형식이 올바르지 않습니다.'
+  if (status === 401) return '로그인이 필요합니다.'
+  if (status === 403) return '권한이 없습니다. 관리자에게 문의하세요.'
+  if (status === 404) return '요청하신 리소스를 찾을 수 없습니다.'
+  if (status === 409) return '다른 사용자가 먼저 변경했습니다. 새로고침 후 다시 시도하세요.'
+  if (status === 413) return '파일이 너무 큽니다.'
+  if (status === 415) return '지원하지 않는 파일 형식입니다.'
+  if (status === 422) return '입력값을 다시 확인해 주세요.'
+  if (status === 429) return '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.'
+  // 서버/인프라 에러 — 관리자 문의
+  if (status === 502) return '외부 서비스 응답 오류입니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요.'
+  if (status === 503) return '서비스 점검 중입니다. 잠시 후 다시 시도해 주세요.'
+  if (status === 504) return '서버 응답 시간이 초과되었습니다.'
+  if (status >= 500) return '서버 오류가 발생했습니다. 문제가 지속되면 관리자에게 문의하세요.'
+  return `요청 실패 (HTTP ${status})`
+}
+
 /** main.py 통합 에러 포맷 {error:{code,message,detail}} 및 FastAPI 기본 {detail} 모두 처리 */
 async function parseErrorMessage(res: Response): Promise<string> {
   const err = await res.json().catch(() => ({} as Record<string, unknown>))
+  const fallback = statusFallbackMessage(res.status)
   if (err.error && typeof err.error === 'object') {
     const e = err.error as Record<string, unknown>
     if (Array.isArray(e.detail)) return (e.detail as { msg: string }[]).map(x => x.msg).join('; ')
-    return (e.message as string) || `HTTP ${res.status}`
+    return (e.message as string) || fallback
   }
   if (Array.isArray(err.detail)) return (err.detail as { msg: string }[]).map(x => x.msg).join('; ')
-  return (err.detail as string) || `HTTP ${res.status}`
+  return (err.detail as string) || fallback
+}
+
+/** 에러 객체에 대해 사용자 토스트용 메시지/재시도 가능 여부를 반환. */
+export type ApiErrorInfo = {
+  status?: number
+  message: string
+  retryable: boolean
+  /** true면 관리자 문의 안내 필요 (5xx) */
+  contactSupport: boolean
+}
+
+export function classifyApiError(err: unknown, fallback = '요청 실패'): ApiErrorInfo {
+  const msg = err instanceof Error ? err.message : String(err ?? fallback)
+  // 메시지에 HTTP 상태 패턴이 담겨 있으면 추출
+  const statusMatch = msg.match(/HTTP\s*(\d{3})/)
+  const status = statusMatch ? Number(statusMatch[1]) : undefined
+  const retryable = status === 429 || status === 503 || status === 504 || /시간이 초과/.test(msg) || /너무 많/.test(msg)
+  const contactSupport = status !== undefined && status >= 500 && status !== 503 && status !== 504
+  return { status, message: msg || fallback, retryable, contactSupport }
+}
+
+/**
+ * 중복 전송 방지용 Idempotency-Key 생성기.
+ *
+ * ⚠️ 호출부(제출 핸들러)에서 **한 번만** 생성해 동일 논리 액션의 재시도에 재사용해야 함.
+ * `request()` 내부에서 자동 생성하면 더블클릭 두 번이 서로 다른 UUID를 받아
+ * 백엔드 dedup(Redis SET NX)이 무의미해진다. 반드시 호출부에서 useRef 등으로 고정.
+ */
+export function makeIdempotencyKey(): string {
+  const c = (globalThis as { crypto?: Crypto }).crypto
+  if (c?.randomUUID) return c.randomUUID()
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 async function request<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
@@ -40,11 +93,19 @@ async function request<T>(path: string, init?: RequestInit & { timeoutMs?: numbe
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
+  // 호출부가 제공한 Idempotency-Key만 사용. 자동 생성은 하지 않는다
+  // (매 호출 새 UUID = dedup 무의미). 내부 재시도 시에도 동일 헤더가 전파되도록
+  // merge된 헤더를 재사용한다.
+  const baseHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...((init?.headers as Record<string, string>) ?? {}),
+  }
+
   let res: Response
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers: baseHeaders,
       cache: 'no-store',
       credentials: 'include',
       signal: init?.signal ?? controller.signal,
@@ -67,7 +128,7 @@ async function request<T>(path: string, init?: RequestInit & { timeoutMs?: numbe
     if (retrySignal.aborted) throw new Error('요청이 취소되었습니다.')
     const retryRes = await fetch(`${API_BASE}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers: baseHeaders,  // Idempotency-Key 포함 원본 헤더 재사용
       cache: 'no-store',
       credentials: 'include',
       signal: retrySignal,
@@ -89,7 +150,7 @@ async function request<T>(path: string, init?: RequestInit & { timeoutMs?: numbe
       try {
         const retryRes = await fetch(`${API_BASE}${path}`, {
           ...init,
-          headers: { 'Content-Type': 'application/json', ...init?.headers },
+          headers: baseHeaders,  // Idempotency-Key 포함 원본 헤더 재사용
           cache: 'no-store',
           credentials: 'include',
           signal: retryController.signal,
@@ -183,6 +244,36 @@ export function fetchTicketStats(projectId?: string): Promise<TicketStats> {
   return request<TicketStats>(`/tickets/stats${qs}`)
 }
 
+/** 주어진 티켓과 유사한 과거 티켓 — pg_trgm 제목 유사도 기반. */
+export function fetchRelatedTickets(iid: number, projectId?: string, limit = 3): Promise<
+  { iid: number; title: string; state: string; status: string; created_at: string; score: number }[]
+> {
+  const qs: Record<string, string | number | null | undefined> = { limit }
+  if (projectId) qs.project_id = projectId
+  return request(`/tickets/${iid}/related${buildQuery(qs)}`)
+}
+
+/** 티켓 전문검색 — 중복 티켓 감지·빠른 검색 등에 사용. */
+export interface TicketSearchResult {
+  iid: number
+  title: string
+  status: string
+  priority: string
+  category: string
+  created_at: string
+  updated_at: string
+  project_id: string
+  assignees?: { username: string; name?: string }[]
+}
+export function searchTickets(params: {
+  q: string
+  state?: 'opened' | 'closed'
+  project_id?: string
+  per_page?: number
+}): Promise<TicketSearchResult[]> {
+  return request(`/tickets/search${buildQuery(params as Record<string, string | number | null | undefined>)}`)
+}
+
 /** 칸반 보드 전용 경량 엔드포인트 — DB에서 직접 조립, GitLab API 호출 없음. */
 export function fetchKanbanBoard(params?: {
   project_id?: string
@@ -220,13 +311,57 @@ export function fetchTicketRequesters(projectId?: string): Promise<{ username: s
   return request(`/tickets/requesters${qs}`)
 }
 
-export function fetchTicket(iid: number, projectId?: string): Promise<Ticket> {
+/**
+ * 단일 티켓 조회. 응답의 `ETag` 헤더를 `_etag` 프로퍼티로 함께 반환해
+ * 호출부가 낙관적 락(If-Match)에 활용할 수 있게 한다.
+ *
+ * 백엔드는 ETag를 `updated_at` 문자열 대신 안정적인 해시로 반환하므로
+ * 프론트는 반드시 이 `_etag`를 그대로 If-Match로 전달해야 한다.
+ *
+ * 401 → 토큰 리프레시 후 1회 재시도. 429 → Retry-After 준수 1회 재시도.
+ */
+export async function fetchTicket(
+  iid: number,
+  projectId?: string,
+): Promise<Ticket & { _etag?: string }> {
   const qs = projectId ? `?project_id=${projectId}` : ''
-  return request<Ticket>(`/tickets/${iid}${qs}`)
+  const url = `${API_BASE}/tickets/${iid}${qs}`
+  const doFetch = () => fetch(url, { credentials: 'include', cache: 'no-store' })
+
+  let res = await doFetch()
+
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('Retry-After') || '1', 10)
+    const waitMs = Math.min(Math.max(retryAfter, 1), 10) * 1000
+    await new Promise(resolve => setTimeout(resolve, waitMs))
+    res = await doFetch()
+  }
+
+  if (res.status === 401) {
+    const refreshed = await tryRefreshToken()
+    if (refreshed) {
+      res = await doFetch()
+    } else {
+      handleAuthExpired()
+      throw new Error('로그인이 필요합니다.')
+    }
+  }
+  if (!res.ok) {
+    throw new Error(await parseErrorMessage(res))
+  }
+  const ticket = await res.json() as Ticket
+  const etag = res.headers.get('ETag')?.replace(/"/g, '')
+  return { ...ticket, _etag: etag ?? undefined }
 }
 
-export function createTicket(data: TicketCreate): Promise<Ticket> {
-  return request<Ticket>('/tickets/', { method: 'POST', body: JSON.stringify(data) })
+export function createTicket(data: TicketCreate, opts?: { idempotencyKey?: string }): Promise<Ticket> {
+  const headers: Record<string, string> = {}
+  if (opts?.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey
+  return request<Ticket>('/tickets/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    headers,
+  })
 }
 
 export function fetchComments(iid: number, projectId?: string): Promise<Comment[]> {
@@ -287,6 +422,14 @@ export async function updateTicket(
 
   let res = await doFetch(init)
 
+  // 429 → Retry-After 준수 1회 재시도 (rate limit 대응)
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('Retry-After') || '1', 10)
+    const waitMs = Math.min(Math.max(retryAfter, 1), 10) * 1000
+    await new Promise(resolve => setTimeout(resolve, waitMs))
+    res = await doFetch(init)
+  }
+
   // 401 → 토큰 리프레시 후 재시도 (request<T> 헬퍼와 동일한 로직)
   if (res.status === 401) {
     const refreshed = await tryRefreshToken()
@@ -314,11 +457,15 @@ export function addComment(
   body: string,
   projectId?: string,
   internal = false,
+  opts?: { idempotencyKey?: string },
 ): Promise<Comment> {
   const qs = projectId ? `?project_id=${projectId}` : ''
+  const headers: Record<string, string> = {}
+  if (opts?.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey
   return request<Comment>(`/tickets/${iid}/comments${qs}`, {
     method: 'POST',
     body: JSON.stringify({ body, internal }),
+    headers,
   })
 }
 
@@ -337,6 +484,45 @@ export function deleteComment(iid: number, noteId: number, projectId?: string): 
 
 /** 파일 업로드 전용 타임아웃 (ms). 10MB 파일 기준 느린 네트워크(1Mbps)에서 약 80s. */
 const UPLOAD_TIMEOUT_MS = 300_000 // 5분
+
+/**
+ * XHR 기반 업로드 — 진행률 콜백 지원. (fetch는 ReadableStream request body에서도
+ * progress 콘솔 노출이 브라우저마다 불안정해 XMLHttpRequest로 통일.)
+ */
+export function uploadFileWithProgress(
+  file: File,
+  projectId: string | undefined,
+  onProgress: (pct: number) => void,
+): Promise<{ markdown: string; url: string; full_path: string; proxy_path: string; name: string }> {
+  return new Promise((resolve, reject) => {
+    const qs = projectId ? `?project_id=${projectId}` : ''
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_BASE}/tickets/upload${qs}`, true)
+    xhr.withCredentials = true
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText)) }
+        catch { reject(new Error('서버 응답 파싱 실패')) }
+      } else if (xhr.status === 401) {
+        handleAuthExpired()
+        reject(new Error('로그인이 필요합니다.'))
+      } else {
+        let detail = `HTTP ${xhr.status}`
+        try { detail = JSON.parse(xhr.responseText).detail || detail } catch { /* noop */ }
+        reject(new Error(detail))
+      }
+    }
+    xhr.onerror = () => reject(new Error('네트워크 오류로 업로드 실패'))
+    xhr.ontimeout = () => reject(new Error(`파일 업로드 시간이 초과되었습니다 (${UPLOAD_TIMEOUT_MS / 60000}분)`))
+    xhr.timeout = UPLOAD_TIMEOUT_MS
+    const fd = new FormData()
+    fd.append('file', file)
+    xhr.send(fd)
+  })
+}
 
 export async function uploadFile(
   file: File,
@@ -539,15 +725,24 @@ export function fetchOllamaModels(baseUrl: string): Promise<{ base_url: string; 
   })
 }
 
+export type BulkUpdateResult = {
+  success: number[]
+  errors: { iid: number; code?: number; error: string }[]
+  summary?: { total: number; succeeded: number; failed: number }
+}
+
 export function bulkUpdateTickets(data: {
   iids: number[]
   project_id: string
   action: string
   value?: string
-}): Promise<{ success: number[]; errors: { iid: number; error: string }[] }> {
-  return request('/tickets/bulk', {
+}, opts?: { idempotencyKey?: string }): Promise<BulkUpdateResult> {
+  const headers: Record<string, string> = {}
+  if (opts?.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey
+  return request<BulkUpdateResult>('/tickets/bulk', {
     method: 'POST',
     body: JSON.stringify(data),
+    headers,
   })
 }
 

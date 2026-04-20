@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
 import { errorMessage } from '@/lib/utils'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 
 interface FieldDef {
   name: string
@@ -121,6 +122,9 @@ export default function ServiceCatalogAdminPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+
+  useEscapeClose(showModal, () => setShowModal(false))
+  useEscapeClose(deleteId !== null, () => setDeleteId(null))
 
   async function load() {
     setLoading(true)

@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from typing import Optional
 from ..auth import get_current_user
@@ -73,7 +74,13 @@ def create_rating(
         comment=data.comment,
     )
     db.add(rating)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # unique(gitlab_issue_iid, username) 경쟁 — 두 동시 요청 중 한쪽은
+        # 500 대신 사용자 친화적 409를 받아야 한다. (우선 체크 후 INSERT가 TOCTOU)
+        db.rollback()
+        raise HTTPException(status_code=409, detail="이미 평가를 완료한 티켓입니다. 수정 API를 이용하세요.")
     db.refresh(rating)
 
     _post_gitlab_comment(iid, employee_name, data.score, data.comment, gitlab_token=user.get("gitlab_token"))

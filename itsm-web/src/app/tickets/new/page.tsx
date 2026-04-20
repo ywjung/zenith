@@ -8,6 +8,7 @@ import {
   uploadFile, fetchTemplates, fetchKBArticles,
   fetchCustomFieldDefs, setTicketCustomFields,
   aiSuggestTicket, fetchAIStatus, type AIClassifyResult,
+  makeIdempotencyKey,
 } from '@/lib/api'
 import type { GitLabProject, ProjectMember, Milestone, TicketTemplate, KBArticle, CustomFieldDef } from '@/types'
 import dynamic from 'next/dynamic'
@@ -77,6 +78,9 @@ function NewTicketContent() {
   const [kbSuggestions, setKbSuggestions] = useState<KBArticle[]>([])
   const [kbLoading, setKbLoading] = useState(false)
   const kbTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 중복 티켓 감지: 제목 입력 후 유사한 오픈 티켓 최대 3건 표시.
+  const [dupTickets, setDupTickets] = useState<Array<{ iid: number; title: string; status: string; project_id: string }>>([])
+  const dupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [form, setForm] = useState({
     title: '',
@@ -112,6 +116,9 @@ function NewTicketContent() {
   const DRAFT_KEY = 'ticket_new_draft'
   const isDirtyRef = useRef(false)
   const submittedRef = useRef(false)
+  // 중복 전송 방지용 Idempotency-Key — 제출 시 1회 생성, 성공/초기화 전까지 재사용.
+  // 동일 제출의 재시도(네트워크 재시도·429·401 refresh)와 더블클릭이 같은 키를 갖도록.
+  const idemKeyRef = useRef<string | null>(null)
   // 이탈 확인 모달 상태
   const [leaveModal, setLeaveModal] = useState<{ show: boolean; dest: string }>({ show: false, dest: '' })
   // 임시저장 복원 배너 상태
@@ -125,15 +132,32 @@ function NewTicketContent() {
     isDirtyRef.current = !!(form.title || form.description || form.employee_name)
   }, [form.title, form.description, form.employee_name])
 
-  // 자동 임시저장: 폼이 더티 상태이고 제출 전이면 2초 debounce로 localStorage 저장
+  // 자동 임시저장: 폼 변경 시 500ms debounce로 localStorage 저장 (빠른 이탈 시 유실 최소화)
   useEffect(() => {
     if (!isDirtyRef.current || submittedRef.current) return
     const timer = setTimeout(() => {
       try {
         localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, confidential, categoryContext, savedAt: Date.now() }))
       } catch {}
-    }, 2000)
+    }, 500)
     return () => clearTimeout(timer)
+  }, [form, confidential, categoryContext])
+
+  // 탭 숨김·언로드 시 즉시 저장 (debounce 대기 중 유실 방지)
+  useEffect(() => {
+    function flushDraft() {
+      if (!isDirtyRef.current || submittedRef.current) return
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, confidential, categoryContext, savedAt: Date.now() }))
+      } catch {}
+    }
+    function onVisibility() { if (document.visibilityState === 'hidden') flushDraft() }
+    window.addEventListener('pagehide', flushDraft)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', flushDraft)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [form, confidential, categoryContext])
 
   // 페이지 진입 시 임시저장 데이터 확인
@@ -269,6 +293,25 @@ function NewTicketContent() {
     }, 300)
     return () => { if (kbTimer.current) clearTimeout(kbTimer.current) }
   }, [form.title, form.category, form.description])
+
+  // 중복 티켓 감지 — 제목 6자 이상에서 오픈 티켓 유사 검색 (400ms 디바운스)
+  useEffect(() => {
+    if (dupTimer.current) clearTimeout(dupTimer.current)
+    if (form.title.trim().length < 6) { setDupTickets([]); return }
+    dupTimer.current = setTimeout(async () => {
+      try {
+        const { searchTickets } = await import('@/lib/api')
+        const results = await searchTickets({
+          q: form.title.trim(),
+          state: 'opened',
+          per_page: 5,
+          project_id: form.project_id || undefined,
+        })
+        setDupTickets(results.slice(0, 3).map(r => ({ iid: r.iid, title: r.title, status: r.status, project_id: r.project_id })))
+      } catch { setDupTickets([]) }
+    }, 400)
+    return () => { if (dupTimer.current) clearTimeout(dupTimer.current) }
+  }, [form.title, form.project_id])
 
   // AI 자동 분류 — 제목 5자 이상, 800ms 디바운스
   useEffect(() => {
@@ -481,7 +524,10 @@ function NewTicketContent() {
         milestone_id: form.milestone_id ? Number(form.milestone_id) : undefined,
         confidential,
       }
-      const ticket = await createTicket(payload)
+      if (!idemKeyRef.current) idemKeyRef.current = makeIdempotencyKey()
+      const ticket = await createTicket(payload, { idempotencyKey: idemKeyRef.current })
+      // 성공 시 키 초기화 (향후 다른 제출은 새 키 사용)
+      idemKeyRef.current = null
       // 커스텀 필드 값 저장
       if (Object.keys(customFieldValues).length > 0) {
         try {
@@ -1180,6 +1226,29 @@ function NewTicketContent() {
               )}
             </div>
           </div>
+
+          {/* 중복 티켓 감지 — 유사 오픈 티켓 있으면 먼저 검토하도록 안내 */}
+          {dupTickets.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 p-4">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 mb-2">⚠️ 비슷한 티켓이 이미 열려 있어요</p>
+              <ul className="space-y-1.5">
+                {dupTickets.map(d => (
+                  <li key={d.iid} className="flex items-start gap-1.5">
+                    <span className="text-amber-400 text-xs mt-0.5 shrink-0">#</span>
+                    <a
+                      href={`/tickets/${d.iid}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-amber-800 dark:text-amber-200 hover:underline leading-snug"
+                    >
+                      #{d.iid} {d.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">중복 접수 전에 먼저 확인해 보세요.</p>
+            </div>
+          )}
 
           {/* KB 문서 제안 */}
           {(kbLoading || kbSuggestions.length > 0) && (

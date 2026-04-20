@@ -6,6 +6,7 @@ import { useConfirm } from '@/components/ConfirmProvider'
 import { API_BASE } from '@/lib/constants'
 import { adminFetch } from '@/lib/adminFetch'
 import { useTranslations } from 'next-intl'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 
 interface AutomationRule {
   id: number
@@ -311,6 +312,9 @@ export default function AutomationRulesPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [logsRule, setLogsRule] = useState<AutomationRule | null>(null)
+
+  useEscapeClose(showForm, () => setShowForm(false))
+  useEscapeClose(logsRule !== null, () => setLogsRule(null))
 
   async function loadRules() {
     setLoading(true)

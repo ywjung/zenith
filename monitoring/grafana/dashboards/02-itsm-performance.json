@@ -810,6 +810,115 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "인프라 의존성",
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "DB 연결 풀 추이",
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 15,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sqlalchemy_pool_checked_out",
+          "legendFormat": "checked_out",
+          "refId": "A"
+        },
+        {
+          "expr": "sqlalchemy_pool_checked_in",
+          "legendFormat": "checked_in",
+          "refId": "B"
+        },
+        {
+          "expr": "sqlalchemy_pool_overflow",
+          "legendFormat": "overflow",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "GitLab API 연속 실패 수",
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "gitlab_circuit_breaker_consecutive_failures",
+          "legendFormat": "failures",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "슬로우 쿼리 TOP endpoint",
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 24,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (path) (rate(db_slow_queries_total[$interval])))",
+          "legendFormat": "{{path}}",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }

@@ -43,7 +43,14 @@ def subscribe(
     db: Session = Depends(get_db),
 ):
     """브라우저 Push 구독 정보를 저장한다. 동일 endpoint는 upsert 처리."""
-    existing = db.query(WebPushSubscription).filter_by(endpoint=body.endpoint).first()
+    # with_for_update로 TOCTOU 경합 방지 — 같은 브라우저에서 동시 subscribe 시
+    # unique(endpoint) 위반으로 500 나는 대신 직렬화로 upsert 안전하게 처리.
+    existing = (
+        db.query(WebPushSubscription)
+        .filter_by(endpoint=body.endpoint)
+        .with_for_update()
+        .first()
+    )
     ua = request.headers.get("user-agent", "")[:500]
     if existing:
         # endpoint가 같으면 키 갱신 (브라우저가 구독을 갱신하는 경우)
@@ -60,7 +67,23 @@ def subscribe(
             user_agent=ua,
         )
         db.add(sub)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        # unique 위반 등 race 잔여 — IntegrityError일 가능성 — rollback 후 upsert 재시도
+        db.rollback()
+        from sqlalchemy.exc import IntegrityError as _IE
+        if isinstance(e, _IE):
+            # 레이스에서 놓친 경우 — 재조회 후 upsert
+            sub = db.query(WebPushSubscription).filter_by(endpoint=body.endpoint).first()
+            if sub:
+                sub.username = user["username"]
+                sub.p256dh = body.p256dh
+                sub.auth = body.auth
+                sub.user_agent = ua
+                db.commit()
+                return {"status": "subscribed"}
+        raise
     return {"status": "subscribed"}
 
 

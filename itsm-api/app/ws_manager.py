@@ -64,8 +64,13 @@ class ConnectionManager:
                 dead.append(conn["ws"])
 
         # Clean up dead connections silently
-        for ws in dead:
-            self.rooms[ticket_iid] = [c for c in self.rooms.get(ticket_iid, []) if c["ws"] is not ws]
+        if dead:
+            remaining = [c for c in self.rooms.get(ticket_iid, []) if c["ws"] not in dead]
+            if remaining:
+                self.rooms[ticket_iid] = remaining
+            else:
+                # 빈 방은 제거해 메모리 누적 방지
+                self.rooms.pop(ticket_iid, None)
 
     async def broadcast_viewers(self, ticket_iid: str) -> None:
         """Push the current viewer list to every connection in the room."""

@@ -5,7 +5,7 @@ import { useEffect, useState, useRef, Suspense } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { fetchTicket, fetchComments, getMyRating, updateTicket, addComment, updateComment, deleteComment, deleteTicket, fetchProjectMembers, fetchMilestones, fetchTicketCustomFields, setTicketCustomFields, uploadFile, fetchTicketLinks, createTicketLink, deleteTicketLink, fetchDevProjects, fetchForwards, createForward, deleteForward, fetchTicketSLA, updateTicketSLA, fetchLinkedMRs, subscribeTicketEvents, fetchWatchers, watchTicket, unwatchTicket, fetchQuickReplies, suggestKBArticles, fetchSLAPrediction, pauseTicketSLA, resumeTicketSLA, extendTicketSLA, fetchTicketAISummary } from '@/lib/api'
+import { fetchTicket, fetchComments, getMyRating, updateTicket, addComment, updateComment, deleteComment, deleteTicket, fetchProjectMembers, fetchMilestones, fetchTicketCustomFields, setTicketCustomFields, uploadFile, fetchTicketLinks, createTicketLink, deleteTicketLink, fetchDevProjects, fetchForwards, createForward, deleteForward, fetchTicketSLA, updateTicketSLA, fetchLinkedMRs, subscribeTicketEvents, fetchWatchers, watchTicket, unwatchTicket, fetchQuickReplies, suggestKBArticles, fetchSLAPrediction, pauseTicketSLA, resumeTicketSLA, extendTicketSLA, fetchTicketAISummary, fetchRelatedTickets, makeIdempotencyKey } from '@/lib/api'
 import type { AISummaryResult } from '@/lib/api'
 import type { QuickReply } from '@/lib/api'
 import type { Ticket, Comment, Rating, ProjectMember, Milestone, TicketCustomFieldValue, TicketLink, DevProject, ProjectForward, ForwardsResponse, SLARecord, LinkedMR, SLAPrediction } from '@/types'
@@ -20,7 +20,7 @@ import { useConfirm } from '@/components/ConfirmProvider'
 import RequireAuth from '@/components/RequireAuth'
 import { useAuth } from '@/context/AuthContext'
 import { useServiceTypes } from '@/context/ServiceTypesContext'
-import { formatName, formatDate, formatSmartDate, formatFileSize, getFileIcon, isImageFile, markdownToHtml } from '@/lib/utils'
+import { formatName, formatDate, formatSmartDate, formatFileSize, getFileIcon, isImageFile, markdownToHtml, errorMessage } from '@/lib/utils'
 import { PRIORITY_OPTIONS, API_BASE } from '@/lib/constants'
 import dynamic from 'next/dynamic'
 import DOMPurify from 'isomorphic-dompurify'
@@ -823,6 +823,44 @@ function DescriptionWithAttachments({
   )
 }
 
+/**
+ * 긴 댓글·본문을 기본 접기 + "더 보기"로 펼치게 해 스크롤 피로 완화.
+ * 렌더링된 DOM 높이가 360px 이상이면 접기 상태로 초기 표시.
+ */
+function CollapsibleBody({ children }: { children: React.ReactNode }) {
+  const [expanded, setExpanded] = useState(false)
+  const [overflowing, setOverflowing] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const THRESHOLD = 360
+  useEffect(() => {
+    if (!ref.current) return
+    setOverflowing(ref.current.scrollHeight > THRESHOLD + 40)
+  }, [children])
+  return (
+    <div className="relative">
+      <div
+        ref={ref}
+        className="overflow-hidden transition-[max-height] duration-200"
+        style={{ maxHeight: expanded || !overflowing ? 'none' : THRESHOLD }}
+      >
+        {children}
+      </div>
+      {overflowing && !expanded && (
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white dark:from-gray-900 to-transparent pointer-events-none" />
+      )}
+      {overflowing && (
+        <button
+          type="button"
+          onClick={() => setExpanded(e => !e)}
+          className="relative mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          {expanded ? '접기 ▲' : '더 보기 ▼'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function Lightbox({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
   const t = useTranslations('ticket_detail')
   useEffect(() => {
@@ -903,6 +941,8 @@ function TicketDetailContent() {
   const [waitingReasonInput, setWaitingReasonInput] = useState('')
   const [pendingReasonStatus, setPendingReasonStatus] = useState<string>('waiting')
   const ticketEtag = useRef<string>('')
+  // 댓글 제출 중복 방지 — 전송 성공 전까지 동일 키를 재사용.
+  const commentIdemKeyRef = useRef<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [cloning, setCloning] = useState(false)
@@ -950,6 +990,9 @@ function TicketDetailContent() {
   const [lightbox, setLightbox] = useState<{ url: string; name: string } | null>(null)
   const [commentFiles, setCommentFiles] = useState<File[]>([])
   const [commentUploading, setCommentUploading] = useState(false)
+  // 파일별 업로드 상태 — 진행률·개별 에러 표시.
+  type UploadStatus = { progress: number; status: 'pending' | 'uploading' | 'ok' | 'error'; error?: string }
+  const [commentUploadStatus, setCommentUploadStatus] = useState<Record<string, UploadStatus>>({})
   const [commentIsDragging, setCommentIsDragging] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
 
@@ -1000,6 +1043,7 @@ function TicketDetailContent() {
   const [convertingToKb, setConvertingToKb] = useState(false)
   const [kbConvertError, setKbConvertError] = useState<string | null>(null)
   const [kbSuggestions, setKbSuggestions] = useState<import('@/types').KBArticle[]>([])
+  const [relatedTickets, setRelatedTickets] = useState<{ iid: number; title: string; status: string; score: number }[]>([])
 
   const isRequester = !!user && !!ticket?.created_by_username && user.username === ticket.created_by_username
   const canDelete = isAdmin || (ticket?.status === 'open' && isRequester)
@@ -1024,7 +1068,7 @@ function TicketDetailContent() {
     // Phase 1b: 렌더링에 필요한 코어 데이터 병렬 fetch
     Promise.all([fetchTicket(iid, projectId), fetchComments(iid, projectId), getMyRating(iid)])
       .then(([t, c, r]) => {
-        ticketEtag.current = t.updated_at ?? ''
+        ticketEtag.current = t._etag ?? ''
         setTicket(t)
         setComments(c)
         setRating(r)
@@ -1042,6 +1086,10 @@ function TicketDetailContent() {
           if (t.title) {
             const descExcerpt = (t.description || '').replace(/[#*`>\[\]()\-_~|!]/g, ' ').trim().slice(0, 200)
             suggestKBArticles(t.title, 3, t.category, descExcerpt || undefined).then(setKbSuggestions).catch(() => {})
+            // 유사 과거 티켓 추천 — pg_trgm 제목 유사도 기반. 에이전트/운영자 도움.
+            fetchRelatedTickets(iid, t.project_id, 3)
+              .then(r => setRelatedTickets(r.map(x => ({ iid: x.iid, title: x.title, status: x.status, score: x.score }))))
+              .catch(() => {})
           }
           if (isDeveloper || isAgent) {
             fetchTicketLinks(iid, t.project_id).then(setLinks).catch(() => {})
@@ -1066,7 +1114,16 @@ function TicketDetailContent() {
           }
         }
       })
-      .catch((e) => setError(e.message))
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e)
+        // 404 — 티켓이 GitLab에서 삭제된 경우 (예: admin 수동 삭제, orphan cleanup 후).
+        // 기본 에러 메시지 대신 명확한 안내로 사용자 혼란 제거.
+        if (/404|not.?found|찾을 수 없/i.test(msg)) {
+          setError('이 티켓은 삭제되었거나 더 이상 존재하지 않습니다.')
+        } else {
+          setError(msg)
+        }
+      })
       .finally(() => setLoading(false))
   }, [iid, projectId, isDeveloper, isAgent, user])
 
@@ -1088,7 +1145,7 @@ function TicketDetailContent() {
     // interval 내부에서 최신 값을 읽으므로 forwards가 0이면 즉시 반환
     const pid = ticket.project_id
     const timer = setInterval(() => {
-      fetchTicket(iid, pid).then(t => { ticketEtag.current = t.updated_at ?? ''; setTicket(t) }).catch(() => {})
+      fetchTicket(iid, pid).then(t => { ticketEtag.current = t._etag ?? ''; setTicket(t) }).catch(() => {})
       fetchForwards(iid, pid).then((res) => {
         setForwards(res.forwards)
         setForwardsAllClosed(res.all_closed)
@@ -1103,7 +1160,7 @@ function TicketDetailContent() {
     if (!iid || !ticket?.project_id) return
     const pid = ticket.project_id
     const unsubscribe = subscribeTicketEvents(String(iid), pid, () => {
-      fetchTicket(iid, pid).then(t => { ticketEtag.current = t.updated_at ?? ''; setTicket(t) }).catch(() => {})
+      fetchTicket(iid, pid).then(t => { ticketEtag.current = t._etag ?? ''; setTicket(t) }).catch(() => {})
       if (isDeveloper) {
         fetchForwards(iid, pid).then((res) => {
           setForwards(res.forwards)
@@ -1146,6 +1203,7 @@ function TicketDetailContent() {
 
   async function _doStatusChange(newStatus: string, note: string, type: string, reason: string) {
     if (!ticket) return
+    const prevStatus = ticket.status
     setUpdating(true)
     setActionError(null)
     try {
@@ -1160,6 +1218,25 @@ function TicketDetailContent() {
       setTicket(updated)
       const updatedComments = await fetchComments(iid, projectId)
       setComments(updatedComments)
+      // 실행 취소 토스트 — 파괴적 전환(closed/resolved)만. 해결 노트 필수 전환은 note가 남아 있으므로 제외.
+      if (!note && prevStatus && prevStatus !== newStatus && (newStatus === 'closed' || newStatus === 'in_progress' || newStatus === 'approved')) {
+        toast(t('status_changed_toast', { status: newStatus }), {
+          duration: 6000,
+          action: {
+            label: t('undo'),
+            onClick: async () => {
+              try {
+                const reverted = await updateTicket(iid, { status: prevStatus }, projectId)
+                if (reverted._etag) ticketEtag.current = reverted._etag
+                setTicket(reverted)
+                toast.success(t('status_reverted', { status: prevStatus }))
+              } catch (e) {
+                toast.error(errorMessage(e, t('err_status_change')))
+              }
+            },
+          },
+        })
+      }
       // UX2 #4: 처리완료 전환 시 만족도 평가 안내
       if (newStatus === 'resolved') {
         toast(t('resolved_toast_title'), {
@@ -1189,7 +1266,8 @@ function TicketDetailContent() {
     setUpdating(true)
     setActionError(null)
     try {
-      const updated = await updateTicket(iid, { priority: newPriority }, projectId)
+      const updated = await updateTicket(iid, { priority: newPriority }, projectId, ticketEtag.current || undefined)
+      if (updated._etag) ticketEtag.current = updated._etag
       setTicket(updated)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : t('err_priority_change'))
@@ -1203,7 +1281,8 @@ function TicketDetailContent() {
     setUpdating(true)
     setActionError(null)
     try {
-      const updated = await updateTicket(iid, { category: newCategory }, projectId)
+      const updated = await updateTicket(iid, { category: newCategory }, projectId, ticketEtag.current || undefined)
+      if (updated._etag) ticketEtag.current = updated._etag
       setTicket(updated)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : t('err_service_type_change'))
@@ -1219,7 +1298,8 @@ function TicketDetailContent() {
     try {
       // -1 means unassign
       const id = assigneeId === '' ? -1 : Number(assigneeId)
-      const updated = await updateTicket(iid, { assignee_id: id }, projectId)
+      const updated = await updateTicket(iid, { assignee_id: id }, projectId, ticketEtag.current || undefined)
+      if (updated._etag) ticketEtag.current = updated._etag
       setTicket(updated)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : t('err_assignee_change'))
@@ -1248,7 +1328,8 @@ function TicketDetailContent() {
     try {
       // 0 means remove milestone
       const id = milestoneId === '' ? 0 : Number(milestoneId)
-      const updated = await updateTicket(iid, { milestone_id: id }, projectId)
+      const updated = await updateTicket(iid, { milestone_id: id }, projectId, ticketEtag.current || undefined)
+      if (updated._etag) ticketEtag.current = updated._etag
       setTicket(updated)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : t('err_milestone_change'))
@@ -1313,7 +1394,9 @@ function TicketDetailContent() {
         iid,
         { title: editForm.title, description: finalDesc, category: editForm.category },
         projectId,
+        ticketEtag.current || undefined,
       )
+      if (updated._etag) ticketEtag.current = updated._etag
       setTicket(updated)
       setIsEditing(false)
       setEditAttachments([])
@@ -1469,20 +1552,44 @@ function TicketDetailContent() {
       const bodyIsHtml = body.startsWith('<')
       if (commentFiles.length > 0) {
         setCommentUploading(true)
+        // 모든 파일을 병렬 업로드 + 개별 진행률/에러 트래킹.
+        const { uploadFileWithProgress } = await import('@/lib/api')
+        const initial: Record<string, UploadStatus> = {}
+        commentFiles.forEach(f => { initial[f.name] = { progress: 0, status: 'pending' } })
+        setCommentUploadStatus(initial)
+        const results = await Promise.all(commentFiles.map(async file => {
+          setCommentUploadStatus(s => ({ ...s, [file.name]: { progress: 0, status: 'uploading' } }))
+          try {
+            const r = await uploadFileWithProgress(file, ticket?.project_id || undefined, (pct) => {
+              setCommentUploadStatus(s => ({ ...s, [file.name]: { progress: pct, status: 'uploading' } }))
+            })
+            setCommentUploadStatus(s => ({ ...s, [file.name]: { progress: 100, status: 'ok' } }))
+            return { file, result: r, error: null as string | null }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : '업로드 실패'
+            setCommentUploadStatus(s => ({ ...s, [file.name]: { progress: 0, status: 'error', error: msg } }))
+            return { file, result: null, error: msg }
+          }
+        }))
+        // 하나라도 실패하면 중단 (부분 성공한 파일은 유지 — 사용자가 실패한 것만 재시도 가능)
+        const failed = results.filter(r => r.error)
+        if (failed.length > 0) {
+          setCommentError(`첨부 실패: ${failed.map(f => f.file.name).join(', ')}`)
+          setCommenting(false); setCommentUploading(false)
+          return
+        }
         const attachments: string[] = []
-        for (const file of commentFiles) {
-          const result = await uploadFile(file, ticket?.project_id || undefined)
-          const proxyUrl = toDisplayUrl(result)
-          const name = result.name ?? file.name
-          if (isImageFile(file.name)) {
+        for (const r of results) {
+          if (!r.result) continue
+          const proxyUrl = toDisplayUrl(r.result)
+          const name = r.result.name ?? r.file.name
+          if (isImageFile(r.file.name)) {
             attachments.push(
               bodyIsHtml
                 ? `<p><img src="${proxyUrl}" alt="${name}"></p>`
                 : `![${name}](${proxyUrl})`
             )
           } else {
-            // 비이미지(PDF 등)는 항상 마크다운 링크로 body 하단에 추가
-            // → splitBodyAndAttachments가 추출 → AttachmentFileItem(PDF 미리보기)으로 렌더링
             attachments.push(`[📎 ${name}](${proxyUrl})`)
           }
         }
@@ -1496,10 +1603,13 @@ function TicketDetailContent() {
         }
       }
       if (!body) return
-      const comment = await addComment(iid, body, projectId, isInternal)
+      if (!commentIdemKeyRef.current) commentIdemKeyRef.current = makeIdempotencyKey()
+      const comment = await addComment(iid, body, projectId, isInternal, { idempotencyKey: commentIdemKeyRef.current })
+      commentIdemKeyRef.current = null
       setComments((prev) => [...prev, comment])
       setNewComment('')
       setCommentFiles([])
+      setCommentUploadStatus({})
       setIsInternal(false)
       try { localStorage.removeItem(`itsm:draft:${iid}`) } catch { /* noop */ }
     } catch (err) {
@@ -2244,7 +2354,9 @@ function TicketDetailContent() {
                     </div>
                   ) : (
                     <>
-                      <DescriptionWithAttachments description={c.body} projectPath={ticket?.project_path} onImageClick={(url, name) => setLightbox({ url, name })} />
+                      <CollapsibleBody>
+                        <DescriptionWithAttachments description={c.body} projectPath={ticket?.project_path} onImageClick={(url, name) => setLightbox({ url, name })} />
+                      </CollapsibleBody>
                       <div className="group">
                         <CommentReactions commentId={c.id} />
                       </div>
@@ -2350,20 +2462,41 @@ function TicketDetailContent() {
             </label>
             {commentFiles.length > 0 && (
               <ul className="mt-2 space-y-1">
-                {commentFiles.map((file, idx) => (
-                  <li key={idx} className="flex items-center gap-2 text-sm bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
-                    <span className="shrink-0">{getFileIcon(file.name)}</span>
-                    <span className="truncate text-gray-700 dark:text-gray-200 flex-1">{file.name}</span>
-                    <span className="text-gray-400 dark:text-gray-500 text-xs shrink-0">{formatFileSize(file.size)}</span>
-                    <button
-                      type="button"
-                      onClick={() => setCommentFiles((prev) => prev.filter((_, i) => i !== idx))}
-                      className="text-gray-400 dark:text-gray-500 hover:text-red-500 text-xs shrink-0"
-                     aria-label={t('remove')}>
-                      ✕
-                    </button>
-                  </li>
-                ))}
+                {commentFiles.map((file, idx) => {
+                  const s = commentUploadStatus[file.name]
+                  const bgCls = s?.status === 'error'
+                    ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                    : s?.status === 'ok'
+                    ? 'bg-green-50 dark:bg-green-900/20'
+                    : 'bg-gray-50 dark:bg-gray-800'
+                  return (
+                    <li key={idx} className={`relative rounded px-3 py-1.5 overflow-hidden ${bgCls}`}>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="shrink-0">{getFileIcon(file.name)}</span>
+                        <span className="truncate text-gray-700 dark:text-gray-200 flex-1">{file.name}</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-xs shrink-0">{formatFileSize(file.size)}</span>
+                        {s?.status === 'uploading' && (
+                          <span className="text-blue-600 dark:text-blue-400 text-xs tabular-nums shrink-0">{s.progress}%</span>
+                        )}
+                        {s?.status === 'ok' && <span className="text-green-600 dark:text-green-400 text-xs shrink-0">✓</span>}
+                        {s?.status === 'error' && <span className="text-red-600 dark:text-red-400 text-xs shrink-0" title={s.error}>✗</span>}
+                        <button
+                          type="button"
+                          onClick={() => { setCommentFiles((prev) => prev.filter((_, i) => i !== idx)); setCommentUploadStatus(p => { const n = {...p}; delete n[file.name]; return n }) }}
+                          className="text-gray-400 dark:text-gray-500 hover:text-red-500 text-xs shrink-0"
+                          aria-label={t('remove')}>
+                          ✕
+                        </button>
+                      </div>
+                      {s?.status === 'uploading' && (
+                        <div className="absolute left-0 bottom-0 h-0.5 bg-blue-500 transition-all" style={{ width: `${s.progress}%` }} />
+                      )}
+                      {s?.status === 'error' && s.error && (
+                        <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">{s.error}</p>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
@@ -2453,6 +2586,27 @@ function TicketDetailContent() {
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
               {resolutionNote.created_by_name} · {resolutionNote.created_at ? new Date(resolutionNote.created_at).toLocaleString('ko-KR') : ''}
             </p>
+          </div>
+        )}
+
+        {/* 유사 과거 티켓 — 중복 조사 제거·해결 방법 재사용 */}
+        {isAgent && relatedTickets.length > 0 && (
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">유사 과거 티켓</h2>
+            <div className="space-y-2">
+              {relatedTickets.map(rt => (
+                <Link
+                  key={rt.iid}
+                  href={`/tickets/${rt.iid}`}
+                  className="block p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors"
+                >
+                  <p className="text-sm font-medium text-purple-800 dark:text-purple-300 line-clamp-2">#{rt.iid} {rt.title}</p>
+                  <p className="text-xs text-purple-500 dark:text-purple-400 mt-0.5">
+                    {rt.status === 'closed' ? '✅ 종료' : '🟢 열림'} · 유사도 {Math.round(rt.score * 100)}%
+                  </p>
+                </Link>
+              ))}
+            </div>
           </div>
         )}
 

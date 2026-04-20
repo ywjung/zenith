@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
 import { useConfirm } from '@/components/ConfirmProvider'
 import { errorMessage } from '@/lib/utils'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 
 interface ApiKey {
   id: number
@@ -51,6 +52,8 @@ function ApiKeysContent() {
   const [newKey, setNewKey] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEscapeClose(showForm, () => setShowForm(false))
 
   const load = () => {
     setLoading(true)

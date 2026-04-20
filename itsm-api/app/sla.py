@@ -185,10 +185,17 @@ def mark_first_response(db: Session, iid: int, project_id: str) -> None:
 
 
 def mark_resolved(db: Session, iid: int, project_id: str) -> None:
-    record = db.query(SLARecord).filter(
-        SLARecord.gitlab_issue_iid == iid,
-        SLARecord.project_id == project_id,
-    ).first()
+    # with_for_update로 동시 resolve 호출 TOCTOU 방지 — 두 요청이 동시에
+    # `not record.resolved_at`를 True로 읽으면 resolved_at이 두 번 덮어써짐.
+    record = (
+        db.query(SLARecord)
+        .filter(
+            SLARecord.gitlab_issue_iid == iid,
+            SLARecord.project_id == project_id,
+        )
+        .with_for_update()
+        .first()
+    )
     if record and not record.resolved_at:
         record.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
@@ -196,10 +203,16 @@ def mark_resolved(db: Session, iid: int, project_id: str) -> None:
 
 def pause_sla(db: Session, iid: int, project_id: str) -> None:
     """Pause SLA timer for a ticket (e.g. when entering 'waiting' status)."""
-    record = db.query(SLARecord).filter(
-        SLARecord.gitlab_issue_iid == iid,
-        SLARecord.project_id == project_id,
-    ).first()
+    # with_for_update로 동시 pause 호출 TOCTOU 방지.
+    record = (
+        db.query(SLARecord)
+        .filter(
+            SLARecord.gitlab_issue_iid == iid,
+            SLARecord.project_id == project_id,
+        )
+        .with_for_update()
+        .first()
+    )
     if record and not record.paused_at and not record.resolved_at:
         record.paused_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()

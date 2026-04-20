@@ -114,6 +114,15 @@ def send_email(to: str | list[str], subject: str, body_html: str) -> None:
     msg["To"] = _sanitize_header(", ".join(recipients))
     msg.attach(MIMEText(body_html, "html", "utf-8"))
 
+    from .circuit_breaker import smtp_cb, CircuitOpenError
+
+    # CB가 열려 있으면 SMTP 장애 중 — 재시도 루프를 돌지 않고 즉시 실패.
+    try:
+        smtp_cb.check()
+    except CircuitOpenError as cb_exc:
+        logger.warning("SMTP CB open — skip send to %s: %s (%s)", recipients, subject, cb_exc)
+        return
+
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
@@ -130,6 +139,7 @@ def send_email(to: str | list[str], subject: str, body_html: str) -> None:
                     if settings.SMTP_USER and settings.SMTP_PASSWORD:
                         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                     server.sendmail(settings.SMTP_FROM, recipients, msg.as_string())
+            smtp_cb.record_success()
             logger.info("Email sent to %s: %s", recipients, subject)
             return
         except Exception as e:
@@ -137,6 +147,7 @@ def send_email(to: str | list[str], subject: str, body_html: str) -> None:
             if attempt < 2:
                 import time
                 time.sleep(attempt + 1)  # 1s, 2s
+    smtp_cb.record_failure()
     logger.error("Failed to send email to %s after 3 attempts: %s", recipients, last_exc)
 
 

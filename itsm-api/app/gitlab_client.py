@@ -59,6 +59,21 @@ _cb_lock = threading.Lock()
 _CB_THRESHOLD = 5       # open after 5 consecutive failures
 _CB_TIMEOUT = 30.0      # seconds before half-open retry
 
+# Prometheus 메트릭: CB 상태 시각화 → 운영 대시보드에서 GitLab 장애 즉시 감지.
+try:
+    from prometheus_client import Gauge as _Gauge, Counter as _Counter
+    gitlab_cb_open = _Gauge("gitlab_circuit_breaker_open", "1이면 GitLab API CB 열림, 0이면 닫힘")
+    gitlab_cb_failures = _Gauge("gitlab_circuit_breaker_consecutive_failures", "연속 실패 수")
+    gitlab_cb_transitions_total = _Counter("gitlab_circuit_breaker_transitions_total", "CB 상태 전이", ["to"])
+except Exception:
+    class _Dummy:
+        def set(self, *_a, **_k): pass
+        def inc(self, *_a, **_k): pass
+        def labels(self, *_a, **_k): return self
+    gitlab_cb_open = _Dummy()             # type: ignore[assignment]
+    gitlab_cb_failures = _Dummy()         # type: ignore[assignment]
+    gitlab_cb_transitions_total = _Dummy()  # type: ignore[assignment]
+
 
 def _check_circuit():
     """Raise RuntimeError if circuit is open."""
@@ -76,16 +91,31 @@ def _check_circuit():
 def _record_success():
     global _cb_failures
     with _cb_lock:
+        was_open = _cb_failures >= _CB_THRESHOLD
         _cb_failures = 0
+        gitlab_cb_failures.set(0)
+        if was_open:
+            gitlab_cb_open.set(0)
+            gitlab_cb_transitions_total.labels(to="closed").inc()
+            logger.info("GitLab API circuit breaker CLOSED (recovery)")
 
 
 def _record_failure():
     global _cb_failures, _cb_opened_at
     with _cb_lock:
+        was_open = _cb_failures >= _CB_THRESHOLD
         _cb_failures += 1
-        if _cb_failures == _CB_THRESHOLD:
+        gitlab_cb_failures.set(_cb_failures)
+        # threshold 초과 상태에서 추가 실패(half-open probe 실패 포함) 시 타이머 재시작.
+        # 이전에는 엄격 등호(==)라 half-open 실패가 재오픈으로 이어지지 않았다.
+        if _cb_failures >= _CB_THRESHOLD:
             _cb_opened_at = time.monotonic()
-            logger.error("GitLab API circuit breaker OPENED after %d failures", _CB_THRESHOLD)
+            if not was_open:
+                gitlab_cb_open.set(1)
+                gitlab_cb_transitions_total.labels(to="open").inc()
+                logger.error("GitLab API circuit breaker OPENED after %d failures", _CB_THRESHOLD)
+            else:
+                logger.warning("GitLab API circuit breaker RE-OPENED after half-open probe failed")
 
 
 def _base(project_id: Optional[str] = None) -> str:

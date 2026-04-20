@@ -68,6 +68,32 @@ def _make_celery() -> Celery:
                 "task": "itsm.periodic_search_index_sync",
                 "schedule": crontab(minute="*/30"),     # 30분마다 GitLab → ticket_search_index 동기화
             },
+            "tsi-drift-check-every-10min": {
+                "task": "itsm.periodic_tsi_drift_check",
+                "schedule": crontab(minute="*/10"),     # 10분마다 GitLab↔TSI 행수 비교 (읽기 전용)
+            },
+            "sla-drift-check-hourly": {
+                "task": "itsm.periodic_sla_drift_check",
+                "schedule": crontab(minute=15),         # 매시 15분 (SLA check 10분 직후 엇갈리게)
+            },
+            "watcher-cleanup-daily": {
+                "task": "itsm.periodic_watcher_cleanup",
+                "schedule": crontab(hour=4, minute=0),  # 매일 04:00
+            },
+            "notif-recount-hourly": {
+                "task": "itsm.periodic_notif_recount",
+                "schedule": crontab(minute=45),
+            },
+            "archive-old-tickets-monthly": {
+                "task": "itsm.periodic_archive_old_tickets",
+                "schedule": crontab(day_of_month=1, hour=5, minute=0),
+                "kwargs": {"dry_run": True},  # 보고만, 실제 아카이브는 별도 마이그레이션 후 활성
+            },
+            "orphan-attachments-weekly": {
+                "task": "itsm.periodic_orphan_attachments_check",
+                "schedule": crontab(hour=4, minute=30, day_of_week="sunday"),  # 매주 일요일 04:30 KST
+                "kwargs": {"dry_run": True},            # 1단계: 보고만. 수동 검증 후 destructive 모드 전환
+            },
             "db-cleanup-daily-3am": {
                 "task": "itsm.periodic_db_cleanup",
                 "schedule": crontab(hour=3, minute=0),  # 매일 03:00 KST: 만료 토큰·오래된 로그 정리

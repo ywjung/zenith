@@ -28,6 +28,8 @@ function mockFetch(body: unknown, status = 200) {
     ok: status >= 200 && status < 300,
     status,
     json: jest.fn().mockResolvedValue(body),
+    text: jest.fn().mockResolvedValue(JSON.stringify(body)),
+    headers: { get: () => null },
     statusText: 'OK',
   } as unknown as Response)
 }

@@ -295,9 +295,40 @@ def _run_user_sync():
     with SessionLocal() as db:
         from .models import ApiKey
         all_users = db.query(UserRole).all()
+        # GDPR: 익명화된 사용자는 GitLab 멤버십과 무관하게 재활성화 금지.
+        # (anonymize 엔드포인트는 name="[삭제된 사용자]"로 마스킹하고 is_active=False 설정.
+        # GitLab에서 아직 제거되지 않았더라도 ITSM에선 삭제 상태를 유지해야 함.)
+        ANONYMIZED_LABEL = "[삭제된 사용자]"
         changed = 0
         revoked_keys = 0
+        skipped_anonymized = 0
         for user in all_users:
+            if user.name == ANONYMIZED_LABEL:
+                # 익명화 처리된 사용자는 영구히 비활성 유지 + 발급한 API 키 폐기.
+                # (anonymize 시점 이후 user_sync가 is_active=True로 올렸거나, anonymize
+                # 자체가 API 키를 폐기하지 않은 경우를 대비한 사후 보정.)
+                if user.is_active:
+                    user.is_active = False
+                    changed += 1
+                    logger.warning(
+                        "User sync: forcing anonymized user inactive: id=%d",
+                        user.gitlab_user_id,
+                    )
+                # API 키도 확실히 폐기 (익명화 == 삭제 요청 → 어떤 인증 수단도 유효하면 안 됨)
+                n = (
+                    db.query(ApiKey)
+                    .filter(ApiKey.created_by == user.username, ApiKey.revoked == False)  # noqa: E712
+                    .update({"revoked": True})
+                )
+                if n:
+                    revoked_keys += n
+                    logger.warning(
+                        "User sync: revoked %d API key(s) of anonymized user id=%d",
+                        n, user.gitlab_user_id,
+                    )
+                skipped_anonymized += 1
+                continue
+
             was_active = user.is_active
             should_be_active = user.gitlab_user_id in active_ids
             if was_active != should_be_active:
@@ -317,9 +348,12 @@ def _run_user_sync():
                         logger.info("User sync: revoked %d API key(s) owned by deactivated user %s", n, user.username)
         if changed:
             db.commit()
-            logger.info("User sync: updated %d user(s), revoked %d api_key(s)", changed, revoked_keys)
+            logger.info(
+                "User sync: updated %d user(s), revoked %d api_key(s), skipped %d anonymized",
+                changed, revoked_keys, skipped_anonymized,
+            )
         else:
-            logger.debug("User sync: no changes")
+            logger.debug("User sync: no changes (skipped %d anonymized)", skipped_anonymized)
 
 
 def _email_ingest_loop():
@@ -395,15 +429,24 @@ async def lifespan(app: FastAPI):
     _sla_thread_stop.set()
     _snapshot_thread_stop.set()
     _user_sync_stop.set()
-    logger.info("Shutting down — waiting for background threads (max 55s each)")
-    # gunicorn graceful-timeout=60s 기준 — 스레드에 최대 55s 허용
-    _THREAD_SHUTDOWN_TIMEOUT = 55
-    sla_thread.join(timeout=_THREAD_SHUTDOWN_TIMEOUT)
-    snap_thread.join(timeout=_THREAD_SHUTDOWN_TIMEOUT)
-    user_sync_thread.join(timeout=_THREAD_SHUTDOWN_TIMEOUT)
-    for t, name in [(sla_thread, "sla"), (snap_thread, "snapshot"), (user_sync_thread, "user_sync")]:
+    # gunicorn stop_grace_period(90s 기준) 내 종료 보장.
+    # 이전엔 각 스레드에 55s씩 직렬 join → 최대 165s → SIGKILL.
+    # 전체 타임아웃을 공유 deadline으로 설정하고 남은 시간만 각 스레드에 분배.
+    import time as _time_mod
+    _TOTAL_SHUTDOWN_BUDGET = 55  # 전체 공유 예산
+    _threads = [
+        (sla_thread, "sla"),
+        (snap_thread, "snapshot"),
+        (user_sync_thread, "user_sync"),
+    ]
+    logger.info("Shutting down — joining %d background threads (total budget %ds)",
+                len(_threads), _TOTAL_SHUTDOWN_BUDGET)
+    _deadline = _time_mod.monotonic() + _TOTAL_SHUTDOWN_BUDGET
+    for t, name in _threads:
+        remaining = max(0.0, _deadline - _time_mod.monotonic())
+        t.join(timeout=remaining)
         if t.is_alive():
-            logger.warning("Background thread '%s' did not stop within %ss — forcing shutdown", name, _THREAD_SHUTDOWN_TIMEOUT)
+            logger.warning("Background thread '%s' did not stop within remaining budget — forcing shutdown", name)
     logger.info("Background threads stopped")
 
 
@@ -491,6 +534,30 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     )
 
 
+def _sanitize_validation_errors(errors: list) -> list:
+    """Pydantic v2 errors()의 ctx.error는 Exception 인스턴스로 JSON 직렬화 불가.
+    `raise ValueError(...)`를 쓰는 field_validator에서 나오는 dict는 ctx에 원본 예외가
+    담겨 있어 그대로 JSONResponse로 내보내면 500이 발생한다.
+    JSON-safe dict만 남기도록 정제.
+    """
+    safe: list[dict] = []
+    for e in errors:
+        se: dict = {}
+        for k, v in (e or {}).items():
+            if k == "ctx" and isinstance(v, dict):
+                # ctx 내부의 Exception 인스턴스 제거
+                se[k] = {ck: (str(cv) if isinstance(cv, BaseException) else cv) for ck, cv in v.items()}
+            elif isinstance(v, BaseException):
+                se[k] = str(v)
+            elif isinstance(v, tuple):
+                # loc는 tuple → list로 변환
+                se[k] = list(v)
+            else:
+                se[k] = v
+        safe.append(se)
+    return safe
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     settings = get_settings()
@@ -501,7 +568,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             for e in exc.errors()
         ]
     else:
-        detail = exc.errors()
+        # ctx.error에 ValueError 인스턴스가 들어있을 수 있어 JSON 직렬화 불가 → 정제 필수
+        detail = _sanitize_validation_errors(list(exc.errors()))
     return JSONResponse(
         status_code=422,
         content={
@@ -726,6 +794,10 @@ async def ip_allowlist_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+import os as _os_mod
+_APP_VERSION = _os_mod.environ.get("APP_VERSION") or _os_mod.environ.get("GIT_SHA", "dev")[:12]
+
+
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     """S-H: API 응답에 보안 헤더 추가."""
@@ -734,6 +806,8 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    # 배포 식별자 — 사용자 이슈 리포트 시 정확한 버전 매칭용.
+    response.headers.setdefault("X-App-Version", _APP_VERSION)
     return response
 
 
@@ -779,6 +853,123 @@ _SHORT_CACHE_PATHS = frozenset({
     "/tickets/stats",           # 통계 — 30초 캐시
     "/notifications/announcements",  # 공지 — 60초 캐시
 })
+
+
+@app.middleware("http")
+async def idempotency_middleware(request: Request, call_next):
+    """POST/PUT/PATCH 중복 실행 방지.
+
+    - 클라가 `Idempotency-Key` 헤더를 보내면 Redis에 `{key: "in-flight"}`를 `SET NX EX 300` 로 저장.
+    - 이미 존재하면 409 Conflict — 이전 요청이 아직 처리 중이거나 완료된 중복 전송.
+    - 완료 후 응답 본문을 300초 캐시해 동일 키 재요청 시 즉시 반환 (네트워크 재시도 안전).
+    성능: GET/HEAD·헤더 없는 요청은 no-op.
+    """
+    method = request.method.upper()
+    idem_key = request.headers.get("Idempotency-Key")
+    if method not in {"POST", "PUT", "PATCH"} or not idem_key or len(idem_key) > 128:
+        return await call_next(request)
+    try:
+        from .routers.tickets import _get_redis as _r_factory
+        _r = _r_factory()
+    except Exception:
+        _r = None
+    if _r is None:
+        return await call_next(request)
+    # 사용자별 스코프 — JWT 서명부(payload.signature의 마지막 세그먼트)의 SHA-256 prefix.
+    # 이전 구현의 token[:16]은 HS256 헤더("eyJhbGciOiJIUzI1NiIs...")가 고정값이라
+    # 모든 사용자가 같은 버킷을 공유 → 동일 Idempotency-Key 충돌 시 타 사용자의
+    # 응답 본문(PII 포함)이 누출될 수 있었다 (SEC: cross-user cache leak).
+    import hashlib as _hashlib
+    _tok = request.cookies.get("itsm_token", "") or request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    _sig = _tok.rsplit(".", 1)[-1] if "." in _tok else ""
+    user_scope = _hashlib.sha256(_sig.encode()).hexdigest()[:16] if _sig else "anon"
+    cache_key = f"itsm:idem:{user_scope}:{idem_key}"
+    # 이미 완료된 응답이 있으면 즉시 반환
+    try:
+        cached = _r.get(cache_key)
+    except Exception:
+        cached = None
+    if cached:
+        try:
+            import json as _j
+            payload = _j.loads(cached)
+            from fastapi.responses import JSONResponse as _JR
+            # 클라이언트가 후속 PATCH에 사용할 ETag 등 주요 헤더를 복원.
+            # Set-Cookie는 복원하지 않음 (인증 상태 재발급을 idempotency로 재생하면 보안 위험).
+            replay_headers = {"X-Idempotent-Replay": "1"}
+            cached_headers = payload.get("headers") or {}
+            for safe_h in ("ETag", "Location", "Content-Location"):
+                v = cached_headers.get(safe_h.lower())
+                if v:
+                    replay_headers[safe_h] = v
+            return _JR(
+                content=payload.get("body"),
+                status_code=payload.get("status", 200),
+                headers=replay_headers,
+            )
+        except Exception:
+            pass
+    # 처리 중 마커 — TTL 300s (응답 캐시와 동일).
+    # 이전엔 ex=30였는데, 대량 bulk/파일 업로드 등이 30s를 초과하면 락이 만료돼
+    # 중복 요청이 "처리 중"을 감지하지 못하고 재처리 → 정확히 idempotency가 방지해야 할
+    # 상황이 발생. 완료 시 명시적으로 delete하므로 TTL을 길게 잡아도 무해.
+    try:
+        ok = _r.set(cache_key + ":lock", "1", ex=300, nx=True)
+    except Exception:
+        ok = True
+    if not ok:
+        from fastapi.responses import JSONResponse as _JR
+        return _JR(content={"detail": "동일 요청이 이미 처리 중입니다."}, status_code=409)
+
+    response = await call_next(request)
+
+    # 스트리밍/바이너리 응답은 body_iterator를 전체 소비하면 깨진다.
+    # Content-Type으로 JSON 응답만 캐시 대상으로 제한. 그 외(SSE/octet-stream/
+    # file download/image 등)는 body를 건드리지 않고 그대로 통과시키고 락만 해제.
+    content_type = (response.headers.get("content-type") or "").lower()
+    is_json = "application/json" in content_type
+
+    if 200 <= response.status_code < 300 and is_json:
+        try:
+            body_chunks: list[bytes] = []
+            async for chunk in response.body_iterator:
+                body_chunks.append(chunk)
+            body_bytes = b"".join(body_chunks)
+            import json as _j
+            try:
+                body_obj = _j.loads(body_bytes) if body_bytes else None
+            except Exception:
+                body_obj = None
+            # 지나치게 큰 본문은 Redis 메모리 보호 차원에서 캐시하지 않음 (256KB 초과)
+            if body_obj is not None and len(body_bytes) <= 256 * 1024:
+                # 재생 시 복원할 안전 헤더만 저장. Set-Cookie/Authorization은 저장 안 함.
+                _safe_headers = {
+                    k.lower(): v for k, v in response.headers.items()
+                    if k.lower() in ("etag", "location", "content-location")
+                }
+                _r.setex(
+                    cache_key, 300,
+                    _j.dumps({
+                        "status": response.status_code,
+                        "body": body_obj,
+                        "headers": _safe_headers,
+                    }),
+                )
+            from fastapi.responses import Response as _Resp
+            return _Resp(
+                content=body_bytes,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.media_type,
+            )
+        except Exception as _e:
+            logger.debug("Idempotency cache write skipped: %s", _e)
+    # 비-JSON 응답 또는 실패 응답은 캐시 안 함. 락만 해제하고 원본 그대로 통과.
+    try:
+        _r.delete(cache_key + ":lock")
+    except Exception:
+        pass
+    return response
 
 
 @app.middleware("http")
@@ -1216,28 +1407,34 @@ async def ticket_ws(
         await websocket.close(code=1008)
         return
 
-    await _ws_manager.connect(websocket, ticket_iid, user_id, username)
+    # connect 자체가 실패해도(broadcast_viewers 중 네트워크 에러 등) self.rooms에
+    # 추가된 엔트리가 남지 않도록 전체 생명주기를 try/finally로 감싼다.
     try:
-        while True:
-            try:
-                data = await websocket.receive_json()
-            except Exception:
-                break
+        await _ws_manager.connect(websocket, ticket_iid, user_id, username)
+        try:
+            while True:
+                try:
+                    data = await websocket.receive_json()
+                except Exception:
+                    break
 
-            msg_type = data.get("type")
+                msg_type = data.get("type")
 
-            if msg_type == "ping":
-                await websocket.send_json({"type": "pong"})
+                if msg_type == "ping":
+                    await websocket.send_json({"type": "pong"})
 
-            elif msg_type == "typing":
-                is_typing: bool = bool(data.get("is_typing", False))
-                await _ws_manager.broadcast_to_room(
-                    ticket_iid,
-                    {"type": "typing", "user": username, "is_typing": is_typing},
-                    exclude_ws=websocket,
-                )
-
-    except WebSocketDisconnect:
-        pass
+                elif msg_type == "typing":
+                    is_typing: bool = bool(data.get("is_typing", False))
+                    await _ws_manager.broadcast_to_room(
+                        ticket_iid,
+                        {"type": "typing", "user": username, "is_typing": is_typing},
+                        exclude_ws=websocket,
+                    )
+        except WebSocketDisconnect:
+            pass
     finally:
-        await _ws_manager.disconnect(websocket, ticket_iid)
+        # manager에 등록됐든 중간 실패했든 안전하게 정리 (disconnect는 부재 시 no-op에 근접)
+        try:
+            await _ws_manager.disconnect(websocket, ticket_iid)
+        except Exception as _cleanup_err:
+            logger.debug("WS cleanup error (ticket=%s): %s", ticket_iid, _cleanup_err)

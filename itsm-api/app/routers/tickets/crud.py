@@ -33,6 +33,7 @@ from .helpers import (
     REASON_REQUIRED_TRANSITIONS,
     status_to_label,
     priority_to_label,
+    compute_issue_etag,
     _apply_automation_actions,
     _attach_sla_deadlines,
     _can_requester_modify,
@@ -384,34 +385,82 @@ def list_tickets(
         total = q.count()
         page_rows = q.offset((page - 1) * per_page).limit(per_page).all()
 
+        # ── TSI 기반 티켓 조립 — GitLab API 호출 없이 DB만으로 응답 생성 ────────
+        # 장점: (1) GitLab 다운 중에도 목록 조회 가능 (2) N+1 제거로 <50ms 응답.
+        # 누락 필드(description/web_url 등)는 칸반과 마찬가지로 list 뷰에서 미사용.
+        # 상세 페이지는 여전히 GitLab API로 풀 데이터를 가져온다.
         if page_rows:
-            page_issues = []
+            from ...models import SLARecord as _SLA, UserRole as _UR
+            iids = [r.iid for r in page_rows]
+            sla_map = {
+                (s.gitlab_issue_iid, s.project_id): s
+                for s in db.query(_SLA).filter(
+                    _SLA.project_id == pid, _SLA.gitlab_issue_iid.in_(iids)
+                ).all()
+            }
+            usernames = {r.assignee_username for r in page_rows if r.assignee_username}
+            usernames.update({r.author_username for r in page_rows if r.author_username})
+            name_map: dict[str, str] = {}
+            id_map: dict[str, int] = {}
+            if usernames:
+                for u in db.query(_UR).filter(_UR.username.in_(usernames)).all():
+                    if u.name:
+                        name_map[u.username] = u.name
+                    if u.gitlab_user_id is not None:
+                        id_map[u.username] = u.gitlab_user_id
+
+            tickets_page = []
             for row in page_rows:
-                try:
-                    issue = gitlab_client.get_issue(row.iid, project_id=row.project_id)
-                    page_issues.append(issue)
-                except Exception:
-                    pass
-            tickets_page = [_issue_to_response(i, mask_pii=False) for i in page_issues]
+                labels = row.labels_json or []
+                cat = None
+                prio = "medium"
+                status_val = "open"
+                for lb in labels:
+                    if not isinstance(lb, str):
+                        continue
+                    if lb.startswith("cat::"):
+                        cat = lb[5:]
+                    elif lb.startswith("prio::"):
+                        from .helpers import label_to_priority as _ltp
+                        prio = _ltp(lb)
+                    elif lb.startswith("status::"):
+                        from .helpers import label_to_status as _lts
+                        status_val = _lts(lb)
+                sla = sla_map.get((row.iid, row.project_id))
+                tickets_page.append({
+                    "iid": row.iid,
+                    "title": row.title,
+                    "description": row.description_text or "",
+                    "state": row.state,
+                    "status": "closed" if row.state == "closed" else status_val,
+                    "priority": prio,
+                    "category": cat,
+                    "labels": labels,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                    "assignee_id": id_map.get(row.assignee_username or ""),
+                    "assignee_name": name_map.get(row.assignee_username or "") or row.assignee_username,
+                    "assignee_username": row.assignee_username,
+                    "created_by_username": row.author_username,
+                    "employee_name": name_map.get(row.author_username or "") or row.author_username,
+                    "project_id": row.project_id,
+                    "project_path": "",
+                    "web_url": "",
+                    "milestone_id": None,
+                    "milestone_title": None,
+                    "sla_deadline": sla.sla_deadline.isoformat() if sla and sla.sla_deadline else None,
+                    "sla_breached": bool(sla.breached) if sla else False,
+                })
         else:
             tickets_page = []
 
-        _attach_sla_deadlines(tickets_page, db)
         _result = {
             "tickets": tickets_page,
             "total": total,
             "page": page,
             "per_page": per_page,
         }
-        # 캐시 독립성: page_rows가 있는데 page_issues가 비어있으면 GitLab 전체 장애로 간주 → 캐시 스킵.
-        # 180초간 빈 응답이 유지되어 사용자가 "티켓 없음"을 보게 되는 사고 방지.
-        _all_failed = len(page_rows) > 0 and len(tickets_page) == 0
-        if _all_failed:
-            logger.warning(
-                "list_tickets: GitLab 상세 조회 전부 실패 (%d iids) — 캐시 스킵",
-                len(page_rows),
-            )
-        elif _r:
+        if _r:
             _r.setex(_list_cache_key, 180, _json.dumps(_result))
         return _result
     except Exception as e:
@@ -784,7 +833,8 @@ def get_ticket(
             name_map = gitlab_client.get_users_by_usernames([creator])
             if creator in name_map:
                 ticket["employee_name"] = name_map[creator]
-        return ticket
+        etag = compute_issue_etag(issue)
+        return JSONResponse(content=ticket, headers={"ETag": f'"{etag}"'})
     except HTTPException:
         raise
     except httpx.HTTPStatusError as e:
@@ -836,7 +886,7 @@ def update_ticket(
         raise HTTPException(status_code=403, detail="담당자 변경은 IT 관리자 이상만 가능합니다.")
     try:
         if if_match:
-            current_etag = issue.get("updated_at", "")
+            current_etag = compute_issue_etag(issue)
             if if_match.strip('"') != current_etag:
                 raise HTTPException(
                     status_code=409,
@@ -1091,7 +1141,7 @@ def update_ticket(
                 logger.warning("Failed to dispatch assigned notification for ticket %d: %s", iid, _e)
 
         _invalidate_ticket_list_cache(project_id)
-        etag = updated.get("updated_at", "")
+        etag = compute_issue_etag(updated)
         return JSONResponse(content=ticket, headers={"ETag": f'"{etag}"'})
     except HTTPException:
         raise

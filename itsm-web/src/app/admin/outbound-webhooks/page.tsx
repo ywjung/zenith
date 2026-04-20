@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext'
 import RequireAuth from '@/components/RequireAuth'
 import { useConfirm } from '@/components/ConfirmProvider'
 import { errorMessage } from '@/lib/utils'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 
 interface OutboundWebhook {
   id: number
@@ -54,6 +55,8 @@ function WebhooksContent() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useEscapeClose(showForm, () => setShowForm(false))
   const [success, setSuccess] = useState<string | null>(null)
 
   const load = () => {

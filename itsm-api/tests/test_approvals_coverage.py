@@ -46,6 +46,8 @@ class TestCreateApprovalRequestEmailNotify:
             q = MagicMock()
             if model.__name__ == "ApprovalRequest":
                 q.filter.return_value.with_for_update.return_value.first.return_value = None
+                # 새 구현: advisory lock 사용으로 with_for_update 제거 → filter().first() 직접 호출
+                q.filter.return_value.first.return_value = None
             elif model.__name__ == "UserRole":
                 q.filter.return_value.first.return_value = mock_approver
             return q
@@ -114,6 +116,8 @@ class TestCreateApprovalRequestEmailNotify:
             q = MagicMock()
             if model.__name__ == "ApprovalRequest":
                 q.filter.return_value.with_for_update.return_value.first.return_value = None
+                # 새 구현: advisory lock 사용으로 with_for_update 제거 → filter().first() 직접 호출
+                q.filter.return_value.first.return_value = None
             elif model.__name__ == "UserRole":
                 q.filter.return_value.first.return_value = mock_approver
             return q
@@ -417,6 +421,8 @@ class TestEmailExceptionSwallowed:
             q = MagicMock()
             if model.__name__ == "ApprovalRequest":
                 q.filter.return_value.with_for_update.return_value.first.return_value = None
+                # 새 구현: advisory lock 사용으로 with_for_update 제거 → filter().first() 직접 호출
+                q.filter.return_value.first.return_value = None
             elif model.__name__ == "UserRole":
                 q.filter.return_value.first.return_value = mock_approver
             return q

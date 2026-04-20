@@ -1,0 +1,47 @@
+name: Alembic rollback dry-run
+
+# prod 배포 전 마이그레이션이 안전하게 롤백 가능한지 검증.
+# upgrade head → downgrade -1 → upgrade head 사이클이 에러 없이 완료되는지 확인.
+on:
+  pull_request:
+    paths:
+      - 'itsm-api/alembic/**'
+      - 'itsm-api/app/models.py'
+
+jobs:
+  rollback-cycle:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      REDIS_URL: redis://localhost:6379/0
+      ENVIRONMENT: development
+      SECRET_KEY: ci_test_secret_key_32chars_at_least
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install
+        working-directory: itsm-api
+        run: |
+          pip install -r requirements.txt
+      - name: upgrade → downgrade → upgrade
+        working-directory: itsm-api
+        run: |
+          alembic upgrade head
+          alembic downgrade -1
+          alembic upgrade head

@@ -9,6 +9,7 @@ import {
   fetchFilterOptions, fetchDashboardConfig, saveDashboardConfig,
   fetchKBArticles, importTicketsCSV, downloadImportTemplate,
   fetchDashboardExtraStats,
+  makeIdempotencyKey,
 } from '@/lib/api'
 import type { CSVImportResult, DashboardExtraStats } from '@/lib/api'
 import type { FilterOptions } from '@/lib/api'
@@ -377,6 +378,17 @@ function HomeContent() {
   function handleSearch(e: React.FormEvent) {
     e.preventDefault(); setSearch(searchInput); setPage(1); setSelectedIids(new Set()); syncUrl({ q: searchInput })
   }
+
+  // 검색어 debounce: 입력 후 400ms 무입력 시 자동 검색 (엔터 없이도 결과 갱신).
+  // 입력이 search와 같으면 skip, 첫 마운트 시에도 skip (이미 search와 동일).
+  useEffect(() => {
+    if (searchInput === search) return
+    const timer = setTimeout(() => {
+      setSearch(searchInput); setPage(1); setSelectedIids(new Set()); syncUrl({ q: searchInput })
+    }, 400)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput])
   function handleProjectChange(pid: string) {
     setSelectedProject(pid); setPage(1); setPriority(''); setSla(''); setSelectedRequester(''); setSelectedIids(new Set()); syncUrl({ project: pid })
   }
@@ -469,15 +481,33 @@ function HomeContent() {
     return () => window.removeEventListener('keydown', handler)
   }, [isAgent, tickets, selectedIids.size])
 
+  const bulkIdemKeyRef = useRef<string | null>(null)
+
   async function handleBulkSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (selectedIids.size === 0 || !selectedProject) return
     const count = selectedIids.size
     setBulkProcessing(true); setBulkError(null)
     try {
-      await bulkUpdateTickets({ iids: Array.from(selectedIids), project_id: selectedProject, action: bulkAction, value: bulkValue || undefined })
+      if (!bulkIdemKeyRef.current) bulkIdemKeyRef.current = makeIdempotencyKey()
+      const result = await bulkUpdateTickets(
+        { iids: Array.from(selectedIids), project_id: selectedProject, action: bulkAction, value: bulkValue || undefined },
+        { idempotencyKey: bulkIdemKeyRef.current },
+      )
+      bulkIdemKeyRef.current = null
       setSelectedIids(new Set()); await load()
-      toast.success(`${count}개 티켓에 일괄 작업을 완료했습니다.`)
+      const succeeded = result.summary?.succeeded ?? result.success.length
+      const failed = result.summary?.failed ?? result.errors.length
+      if (failed > 0) {
+        const firstErrs = result.errors.slice(0, 3).map(e => `#${e.iid}: ${e.error}`).join('\n')
+        const more = result.errors.length > 3 ? `\n외 ${result.errors.length - 3}건` : ''
+        toast.error(`일괄 작업: ${succeeded}건 성공, ${failed}건 실패`, {
+          description: firstErrs + more,
+          duration: 8000,
+        })
+      } else {
+        toast.success(`${count}개 티켓에 일괄 작업을 완료했습니다.`)
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '일괄작업 실패'
       setBulkError(msg)

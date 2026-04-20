@@ -230,7 +230,9 @@ def process_inbox() -> int:
     created = 0
     imap = None
     try:
-        imap = imaplib.IMAP4_SSL(settings.IMAP_HOST, settings.IMAP_PORT)
+        # timeout 필수 — 서버 hang 시 Celery worker 영구 블록 방지.
+        # Python 3.9+ 에서 IMAP4/IMAP4_SSL이 timeout 키워드 지원.
+        imap = imaplib.IMAP4_SSL(settings.IMAP_HOST, settings.IMAP_PORT, timeout=30)
         imap.login(settings.IMAP_USER, settings.IMAP_PASSWORD)
         imap.select(settings.IMAP_FOLDER)
 

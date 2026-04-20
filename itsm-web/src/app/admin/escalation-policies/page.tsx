@@ -9,6 +9,7 @@ import { useRoleLabels } from '@/context/RoleLabelsContext'
 import RequireAuth from '@/components/RequireAuth'
 import { useConfirm } from '@/components/ConfirmProvider'
 import { errorMessage } from '@/lib/utils'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 
 interface EscalationPolicy {
   id: number
@@ -160,6 +161,8 @@ function EscalationContent() {
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEscapeClose(showForm, () => setShowForm(false))
 
   const loadPolicies = () => {
     setLoading(true)

@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { API_BASE } from '@/lib/constants'
 import { adminFetch } from '@/lib/adminFetch'
 import { errorMessage } from '@/lib/utils'
+import { useEscapeClose } from '@/hooks/useEscapeClose'
 
 interface PreviewData {
   old_audit_logs: number
@@ -99,6 +100,8 @@ export default function DbCleanupPage() {
   function closeModal() {
     setModal(prev => ({ ...prev, open: false }))
   }
+
+  useEscapeClose(modal.open, closeModal)
 
   async function runCleanup(key: string, endpoint: string, label: string) {
     setRunningKey(key)

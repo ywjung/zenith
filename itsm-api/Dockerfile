@@ -13,6 +13,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# 배포 버전 식별자 — GitHub Actions에서 --build-arg GIT_SHA=${{ github.sha }} 전달.
+ARG GIT_SHA=dev
+ENV APP_VERSION=$GIT_SHA
+
 RUN useradd --no-create-home --shell /bin/false --uid 998 --gid 0 appuser && \
     chown -R appuser /app && \
     mkdir -p /var/celery && chown appuser /var/celery

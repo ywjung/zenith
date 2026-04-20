@@ -11,7 +11,7 @@ from ...database import get_db
 from ... import gitlab_client
 from ...rbac import require_pl, require_agent
 from ...rate_limit import user_limiter, LIMIT_EXPORT
-from .helpers import _issue_to_response, _attach_sla_deadlines
+from .helpers import _issue_to_response, _attach_sla_deadlines, status_to_label, priority_to_label
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +55,6 @@ def export_tickets_csv(
         project_id=project_id,
     )
 
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["번호", "제목", "상태", "우선순위", "카테고리", "신청자", "담당자", "생성일", "수정일"])
-
     def _sc(v) -> str:
         """HIGH-06: CSV formula injection 방어 — reports.py의 _sanitize_csv_cell 동일 로직."""
         s = str(v) if v is not None else ""
@@ -66,25 +62,33 @@ def export_tickets_csv(
             return "'" + s
         return s
 
-    for issue in issues:
-        ticket = _issue_to_response(issue)
-        writer.writerow([
-            ticket.get("iid"),
-            _sc(ticket.get("title")),
-            _sc(ticket.get("status")),
-            _sc(ticket.get("priority")),
-            _sc(ticket.get("category")),
-            _sc(ticket.get("employee_name")),
-            _sc(ticket.get("assignee_name")),
-            ticket.get("created_at", "")[:10] if ticket.get("created_at") else "",
-            ticket.get("updated_at", "")[:10] if ticket.get("updated_at") else "",
-        ])
+    # 진정한 스트리밍: 행별 yield로 대량 export 시에도 메모리 스파이크 없음 (수만 건 OK).
+    def _gen():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        # BOM for Excel UTF-8 호환
+        yield "\ufeff"
+        writer.writerow(["번호", "제목", "상태", "우선순위", "카테고리", "신청자", "담당자", "생성일", "수정일"])
+        yield buf.getvalue(); buf.seek(0); buf.truncate(0)
+        for issue in issues:
+            ticket = _issue_to_response(issue)
+            writer.writerow([
+                ticket.get("iid"),
+                _sc(ticket.get("title")),
+                _sc(ticket.get("status")),
+                _sc(ticket.get("priority")),
+                _sc(ticket.get("category")),
+                _sc(ticket.get("employee_name")),
+                _sc(ticket.get("assignee_name")),
+                ticket.get("created_at", "")[:10] if ticket.get("created_at") else "",
+                ticket.get("updated_at", "")[:10] if ticket.get("updated_at") else "",
+            ])
+            yield buf.getvalue(); buf.seek(0); buf.truncate(0)
 
-    output.seek(0)
     filename = f"tickets_{_date.today().isoformat()}.csv"
     return _StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv; charset=utf-8-sig",
+        _gen(),
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

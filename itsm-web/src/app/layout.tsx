@@ -12,6 +12,8 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import KeyboardShortcuts from '@/components/KeyboardShortcuts'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
 import LazyClientWidgets from '@/components/LazyClientWidgets'
+import HealthBadge from '@/components/HealthBadge'
+import SessionExpireWarning from '@/components/SessionExpireWarning'
 import { Toaster } from 'sonner'
 import OfflineBanner from '@/components/OfflineBanner'
 import RouteProgressBar from '@/components/RouteProgressBar'
@@ -93,6 +95,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <MobileFab />
             <ScrollToTop />
             <LazyClientWidgets />
+            <HealthBadge />
+            <SessionExpireWarning />
             <OfflineBanner />
             <div aria-live="polite" aria-label={tc('toast_region')} role="status">
               <Toaster
