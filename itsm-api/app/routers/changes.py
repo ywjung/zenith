@@ -140,6 +140,7 @@ def list_changes(
     change_type: Optional[str] = None,
     risk_level: Optional[str] = None,
     requester_username: Optional[str] = None,
+    q: Optional[str] = Query(default=None, description="제목 검색어 (글로벌 검색에서 사용)"),
     page: int = Query(default=1, ge=1, le=10000),
     per_page: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -147,23 +148,27 @@ def list_changes(
 ):
     """변경 요청 목록 조회."""
     role = current_user.get("role", "user")
-    q = db.query(ChangeRequest)
+    query = db.query(ChangeRequest)
 
     # 일반 사용자는 자신이 요청한 것만 조회
     if role == "user":
-        q = q.filter(ChangeRequest.requester_username == current_user.get("username"))
+        query = query.filter(ChangeRequest.requester_username == current_user.get("username"))
     elif requester_username:
-        q = q.filter(ChangeRequest.requester_username == requester_username)
+        query = query.filter(ChangeRequest.requester_username == requester_username)
 
     if status:
-        q = q.filter(ChangeRequest.status == status)
+        query = query.filter(ChangeRequest.status == status)
     if change_type:
-        q = q.filter(ChangeRequest.change_type == change_type)
+        query = query.filter(ChangeRequest.change_type == change_type)
     if risk_level:
-        q = q.filter(ChangeRequest.risk_level == risk_level)
+        query = query.filter(ChangeRequest.risk_level == risk_level)
+    # 글로벌 검색 지원 — 제목 부분 일치 (LIKE 메타문자는 escape)
+    if q and len(q) >= 2:
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.filter(ChangeRequest.title.ilike(f"%{escaped}%", escape="\\"))
 
-    total = q.count()
-    items = q.order_by(ChangeRequest.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    total = query.count()
+    items = query.order_by(ChangeRequest.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
     return {"changes": [_cr_to_dict(c) for c in items], "total": total, "page": page, "per_page": per_page}
 
 

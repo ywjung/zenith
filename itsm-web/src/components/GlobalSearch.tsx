@@ -76,9 +76,10 @@ export default function GlobalSearch() {
       const signal = abortRef.current.signal
       const opts = { credentials: 'include' as const, cache: 'no-store' as const, signal }
       // 병렬 검색 — 티켓 + KB + 변경
+      // KB 엔드포인트는 /kb가 아니라 /kb/articles 였음(404) — 실제 검색이 안 됐던 버그 수정.
       const [ticketRes, kbRes, changeRes] = await Promise.allSettled([
         fetch(`${API_BASE}/tickets/search?q=${encodeURIComponent(q)}&per_page=5`, opts),
-        fetch(`${API_BASE}/kb?q=${encodeURIComponent(q)}&per_page=3`, opts),
+        fetch(`${API_BASE}/kb/articles?q=${encodeURIComponent(q)}&per_page=3`, opts),
         fetch(`${API_BASE}/changes?q=${encodeURIComponent(q)}&per_page=3`, opts),
       ])
       const all: SearchResult[] = []
@@ -96,10 +97,10 @@ export default function GlobalSearch() {
           all.push({ iid: a.id, title: a.title, status: '', priority: '', category: a.category ?? '', _type: 'kb', _id: a.id, _slug: a.slug })
         })
       }
-      // 변경 결과
+      // 변경 결과 — 백엔드 응답 키가 `changes`. 기존 코드는 `items`를 찾아 결과가 항상 0건이었음.
       if (changeRes.status === 'fulfilled' && changeRes.value.ok) {
         const changes = await changeRes.value.json()
-        const items = Array.isArray(changes) ? changes : (changes.items ?? [])
+        const items = Array.isArray(changes) ? changes : (changes.changes ?? changes.items ?? [])
         items.forEach((c: { id: number; title: string; status?: string }) => {
           all.push({ iid: c.id, title: c.title, status: c.status ?? '', priority: '', category: '', _type: 'change' })
         })
