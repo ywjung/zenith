@@ -1,6 +1,6 @@
 # ZENITH ITSM 운영 매뉴얼
 
-> 최종 업데이트: 2026-04-07 · v2.4
+> 최종 업데이트: 2026-04-20 · v2.6
 
 ---
 
@@ -54,10 +54,23 @@ curl http://localhost:8111/api/health
     "db": "ok",
     "redis": "ok",
     "gitlab": "ok",
-    "clamav": "ok"
+    "celery_broker": "ok",
+    "label_sync": "ok"
   }
 }
 ```
+
+**주요 체크 항목**:
+- `db`: PostgreSQL `SELECT 1` 응답
+- `redis`: 공유 ConnectionPool 생성 확인
+- `gitlab`: `/api/v4/version` 호출 (30초 캐시)
+- `celery_broker`: Redis ping
+- `label_sync`: GitLab 라벨 드리프트 감지 (5분 캐시, 결함 시 자동 복구 시도)
+
+**Circuit Breaker 모니터링**:
+- Prometheus 메트릭 `circuit_breaker_open{name="gitlab|clamav|smtp"}` — 1이면 open
+- `circuit_breaker_transitions_total{name,to}` — closed/open 전이 추적
+- open 상태 지속 시 관련 외부 의존성(GitLab, ClamAV, SMTP) 장애 확인 필요
 
 ---
 

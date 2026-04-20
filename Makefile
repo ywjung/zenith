@@ -1,4 +1,4 @@
-.PHONY: help dev lint test migrate build clean
+.PHONY: help dev lint test migrate build clean setup setup-bundle setup-external down status logs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -59,12 +59,45 @@ nginx-check: ## Render nginx template & run nginx -t (pre-merge sanity)
 	  -v "$(PWD)/nginx/conf.d:/etc/nginx/conf.d:ro" \
 	  nginx:1.27-alpine sh -c '/docker-entrypoint.d/20-envsubst-on-templates.sh && nginx -t'
 
-install: ## Install all dependencies
+install: ## Install dev dependencies (python + npm)
 	cd itsm-api && pip install -r requirements-dev.txt
 	cd itsm-web && npm ci
 
 pre-commit-install: ## Install pre-commit hooks
 	pre-commit install
+
+# ─── Production install launcher ─────────────────────────────────────────────
+setup: ## Production install (interactive mode selector)
+	./scripts/install.sh
+
+setup-bundle: ## Production install — bundled GitLab
+	./scripts/install.sh --mode bundle
+
+setup-external: ## Production install — connect to existing GitLab
+	./scripts/install.sh --mode external
+
+# ─── Compose operations (external-gitlab aware) ─────────────────────────────
+# USE_EXTERNAL_GITLAB=1 make <target> 으로 외부 GitLab override 적용
+ifeq ($(USE_EXTERNAL_GITLAB),1)
+  COMPOSE_FILES := -f docker-compose.yml -f docker-compose.external-gitlab.yml
+else
+  COMPOSE_FILES :=
+endif
+
+up: ## Start all services (USE_EXTERNAL_GITLAB=1 for external mode)
+	docker compose $(COMPOSE_FILES) up -d
+
+down: ## Stop all services
+	docker compose $(COMPOSE_FILES) down
+
+status: ## Show container status
+	docker compose $(COMPOSE_FILES) ps
+
+logs: ## Tail API logs (SVC=<name> to change, default itsm-api)
+	docker compose $(COMPOSE_FILES) logs -f $(or $(SVC),itsm-api)
+
+health: ## Check API health
+	@curl -fsS http://localhost:$${APP_PORT:-8111}/api/health | python3 -m json.tool
 
 clean: ## Remove build artifacts and caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

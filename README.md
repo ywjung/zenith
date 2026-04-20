@@ -180,6 +180,38 @@ docker compose version
 
 ## 3. 설치 — 신규 서버
 
+### 🚀 Quick Start (5분 설치)
+
+Docker/Compose가 이미 설치된 서버라면:
+
+```bash
+# 1. 저장소 체크아웃
+git clone <저장소 URL> /opt/zenith && cd /opt/zenith
+
+# 2. 원클릭 설치 런처 (대화형)
+./scripts/install.sh
+
+# 또는 모드 지정 (비대화형)
+./scripts/install.sh --mode external   # 기존 GitLab 연동
+./scripts/install.sh --mode bundle     # 번들 GitLab 함께 설치
+
+# 또는 Makefile 단축
+make setup-external   # 기존 GitLab 연동
+make setup-bundle     # 번들 GitLab
+```
+
+런처는 다음을 자동 처리합니다:
+- ✅ Docker/디스크/포트 사전 점검
+- ✅ 필수 secrets 자동 생성(`SECRET_KEY`, DB/Redis 비밀번호, Fernet 키 등)
+- ✅ `.env` 템플릿 채움 (GitLab URL·OAuth 값만 수동 입력)
+- ✅ 모드별 `docker-compose` override 자동 선택
+- ✅ Alembic 마이그레이션 자동 실행
+- ✅ 헬스체크 대기 후 접속 정보 출력
+
+외부 GitLab 연동 상세 가이드 → **[docs/install-existing-gitlab.md](docs/install-existing-gitlab.md)**
+
+---
+
 ### 3-1. Docker 설치 (Ubuntu 24.04 기준)
 
 ```bash
@@ -1704,14 +1736,14 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 ## 20. 버전 이력
 
-### 현재 버전 (2026-04-07)
+### 현재 버전 (2026-04-20)
 
 - **스택**: Python 3.13 · FastAPI 0.135 · Next.js 15 · PostgreSQL 17 · Redis 7.4 · Nginx 1.27 · Node.js 22 · Celery 5 · Gunicorn 23
 - **DB 마이그레이션**: 72단계 (0001~0072)
 - **API 엔드포인트**: 170개+
 - **서비스**: 13개 컨테이너 (+ 선택적 3개: Ollama, pg-backup, OTel Collector)
-- **테스트**: pytest 1,713개 통과 · 코드 커버리지 97%+ · CI --cov-fail-under=95 강제
-- **Grafana 대시보드**: 6개 자동 프로비저닝 (알림 & 인시던트 대시보드, Web Vitals 대시보드 포함)
+- **테스트**: pytest 1,828개 수집 · 프론트엔드 Jest 49개 · 코드 커버리지 97%+ · CI --cov-fail-under=95 강제
+- **Grafana 대시보드**: 8개 자동 프로비저닝 (운영·성능·SLA·비즈니스·알림·Web Vitals·문제 관리·인프라)
 - **v1.7 추가**: Celery 실패 메트릭·Slack, DB 슬로우 쿼리 감지, Web Vitals 수집, MinIO 스토리지, 서버 이전 자동화, i18n 한/영
 - **v1.8 추가**: WebSocket 실시간 협업, PWA 홈 화면 설치, 다크모드 이메일 템플릿, SLA 예측 모델, Celery 모니터링 UI, DB 정리 UI, OpenTelemetry 분산 추적, Grafana Web Vitals 대시보드, E2E 테스트 확대
 - **v1.9 추가**: 온보딩 투어, 리포트 PDF 내보내기, 간트 차트(`/gantt`), 시간 추적(Time Tracking), SLA 에스컬레이션 대시보드(`/sla`), 대시보드 위젯 커스터마이징, 캘린더 뷰(`/calendar`), 활성 세션 관리
@@ -1722,6 +1754,16 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 - **v2.2 프로덕션 최적화**: gunicorn + UvicornWorker 멀티 프로세스(`WORKERS` 환경변수로 조정), nginx upstream keepalive(api 32/web 16), rate limiting(api 30r/s·login 10r/m), PostgreSQL shared_buffers 256MB+work_mem 16MB 튜닝, Redis maxmemory 512MB, 컨테이너별 resource limits, Flower Basic 인증 강제(`FLOWER_USER`/`FLOWER_PASSWORD`), prometheus:v2.55.1·grafana:11.4.0 버전 고정, 비루트 appuser(UID 1001), FastAPI pattern= 경고 제거
 - **v2.3 버그픽스**: 반복 티켓 카테고리·우선순위 한국어 표시 수정(영문 raw value → 레이블 매핑), SLA 대시보드 breach_count·tickets 불일치 수정(orphan SLA 레코드 제외 후 enriched 목록 기준 집계), Service Worker 아이콘·manifest Stale-While-Revalidate 전환(배포 후 아이콘 즉시 갱신), PWA manifest maskable purpose 제거(비호환 RGBA PNG 아이콘)
 - **v2.4 보안·성능·AI**: AI 설정(OpenAI/Ollama), 보안 강화 ~95건(SSRF·XSS·토큰 노출·정보 노출·symlink 탈출 수정), 성능 최적화(DB 기반 티켓 목록/통계, Redis 프로젝트/멤버 캐싱, SLA 복합 인덱스, RichTextEditor/MarkdownRenderer 지연 로딩, Reports N+1→SQL 집계), 알림 ETag/304, WebSocket 쿠키 인증 전환, GitLab 사용자 토큰으로 이슈/노트 업데이트(Administrator → 실제 사용자 표시), `dompurify` 경량화, unused import 55건 정리
+- **v2.5 i18n·UX·인프라**: 프론트엔드 i18n 영어 번역 Phase 2 확대(tickets/[id]·admin 전 페이지·problems·changes·portal/track·multi-project·OnboardingTour·TimelineView·RichTextEditor·FilePreview·TimeTracker·ResolutionNoteModal·MarkdownRenderer 25개+ 모듈), 티켓 상세 병렬 fetch 최적화, 칸반 드래그 성능·WIP 제한·검색 일관성, nginx rate limit 세밀 튜닝, ClamAV 타임아웃 가드, 티켓 상세 세션 만료 UX(연장 모달+자동 refresh), 드래프트 자동 저장, 일괄 작업 단축키, GitLab 전체 실패 시 빈 응답 캐시 방지
+- **v2.6 안정성·데이터 정합·GDPR (현재)**:
+  - **낙관적 락·TOCTOU 방지 (9건)**: 티켓 PATCH 해시 기반 ETag(`compute_issue_etag`) · Approvals 생성 `pg_advisory_xact_lock` · KB article `with_for_update` · SLA `mark_resolved`/`pause_sla` row lock · Rating 동시 생성 `IntegrityError`→409 · WebPush subscribe row lock + upsert retry · Bulk 작업 부분 실패 207 Multi-Status · TSI list_tickets `assignee_id` 매핑 복구
+  - **Circuit Breaker**: 공용 `CircuitBreaker` 모듈 · GitLab/ClamAV/SMTP 적용 · half-open probe 실패 시 재오픈 버그 수정(`>=` 비교 + `was_open` 체크)
+  - **GDPR 컴플라이언스**: `anonymize_user` 대소문자 무관 PII 마스킹(`re.IGNORECASE` Python 루프) · 익명화 즉시 API 키·Refresh token 폐기 · `periodic_user_sync`의 익명화 사용자 재활성화 차단
+  - **Idempotency 미들웨어 강화**: 사용자 스코프 해시 기반(서명부 SHA-256) · cross-user 응답 본문 누출 차단 · 스트리밍/바이너리 응답 우회 · 256KB 크기 상한 · 재생 시 ETag/Location 안전 헤더 복원
+  - **WebSocket 메모리 누수**: `ws_manager.broadcast_to_room` 빈 방 자동 삭제
+  - **에러 처리 표준화**: `validation_exception_handler` Pydantic `ctx.error` JSON 직렬화 가드 · 프론트 `parseErrorMessage`/`classifyApiError` 상태 코드별 한/영 메시지 + 재시도 가능성 분류 · SessionExpireWarning "나중에" 버튼 재표시 버그 수정
+  - **프론트엔드 견고성**: `fetchTicket`/`updateTicket` 429 Retry-After 재시도 · `Idempotency-Key` 호출부 minting(useRef)로 더블클릭 중복 방지 · `useEscapeClose` 훅 공통화(kanban/profile/kb/changes/problems 등 10개 페이지)
+  - **테스트 강화**: 백엔드 `test_recent_regressions.py`·`test_recent_edge_cases.py` 35개 회귀·엣지 테스트 신규 · 프론트 `api-recent.test.ts`·`SessionExpireWarning.test.tsx` 22개 · 총 22건 실제 버그 발견·수정
 
 ### 마이그레이션 이력
 
@@ -1777,6 +1819,14 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 | 항목 | 내용 |
 |------|------|
+| **낙관적 락 (해시 ETag)** | 티켓 GET 응답의 ETag를 `updated_at` 문자열 대신 SHA-256 해시로 반환 · 포맷 변경에 견고, 내부 타임스탬프 노출 방지 · PATCH `If-Match` 불일치 시 409 |
+| **Idempotency 미들웨어** | 사용자별 스코프를 JWT 서명부 SHA-256 기반으로 분리(cross-user 누출 차단) · JSON 응답만 캐시하여 SSE/파일 다운로드 보호 · 재생 시 ETag/Location 등 안전 헤더 복원 |
+| **Circuit Breaker** | GitLab/ClamAV/SMTP 공통 CB(`app/circuit_breaker.py`) · half-open 실패 시 재오픈 · Prometheus `circuit_breaker_open`/`transitions_total` 메트릭 |
+| **Bulk 작업 207 Multi-Status** | 티켓 일괄 작업 부분 실패 시 207 + `{success, errors, summary}` 구조 유지 · 프론트 개별 실패 사유 표시 |
+| **GDPR 사용자 익명화 강화** | `POST /users/{id}/anonymize` — 대소문자 무관 PII 마스킹 · API 키/Refresh token 즉시 폐기 · 주기적 user_sync가 재활성화하지 않도록 가드 |
+| **SessionExpireWarning** | JWT 만료 2분 전 모달 · 60s 카운트다운 후 자동 refresh · "나중에" 버튼 dismiss 후 재표시 안 되도록 exp 기반 dedup |
+| **Escape 키 일관성** | `useEscapeClose` 공통 훅 · 관리자 모달(10개 페이지)·kanban·profile·kb·changes·problems 동일 UX |
+| **API 에러 매핑** | 프론트 `classifyApiError` — 429/503/504 retryable, 5xx contactSupport · 상태 코드별 한/영 fallback 메시지 |
 | **티켓 유형 분류** | ITIL 4가지 유형(incident·service_request·change·problem) 사이드바에서 설정, "문제" 선택 시 문제 관리 패널 활성화 |
 | **문제 관리** | 문제 티켓에서 인시던트를 `problem_of` 링크로 연결·추적 |
 | **서비스 카탈로그** | 관리자가 IT 서비스 항목 정의 → 고객 포털 카드 노출 + 서비스별 추가 필드 수집 |
@@ -1849,6 +1899,28 @@ docker compose exec gitlab gitlab-rake gitlab:cleanup:remote_uploads
 
 | 항목 | 수정 내용 |
 |------|---------|
+| Idempotency cross-user 누출 | 사용자 스코프를 `token[:16]` → JWT 서명부 SHA-256 prefix로 교체 (HS256 헤더 고정 프리픽스로 전 사용자가 한 버킷 공유 → cross-user 응답 본문 누출) |
+| Circuit Breaker half-open 실패 후 재오픈 안 됨 | `_failures == threshold` 엄격 비교 → `>=` + `was_open` 체크 (probe 실패 시 `_opened_at` 타이머 재시작) |
+| Anonymize 대소문자 PII 잔류 (GDPR) | `ilike` 필터 + `func.replace` case-sensitive → Python `re.IGNORECASE` 루프로 치환 |
+| Anonymize 후 API 키 유효 (GDPR) | `anonymize_user`에서 `ApiKey.revoked=True`·`RefreshToken.revoked=True` 즉시 폐기 + user_sync에서 사후 보정 |
+| periodic_user_sync 익명화 재활성화 | `name == "[삭제된 사용자]"` 감지 시 GitLab 멤버십 무시, 영구 비활성 유지 |
+| Bulk 전체 실패 구조화 에러 유실 | 4xx/5xx → 207 Multi-Status로 통일 (프론트 request() `!ok` 분기로 body 버려지던 문제) |
+| TSI assignee_id 누락 | DB 기반 list 경로에서 `assignee_id: None` 하드코딩 → `UserRole.gitlab_user_id` 매핑으로 인라인 담당자 하이라이트 복구 |
+| ETag `updated_at` 포맷 의존성 | 해시(`compute_issue_etag`: updated_at+state+title+labels SHA-256 12자) 기반으로 전환 — 타임스탬프 노출·포맷 변경 이슈 해소 |
+| fetchTicket ETag 미추출 | 프론트가 `ticket.updated_at`을 ETag로 사용 → `_etag` 프로퍼티(응답 헤더)로 교체 (해시 전환 후 매 PATCH 409 회귀 방지) |
+| Idempotency 스트리밍 body 소비 | Content-Type 기반 JSON 응답만 처리 — SSE/파일 다운로드 body_iterator 보존 |
+| Idempotency 캐시 ETag 유실 | 재생 시 ETag/Location/Content-Location 복원 (Set-Cookie는 보안 차원에서 제외) |
+| SessionExpireWarning 재표시 | `dismissedExpRef`로 현재 exp 세션에 대해 재표시 차단, refresh 성공 시 리셋 |
+| validation_exception_handler 500 | Pydantic v2 `ctx.error`에 Exception 인스턴스 포함 → `_sanitize_validation_errors`로 문자열화 · 개발 환경 422 정상화 |
+| ws_manager 빈 방 메모리 누수 | `broadcast_to_room` dead 정리 후 `self.rooms.pop()`으로 빈 방 삭제 |
+| Approvals 동시 생성 race | `pg_advisory_xact_lock(hash(iid, project_id))`로 티켓 단위 직렬화 · `with_for_update` phantom 보정 |
+| KB article 동시 수정 revision 중복 | `update_article`에서 article row `with_for_update` → revision_number 일관 |
+| SLA mark_resolved/pause_sla TOCTOU | row lock 추가 — 동시 요청으로 인한 중복 set/overwrite 방지 |
+| Rating 동시 생성 500 노출 | `IntegrityError` catch → 409 반환 (TOCTOU 후 unique 위반) |
+| WebPush subscribe race | `with_for_update` + `IntegrityError` fallback upsert |
+| slowapi headers_enabled=True 500 | `response_model=dict` 핸들러에서 `_inject_headers` `isinstance(Response)` 실패 → 설정 제거 |
+| export.py 심볼 미import | `status_to_label`/`priority_to_label` import 누락 → CSV export NameError 수정 |
+| Related tickets pg_trgm 500 | extension 미설치 환경에서 `similarity`/`%` 실패 시 빈 리스트로 graceful degrade |
 | SW 페이지 로드 지연 | `sw.js` navigation 요청 가로채기 → `if (request.mode === 'navigate') return` 조기 반환, CACHE_NAME zenith-v3 |
 | Flower 404 / 401 | `FLOWER_URL` prefix `/flower` 누락 · `FLOWER_UNAUTHENTICATED_API=true` docker-compose 미설정 → 수정 |
 | Flower 응답 타임아웃 | httpx base_url RFC 3986 절대 경로 버그 · `?refresh=1` blocking → URL 직접 연결 + 파라미터 제거 |

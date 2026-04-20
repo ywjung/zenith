@@ -2,11 +2,12 @@
 
 한국어 하드코딩을 `next-intl` 기반 i18n으로 전환하는 점진적 마이그레이션 절차.
 
-## 현황 (2026-04-12 기준)
+## 현황 (2026-04-20 기준)
 
 - **인프라**: `next-intl` 설치 완료, `messages/ko.json`, `messages/en.json` 운영
-- **이관 완료**: 30 파일 (admin/users, admin/service-types, admin/templates, admin/role-labels 등)
-- **잔여**: 58 파일 (admin 11, app 레벨 47)
+- **이관 완료**: 55+ 파일 (admin 전 페이지, problems, changes, portal/track, multi-project, OnboardingTour, TimelineView, RichTextEditor, FilePreview, TimeTracker, ResolutionNoteModal, MarkdownRenderer, tickets/[id] Phase 1·2)
+- **잔여**: `app/help/page.tsx` (MDX 분리 대기), 소수 컴포넌트
+- **Phase 2 완료**: 2026-04 — tickets/[id] 사이드바·SLA·속성 패널 이관으로 주요 UX 다국어화 달성
 
 ### 상위 하드코딩 볼륨 (한국어 문자 수)
 
