@@ -1570,12 +1570,32 @@ export interface SLADashboardTicket {
   breached: boolean
 }
 
+export interface SLAPriorityBreakdown {
+  breach: number
+  warning: number
+  on_track: number
+}
+
+export interface SLAAssigneeLoad {
+  assignee: string
+  breach: number
+  warning: number
+  total: number
+}
+
 export interface SLADashboard {
   breach_count: number
   warning_count: number
   on_track_count: number
   tickets: SLADashboardTicket[]
   trend: { date: string; count: number }[]
+  // v2.7 확장 지표 (optional — 구버전 백엔드 호환)
+  by_priority?: Record<'critical' | 'high' | 'medium' | 'low', SLAPriorityBreakdown>
+  by_assignee?: SLAAssigneeLoad[]
+  compliance_rate_7d?: number | null
+  mttr_hours_7d?: number | null
+  resolved_count_7d?: number
+  worst_offenders?: SLADashboardTicket[]
 }
 
 export function fetchSLADashboard(projectId?: string): Promise<SLADashboard> {

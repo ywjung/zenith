@@ -974,12 +974,81 @@ def get_sla_dashboard(
     # enriched 목록 기준으로 카운트 (orphan SLA 레코드 제외)
     enriched_breach = sum(1 for t in enriched_tickets if t["breached"])
     enriched_warning = len(enriched_tickets) - enriched_breach
+
+    # ── 확장 지표: 우선순위별 분포 (위반·임박·정상) ───────────────────────────
+    from collections import defaultdict as _dd
+    by_priority_bw: dict[str, dict[str, int]] = _dd(lambda: {"breach": 0, "warning": 0, "on_track": 0})
+    for t in enriched_tickets:
+        p = t.get("priority") or "medium"
+        by_priority_bw[p]["breach" if t["breached"] else "warning"] += 1
+    # 정상 티켓은 우선순위 정보를 enrich 안 하므로 SLARecord에서 직접 집계
+    for rec in active_records:
+        deadline = rec.sla_deadline
+        if deadline is None:
+            continue
+        sla_window = (deadline - rec.created_at).total_seconds() if rec.created_at else 1
+        total_seconds = (now - rec.created_at).total_seconds() if rec.created_at else 1
+        elapsed_pct = (total_seconds / sla_window) * 100 if sla_window > 0 else 0
+        if not rec.breached and now < deadline and elapsed_pct < 80:
+            by_priority_bw[rec.priority or "medium"]["on_track"] += 1
+
+    # ── 담당자별 부하 Top 10 (위반 + 임박 기준 정렬) ──────────────────────────
+    assignee_load: dict[str, dict[str, int]] = _dd(lambda: {"breach": 0, "warning": 0})
+    for t in enriched_tickets:
+        name = t.get("assignee") or "(미배정)"
+        assignee_load[name]["breach" if t["breached"] else "warning"] += 1
+    by_assignee = sorted(
+        [
+            {"assignee": name, "breach": v["breach"], "warning": v["warning"], "total": v["breach"] + v["warning"]}
+            for name, v in assignee_load.items()
+        ],
+        key=lambda x: (-x["breach"], -x["total"]),
+    )[:10]
+
+    # ── 최근 7일 SLA 준수율 & MTTR ───────────────────────────────────────────
+    seven_days_ago_dt = now - timedelta(days=7)
+    resolved_recent = (
+        db.query(SLARecord)
+        .filter(
+            SLARecord.resolved_at != None,  # noqa: E711
+            SLARecord.resolved_at >= seven_days_ago_dt,
+        )
+        .limit(10000)
+        .all()
+    )
+    total_resolved = len(resolved_recent)
+    breached_resolved = sum(1 for r in resolved_recent if r.breached)
+    compliance_rate_7d = round((1 - breached_resolved / total_resolved) * 100, 1) if total_resolved > 0 else None
+
+    # MTTR: 해결 시간(초) 평균 → 시간 단위
+    mttr_values: list[float] = []
+    for r in resolved_recent:
+        if r.created_at and r.resolved_at:
+            paused = r.total_paused_seconds or 0
+            delta = (r.resolved_at - r.created_at).total_seconds() - paused
+            if delta > 0:
+                mttr_values.append(delta)
+    mttr_hours_7d = round(sum(mttr_values) / len(mttr_values) / 3600, 1) if mttr_values else None
+
+    # ── 가장 위험한 티켓 Top 3 (elapsed_pct 내림차순, 위반 우선) ────────────
+    worst_offenders = enriched_tickets[:3]
+
     sla_dash_result = {
         "breach_count": enriched_breach,
         "warning_count": enriched_warning,
         "on_track_count": on_track_count,
         "tickets": enriched_tickets,
         "trend": trend,
+        # v2.7: 확장 지표
+        "by_priority": {
+            p: by_priority_bw.get(p, {"breach": 0, "warning": 0, "on_track": 0})
+            for p in ("critical", "high", "medium", "low")
+        },
+        "by_assignee": by_assignee,
+        "compliance_rate_7d": compliance_rate_7d,
+        "mttr_hours_7d": mttr_hours_7d,
+        "resolved_count_7d": total_resolved,
+        "worst_offenders": worst_offenders,
     }
     if _r:
         try:

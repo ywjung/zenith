@@ -196,36 +196,192 @@ function SLADashboardContent() {
         </div>
       </div>
 
-      {/* 요약 카드 3개 */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      {/* 요약 카드 — 기존 3 + KPI 3 = 6개 */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+        {/* 위반 */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4 flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center text-red-600 dark:text-red-400 text-sm font-bold shrink-0">
             {data.breach_count}
           </div>
-          <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{t('breach_label')}</div>
-            <div className="text-sm font-semibold text-red-600 dark:text-red-400">SLA {t('breached')}</div>
+          <div className="min-w-0">
+            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t('breach_label')}</div>
+            <div className="text-sm font-semibold text-red-600 dark:text-red-400 truncate">SLA {t('breached')}</div>
           </div>
         </div>
+        {/* 임박 */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4 flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center text-yellow-700 dark:text-yellow-400 text-sm font-bold shrink-0">
             {data.warning_count}
           </div>
-          <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{t('warning_label')}</div>
-            <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">{t('at_risk_tickets')}</div>
+          <div className="min-w-0">
+            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t('warning_label')}</div>
+            <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 truncate">{t('at_risk_tickets')}</div>
           </div>
         </div>
+        {/* 정상 */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4 flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center text-green-700 dark:text-green-400 text-sm font-bold shrink-0">
             {data.on_track_count}
           </div>
-          <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{t('on_track_label')}</div>
-            <div className="text-sm font-semibold text-green-700 dark:text-green-400">{t('on_track_label')}</div>
+          <div className="min-w-0">
+            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t('on_track_label')}</div>
+            <div className="text-sm font-semibold text-green-700 dark:text-green-400 truncate">{t('on_track_label')}</div>
           </div>
         </div>
+        {/* 7일 준수율 */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">7일 준수율</div>
+          {data.compliance_rate_7d != null ? (
+            <div className="flex items-end gap-1">
+              <span className={`text-2xl font-bold ${
+                data.compliance_rate_7d >= 95 ? 'text-green-600 dark:text-green-400'
+                : data.compliance_rate_7d >= 80 ? 'text-yellow-600 dark:text-yellow-400'
+                : 'text-red-600 dark:text-red-400'
+              }`}>
+                {data.compliance_rate_7d.toFixed(1)}
+              </span>
+              <span className="text-sm text-gray-400 dark:text-gray-500 mb-1">%</span>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-400 dark:text-gray-500">데이터 없음</div>
+          )}
+          <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+            {data.resolved_count_7d ?? 0}건 해결
+          </div>
+        </div>
+        {/* MTTR */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">평균 해결 시간</div>
+          {data.mttr_hours_7d != null ? (
+            <div className="flex items-end gap-1">
+              <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {data.mttr_hours_7d.toFixed(1)}
+              </span>
+              <span className="text-sm text-gray-400 dark:text-gray-500 mb-1">h</span>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-400 dark:text-gray-500">데이터 없음</div>
+          )}
+          <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">MTTR · 7일 기준</div>
+        </div>
+        {/* 가장 위험한 티켓 */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">최우선 조치 대상</div>
+          {data.worst_offenders && data.worst_offenders.length > 0 ? (
+            <Link href={`/tickets/${data.worst_offenders[0].iid}`} className="block group">
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-blue-600">
+                #{data.worst_offenders[0].iid}
+              </div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                {data.worst_offenders[0].title}
+              </div>
+              <div className="text-[10px] text-red-600 dark:text-red-400 mt-0.5 font-mono">
+                {data.worst_offenders[0].elapsed_pct.toFixed(0)}% · {data.worst_offenders[0].breached ? '위반' : '임박'}
+              </div>
+            </Link>
+          ) : (
+            <div className="text-sm text-green-600 dark:text-green-400">✓ 양호</div>
+          )}
+        </div>
       </div>
+
+      {/* 확장 위젯: 우선순위 분포 + 담당자 워크로드 */}
+      {(data.by_priority || (data.by_assignee && data.by_assignee.length > 0)) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+          {/* 우선순위별 분포 */}
+          {data.by_priority && (
+            <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  우선순위별 현황
+                </h2>
+              </div>
+              <div className="p-4 space-y-2">
+                {(['critical', 'high', 'medium', 'low'] as const).map(p => {
+                  const row = data.by_priority?.[p] ?? { breach: 0, warning: 0, on_track: 0 }
+                  const total = row.breach + row.warning + row.on_track
+                  if (total === 0) return null
+                  const pctB = (row.breach / total) * 100
+                  const pctW = (row.warning / total) * 100
+                  const pctO = (row.on_track / total) * 100
+                  return (
+                    <div key={p} className="flex items-center gap-3">
+                      <span className="w-16 text-xs font-medium text-gray-600 dark:text-gray-300 capitalize">
+                        {tTicket(`priority.${p}`, { default: p })}
+                      </span>
+                      <div className="flex-1 h-5 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden flex">
+                        {row.breach > 0 && (
+                          <div className="bg-red-500 flex items-center justify-center text-[10px] text-white font-bold" style={{ width: `${pctB}%` }}>
+                            {pctB > 12 ? row.breach : ''}
+                          </div>
+                        )}
+                        {row.warning > 0 && (
+                          <div className="bg-yellow-400 dark:bg-yellow-500 flex items-center justify-center text-[10px] text-yellow-900 font-bold" style={{ width: `${pctW}%` }}>
+                            {pctW > 12 ? row.warning : ''}
+                          </div>
+                        )}
+                        {row.on_track > 0 && (
+                          <div className="bg-green-500 flex items-center justify-center text-[10px] text-white font-bold" style={{ width: `${pctO}%` }}>
+                            {pctO > 12 ? row.on_track : ''}
+                          </div>
+                        )}
+                      </div>
+                      <span className="w-10 text-xs font-mono text-right text-gray-500 dark:text-gray-400">{total}</span>
+                    </div>
+                  )
+                })}
+                <div className="flex items-center justify-end gap-3 pt-2 border-t dark:border-gray-700/50 text-[10px] text-gray-500 dark:text-gray-400">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-sm" />{t('breach_label')}</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 bg-yellow-400 dark:bg-yellow-500 rounded-sm" />{t('warning_label')}</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-500 rounded-sm" />{t('on_track_label')}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 담당자 워크로드 Top 10 */}
+          {data.by_assignee && data.by_assignee.length > 0 && (
+            <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  담당자별 부하 Top 10
+                </h2>
+              </div>
+              <div className="p-4">
+                <div className="space-y-1.5">
+                  {data.by_assignee.map((row, i) => {
+                    const max = Math.max(...(data.by_assignee?.map(x => x.total) ?? [1]), 1)
+                    const widthPct = (row.total / max) * 100
+                    return (
+                      <div key={row.assignee + i} className="flex items-center gap-2">
+                        <span className="w-28 text-xs text-gray-700 dark:text-gray-300 truncate" title={row.assignee}>
+                          {row.assignee}
+                        </span>
+                        <div className="flex-1 h-4 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
+                          <div
+                            className={`h-full ${row.breach > 0 ? 'bg-red-400 dark:bg-red-500' : 'bg-yellow-300 dark:bg-yellow-500'}`}
+                            style={{ width: `${widthPct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-mono text-right w-24 text-gray-600 dark:text-gray-300">
+                          {row.breach > 0 && <span className="text-red-500 font-bold">{row.breach}</span>}
+                          {row.breach > 0 && <span className="mx-0.5 text-gray-300">·</span>}
+                          <span className="text-yellow-600 dark:text-yellow-400">{row.warning}</span>
+                          <span className="mx-0.5 text-gray-300">/</span>
+                          <span className="text-gray-500">{row.total}</span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex items-center justify-end gap-3 pt-2 mt-2 border-t dark:border-gray-700/50 text-[10px] text-gray-500 dark:text-gray-400">
+                  <span>위반 · 임박 / 전체</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 본문: 테이블 + 트렌드 차트 */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
