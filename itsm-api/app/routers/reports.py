@@ -1259,8 +1259,22 @@ def get_multi_project_stats(
     db: Session = Depends(get_db),
     user: dict = Depends(require_agent),
 ):
-    """등록된 모든 GitLab 프로젝트의 SLA·티켓 현황을 통합 조회한다."""
+    """등록된 모든 GitLab 프로젝트의 SLA·티켓·건강도를 통합 조회한다.
+
+    응답 필드:
+    - total_sla_records, sla_breached, sla_active, sla_compliance_rate, total_time_hours (기본)
+    - open_tickets: 현재 미해결 SLA 레코드 수
+    - resolved_7d: 최근 7일 해결 건수
+    - mttr_hours_7d: 최근 7일 평균 해결 시간
+    - compliance_rate_7d: 최근 7일 준수율
+    - weekly_trend: 최근 4주 준수율 [{week, compliance, total}]
+    - active_assignees_7d: 최근 7일에 이 프로젝트에서 시간 기록한 고유 담당자 수
+    - health_score: 0~100 종합 점수 (compliance_7d·open_tickets·MTTR 조합)
+    - health_grade: 'good' | 'warn' | 'critical'
+    """
     from ..models import SLARecord
+    from sqlalchemy import func, case
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 
     # 사용된 project_id 목록 (SLA 기록 기준)
     rows = db.query(SLARecord.project_id).distinct().all()
@@ -1278,18 +1292,23 @@ def get_multi_project_stats(
         pass
 
     # SQL 집계로 N+1 제거 — 프로젝트별 SLA 통계를 한 번의 쿼리로 조회
-    from sqlalchemy import func, case
     sla_agg = (
         db.query(
             SLARecord.project_id,
             func.count().label("total"),
             func.sum(case((SLARecord.breached == True, 1), else_=0)).label("breached"),  # noqa: E712
             func.sum(case((SLARecord.resolved_at == None, 1), else_=0) * case((SLARecord.breached == False, 1), else_=0)).label("active"),  # noqa: E711,E712
+            func.sum(case((SLARecord.resolved_at == None, 1), else_=0)).label("open"),  # noqa: E711
         )
         .group_by(SLARecord.project_id)
         .all()
     )
-    sla_map = {r.project_id: {"total": r.total, "breached": int(r.breached or 0), "active": int(r.active or 0)} for r in sla_agg}
+    sla_map = {r.project_id: {
+        "total": r.total,
+        "breached": int(r.breached or 0),
+        "active": int(r.active or 0),
+        "open": int(r.open or 0),
+    } for r in sla_agg}
 
     time_agg = (
         db.query(TimeEntry.project_id, func.coalesce(func.sum(TimeEntry.minutes), 0).label("total_min"))
@@ -1298,19 +1317,146 @@ def get_multi_project_stats(
     )
     time_map = {r.project_id: int(r.total_min) for r in time_agg}
 
+    # 최근 7일 통계: resolved 건수·breach·MTTR
+    now = _dt.now(_tz.utc).replace(tzinfo=None)
+    seven_days_ago = now - _td(days=7)
+    recent_resolved = (
+        db.query(SLARecord)
+        .filter(
+            SLARecord.resolved_at != None,  # noqa: E711
+            SLARecord.resolved_at >= seven_days_ago,
+        )
+        .all()
+    )
+    recent_map: dict[str, dict] = {}
+    for r in recent_resolved:
+        pid = r.project_id
+        if pid not in recent_map:
+            recent_map[pid] = {"resolved": 0, "breached": 0, "mttr_secs": []}
+        recent_map[pid]["resolved"] += 1
+        if r.breached:
+            recent_map[pid]["breached"] += 1
+        if r.created_at and r.resolved_at:
+            paused = r.total_paused_seconds or 0
+            delta = (r.resolved_at - r.created_at).total_seconds() - paused
+            if delta > 0:
+                recent_map[pid]["mttr_secs"].append(delta)
+
+    # 최근 4주 주차별 준수율 (스파크라인 데이터)
+    four_weeks_ago = now - _td(weeks=4)
+    weekly_rows = (
+        db.query(SLARecord)
+        .filter(
+            SLARecord.resolved_at != None,  # noqa: E711
+            SLARecord.resolved_at >= four_weeks_ago,
+        )
+        .all()
+    )
+    # (project_id, week_iso) → {total, breached}
+    from collections import defaultdict as _dd
+    weekly_agg: dict[tuple[str, str], dict[str, int]] = _dd(lambda: {"total": 0, "breached": 0})
+    for r in weekly_rows:
+        if not r.resolved_at:
+            continue
+        d = r.resolved_at.date()
+        monday = d - _td(days=d.weekday())
+        k = (r.project_id, monday.isoformat())
+        weekly_agg[k]["total"] += 1
+        if r.breached:
+            weekly_agg[k]["breached"] += 1
+
+    # 4주차 키 생성 (연속된 주 포함, 과거→현재 순)
+    this_week_monday = now.date() - _td(days=now.weekday())
+    week_keys = [(this_week_monday - _td(weeks=i)).isoformat() for i in range(3, -1, -1)]
+
+    # 최근 7일 활성 담당자 수 (TimeEntry 기준 — agent_id 기준 distinct, logged_at 필터)
+    active_assignees_agg = (
+        db.query(TimeEntry.project_id, func.count(func.distinct(TimeEntry.agent_id)).label("cnt"))
+        .filter(TimeEntry.logged_at >= seven_days_ago)
+        .group_by(TimeEntry.project_id)
+        .all()
+    )
+    active_assignees_map = {r.project_id: int(r.cnt or 0) for r in active_assignees_agg}
+
+    def _health_score(*, compliance_7d: float | None, open_count: int, mttr_hours: float | None) -> tuple[int, str]:
+        """0~100 점수 + grade. 기준치는 운영팀 조정 가능.
+        - compliance_7d (없으면 전체 준수율 fallback): 50점
+        - open_count 가 낮을수록 +30점 (10건 이하 만점)
+        - mttr_hours 가 낮을수록 +20점 (8시간 이하 만점)
+        """
+        comp = compliance_7d if compliance_7d is not None else 0
+        comp_score = int(min(50, comp * 0.5))
+        open_score = int(max(0, 30 - (open_count * 3)))
+        if mttr_hours is None:
+            mttr_score = 10
+        elif mttr_hours <= 8:
+            mttr_score = 20
+        elif mttr_hours <= 24:
+            mttr_score = 15
+        elif mttr_hours <= 72:
+            mttr_score = 10
+        else:
+            mttr_score = 5
+        total = comp_score + open_score + mttr_score
+        total = max(0, min(100, total))
+        if total >= 80:
+            grade = "good"
+        elif total >= 50:
+            grade = "warn"
+        else:
+            grade = "critical"
+        return total, grade
+
     result = []
     for pid in project_ids:
-        s = sla_map.get(pid, {"total": 0, "breached": 0, "active": 0})
+        s = sla_map.get(pid, {"total": 0, "breached": 0, "active": 0, "open": 0})
         total = s["total"]
         breached = s["breached"]
+        compliance = round((total - breached) / total * 100, 1) if total else None
+
+        rec = recent_map.get(pid, {"resolved": 0, "breached": 0, "mttr_secs": []})
+        resolved_7d = rec["resolved"]
+        compliance_7d = round((resolved_7d - rec["breached"]) / resolved_7d * 100, 1) if resolved_7d else None
+        mttr_hours_7d = round(sum(rec["mttr_secs"]) / len(rec["mttr_secs"]) / 3600, 1) if rec["mttr_secs"] else None
+
+        weekly_trend = [
+            {
+                "week": wk,
+                "total": weekly_agg.get((pid, wk), {"total": 0})["total"],
+                "compliance": (
+                    round(
+                        (weekly_agg[(pid, wk)]["total"] - weekly_agg[(pid, wk)]["breached"])
+                        / weekly_agg[(pid, wk)]["total"] * 100, 1
+                    )
+                    if (pid, wk) in weekly_agg and weekly_agg[(pid, wk)]["total"] > 0 else None
+                ),
+            }
+            for wk in week_keys
+        ]
+
+        score, grade = _health_score(
+            compliance_7d=compliance_7d if compliance_7d is not None else compliance,
+            open_count=s["open"],
+            mttr_hours=mttr_hours_7d,
+        )
+
         result.append({
             "project_id": pid,
             "project_name": project_names.get(pid, pid),
             "total_sla_records": total,
             "sla_breached": breached,
             "sla_active": s["active"],
-            "sla_compliance_rate": round((total - breached) / total * 100, 1) if total else None,
+            "sla_compliance_rate": compliance,
             "total_time_hours": round(time_map.get(pid, 0) / 60, 1),
+            # v2.7 확장 지표
+            "open_tickets": s["open"],
+            "resolved_7d": resolved_7d,
+            "compliance_rate_7d": compliance_7d,
+            "mttr_hours_7d": mttr_hours_7d,
+            "weekly_trend": weekly_trend,
+            "active_assignees_7d": active_assignees_map.get(pid, 0),
+            "health_score": score,
+            "health_grade": grade,
         })
 
     result.sort(key=lambda x: -x["total_sla_records"])

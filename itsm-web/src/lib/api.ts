@@ -1823,6 +1823,12 @@ export function fetchTimeTrackingReport(params?: {
 // Task 6: 멀티 프로젝트 통합 뷰
 // ---------------------------------------------------------------------------
 
+export interface MultiProjectWeeklyPoint {
+  week: string            // ISO Monday date
+  total: number
+  compliance: number | null
+}
+
 export interface MultiProjectStats {
   project_id: string
   project_name: string
@@ -1831,6 +1837,15 @@ export interface MultiProjectStats {
   sla_active: number
   sla_compliance_rate: number | null
   total_time_hours: number
+  // v2.7 확장 지표 (optional — 구버전 백엔드 호환)
+  open_tickets?: number
+  resolved_7d?: number
+  compliance_rate_7d?: number | null
+  mttr_hours_7d?: number | null
+  weekly_trend?: MultiProjectWeeklyPoint[]
+  active_assignees_7d?: number
+  health_score?: number
+  health_grade?: 'good' | 'warn' | 'critical'
 }
 
 export function fetchMultiProjectStats(): Promise<{ projects: MultiProjectStats[] }> {
