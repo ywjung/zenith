@@ -209,7 +209,12 @@ function MultiProjectContent() {
         </div>
       )}
 
-      {!loading && !error && projects.length > 0 && (
+      {/* 단일 프로젝트 — 통합 뷰보다 전용 대시보드(SLA/리포트)가 더 유용함을 안내 */}
+      {!loading && !error && projects.length === 1 && (
+        <SingleProjectNotice project={projects[0]} />
+      )}
+
+      {!loading && !error && projects.length > 1 && (
         <div className="space-y-6">
           {/* KPI 카드 8개 */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
@@ -463,6 +468,106 @@ function MultiProjectContent() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function SingleProjectNotice({ project }: { project: MultiProjectStats }) {
+  const rc = rateColor(project.sla_compliance_rate)
+  const hc = healthColor(project.health_grade)
+  return (
+    <div className="space-y-5">
+      <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-900/20 dark:to-gray-900 border border-indigo-200 dark:border-indigo-800/50 rounded-xl p-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">이 시스템에는 프로젝트가 1개뿐입니다</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+              멀티 프로젝트 통합 뷰는 2개 이상의 프로젝트가 있을 때 비교·정렬·건강도 분포가 의미를 가집니다. 단일 프로젝트에서는 아래 전용 대시보드가 더 상세합니다.
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Link href="/sla" className="inline-flex items-center gap-1.5 text-sm bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors">
+                ⏰ SLA 대시보드 →
+              </Link>
+              <Link href="/reports" className="inline-flex items-center gap-1.5 text-sm border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors">
+                📈 분석 리포트 →
+              </Link>
+              <Link href="/" className="inline-flex items-center gap-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                🎫 티켓 목록 →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <ProjectInitial name={project.project_name} />
+          <div className="min-w-0">
+            <div className="text-lg font-semibold text-gray-900 dark:text-white truncate">{project.project_name}</div>
+            <div className="text-xs text-gray-400 font-mono">#{project.project_id}</div>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold ${hc.bg} ${hc.border} ${hc.text}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${hc.dot}`} />
+              건강도 {project.health_score ?? '—'}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <DetailStat label="총 SLA" value={`${project.total_sla_records}건`} />
+          <DetailStat label="미해결" value={`${project.open_tickets ?? 0}건`} accent="amber" />
+          <DetailStat label="위반" value={`${project.sla_breached}건`} accent={project.sla_breached > 0 ? 'amber' : undefined} />
+          <DetailStat label="전체 준수율" value={project.sla_compliance_rate != null ? `${project.sla_compliance_rate}%` : '—'} />
+          <DetailStat label="최근 7일 해결" value={`${project.resolved_7d ?? 0}건`} />
+          <DetailStat label="7일 준수율" value={project.compliance_rate_7d != null ? `${project.compliance_rate_7d}%` : '—'} />
+          <DetailStat label="7일 MTTR" value={project.mttr_hours_7d != null ? `${project.mttr_hours_7d}h` : '—'} accent="blue" />
+          <DetailStat label="누적 기록" value={`${project.total_time_hours}h`} accent="purple" />
+        </div>
+
+        {project.sla_compliance_rate != null && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+              <span>SLA 준수율</span>
+              <span className={rc.text}>{project.sla_compliance_rate}%</span>
+            </div>
+            <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+              <div className={`h-full ${rc.bg}`} style={{ width: `${project.sla_compliance_rate}%` }} />
+            </div>
+          </div>
+        )}
+
+        {project.weekly_trend && project.weekly_trend.length > 0 && (
+          <div className="mt-5">
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">최근 4주 주별 준수율</div>
+            <div className="flex items-end gap-2 h-24">
+              {project.weekly_trend.map((w, i) => {
+                const v = w.compliance ?? 0
+                const color = v >= 90 ? 'bg-emerald-400' : v >= 70 ? 'bg-amber-400' : v > 0 ? 'bg-red-400' : 'bg-gray-200 dark:bg-gray-700'
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1" title={`${w.week}: ${w.compliance ?? 0}% (${w.total}건)`}>
+                    <div className="text-[10px] text-gray-400">{w.compliance != null ? `${w.compliance}%` : '—'}</div>
+                    <div className="w-full bg-gray-100 dark:bg-gray-700 rounded overflow-hidden" style={{ height: 48 }}>
+                      <div className={`w-full ${color}`} style={{ height: `${v}%`, marginTop: `${100 - v}%` }} />
+                    </div>
+                    <div className="text-[10px] text-gray-400 font-mono">{w.week.slice(5)}</div>
+                    <div className="text-[9px] text-gray-400">{w.total}건</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="text-xs text-gray-400 dark:text-gray-500 text-center">
+        💡 GitLab에서 신규 프로젝트를 추가하면 이 화면이 자동으로 멀티 프로젝트 뷰로 전환됩니다.
+      </div>
     </div>
   )
 }

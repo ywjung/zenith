@@ -53,9 +53,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="ko">
       <head>
-        {/* OPT: dns-prefetch + preconnect — API/GitLab 연결 초기화 가속 */}
-        <link rel="dns-prefetch" href="//localhost" />
-        <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_BASE || ''} crossOrigin="use-credentials" />
         {/*
           다크 모드 FOUC 방지: hydration 전에 동기적으로 dark 클래스 적용.
           SECURITY: 이 스크립트 내용은 정적 리터럴이어야 합니다.

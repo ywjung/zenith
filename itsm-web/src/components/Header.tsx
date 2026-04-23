@@ -10,6 +10,7 @@ import { formatName } from '@/lib/utils'
 import NotificationBell from './NotificationBell'
 import GlobalSearch from './GlobalSearch'
 import LocaleSwitcher from './LocaleSwitcher'
+import { useProjectCount } from '@/hooks/useProjectCount'
 
 type UserShape = {
   name: string
@@ -130,6 +131,9 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileViewsOpen, setMobileViewsOpen] = useState(false)
   const pathname = usePathname()
+  // 프로젝트 2개 이상일 때만 "멀티뷰" 메뉴 표시 (count null ↔ 미결정 → 기본 숨김)
+  const projectCount = useProjectCount(!!user && isAgent)
+  const showMultiProject = (projectCount ?? 0) >= 2
 
   // 라우트 변경 시 모바일 메뉴 자동 닫기
   useEffect(() => {
@@ -215,7 +219,7 @@ export default function Header() {
     {
       href: '/multi-project',
       label: '멀티뷰',
-      show: isAgent,
+      show: isAgent && showMultiProject,
       icon: (
         <svg className="w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -441,7 +445,7 @@ export default function Header() {
                 {isAgent && <Link href="/gantt" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📊 {t('nav.gantt')}</Link>}
                 {isAgent && <Link href="/sla" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>⏰ {t('nav.sla')}</Link>}
                 {isAgent && <Link href="/reports" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📈 {t('nav.reports')}</Link>}
-                {isAgent && <Link href="/multi-project" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🗂️ 멀티뷰</Link>}
+                {isAgent && showMultiProject && <Link href="/multi-project" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🗂️ 멀티뷰</Link>}
               </div>
             )}
           </div>

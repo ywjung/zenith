@@ -1632,6 +1632,20 @@ export function fetchHolidays(year: number): Promise<HolidayItem[]> {
   return request<HolidayItem[]>(`/admin/holidays/public${buildQuery({ year })}`)
 }
 
+export interface CalendarChange {
+  id: number
+  title: string
+  status: string
+  risk_level: string
+  change_type: string
+  scheduled_start_at: string | null
+  scheduled_end_at: string | null
+}
+
+export function fetchCalendarChanges(year: number, month: number): Promise<CalendarChange[]> {
+  return request<CalendarChange[]>(`/changes/calendar/month${buildQuery({ year, month })}`)
+}
+
 // ---------------------------------------------------------------------------
 // CSV Import
 // ---------------------------------------------------------------------------
@@ -1850,6 +1864,10 @@ export interface MultiProjectStats {
 
 export function fetchMultiProjectStats(): Promise<{ projects: MultiProjectStats[] }> {
   return request<{ projects: MultiProjectStats[] }>('/reports/multi-project')
+}
+
+export function fetchProjectCount(): Promise<{ count: number }> {
+  return request<{ count: number }>('/reports/project-count')
 }
 
 // ---------------------------------------------------------------------------
