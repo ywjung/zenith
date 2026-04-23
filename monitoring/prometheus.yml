@@ -16,10 +16,11 @@ scrape_configs:
     params:
       format: ['prometheus']
 
-  # ── Celery Worker (prometheus_client 내장 메트릭) ───────────────────────────
+  # ── Celery Worker (prometheus_client start_http_server on :8001) ──────────
+  # worker_ready 시그널에서 시작됨 (celery_app.py 참고)
   - job_name: 'celery-worker'
     static_configs:
-      - targets: ['celery-worker:8000']
+      - targets: ['celery-worker:8001']
     metrics_path: '/metrics'
     scrape_timeout: 10s
 

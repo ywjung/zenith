@@ -175,5 +175,23 @@ def on_task_revoked(sender=None, request=None, terminated=False, signum=None, **
 
 @signals.worker_ready.connect
 def on_worker_ready(sender=None, **kwargs):
-    """Worker 시작 완료 시 INFO 로그."""
+    """Worker 시작 완료 시 INFO 로그 + Prometheus HTTP 서버 기동.
+
+    celery-worker는 HTTP 서버가 아니므로 prometheus_client가 정의한 카운터를
+    외부에서 스크레이프할 방법이 없었다. worker 프로세스에 8001 포트로
+    metrics endpoint를 노출해 prometheus.yml의 celery-worker 타겟이 실제 값을
+    수집하도록 한다. prefork 워커인 경우 각 프로세스가 별도 카운터를 가지므로
+    solo 혹은 gevent pool 사용 시 의미가 크다.
+    """
     logger.info("Celery worker is ready | hostname=%s", getattr(sender, "hostname", "?"))
+    try:
+        from prometheus_client import start_http_server
+        import os
+        port = int(os.environ.get("CELERY_METRICS_PORT", "8001"))
+        start_http_server(port)
+        logger.info("Prometheus metrics endpoint started on :%d/metrics", port)
+    except OSError as e:
+        # 포트 충돌 시 경고만 남기고 계속 (여러 워커 프로세스가 경쟁할 수 있음)
+        logger.warning("Prometheus metrics endpoint bind failed: %s", e)
+    except Exception as e:
+        logger.warning("Prometheus metrics endpoint setup failed: %s", e)

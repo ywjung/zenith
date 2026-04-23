@@ -22,6 +22,10 @@ _CACHE_TTL_BREAKDOWN = 60    # breakdown: 1분
 _CACHE_TTL_SLA_DASH = 120    # sla-dashboard: 2분
 _CACHE_TTL_AGENT_PERF = 120  # agent-performance: 2분 (GitLab 페이지네이션 비용 큼)
 
+# GitLab에서 404인 이슈 iid를 프로세스 내부 캐시 (stale SLA record 감지)
+# 재시작 시 초기화 — 이슈 복구 시 자연스럽게 재확인되도록 의도적 in-process only
+_orphaned_issue_ids: set[tuple[str, int]] = set()
+
 router = APIRouter(prefix="/reports", tags=["reports"])
 logger = logging.getLogger(__name__)
 
@@ -914,6 +918,10 @@ def get_sla_dashboard(
     combined = breach_list + warning_list
 
     def _enrich_one(item: dict) -> dict:
+        # Orphan 캐시 조회: 이미 404로 확인된 이슈는 GitLab 재호출 스킵
+        orphan_key = (str(item["project_id"]), int(item["iid"]))
+        if orphan_key in _orphaned_issue_ids:
+            return None
         try:
             issue = gitlab_client.get_issue(item["iid"], project_id=item["project_id"])
             assignee = None
@@ -937,8 +945,13 @@ def get_sla_dashboard(
                 "breached": item["breached"],
             }
         except Exception as e:
-            logger.warning("SLA dashboard: failed to fetch issue #%s: %s", item["iid"], e)
-            # 404 또는 기타 오류 시 None 반환 → 목록에서 제외
+            # 404 (stale SLA record): orphan 캐시에 등록, INFO로 한 번만 로깅
+            is_404 = "404" in str(e) or getattr(getattr(e, "response", None), "status_code", 0) == 404
+            if is_404:
+                _orphaned_issue_ids.add(orphan_key)
+                logger.info("SLA dashboard: issue #%s orphaned (GitLab 404) — cached as skip", item["iid"])
+            else:
+                logger.warning("SLA dashboard: failed to fetch issue #%s: %s", item["iid"], e)
             return None
 
     enriched_tickets: list[dict] = []
