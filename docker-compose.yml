@@ -41,7 +41,7 @@ x-logging: &default-logging
 services:
 
   gitlab:
-    image: gitlab/gitlab-ce:18.10.1-ce.0
+    image: gitlab/gitlab-ce:18.11.1-ce.0
     container_name: gitlab
     restart: unless-stopped
     shm_size: "256m"
@@ -76,7 +76,7 @@ services:
           memory: 2g
 
   postgres:
-    image: postgres:17
+    image: postgres:18
     container_name: itsm-postgres
     restart: unless-stopped
     environment:
@@ -85,6 +85,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       # UTF-8 + 한국어 정렬 지원 (initdb 시 1회만 적용)
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+      # pg18+ 기본 PGDATA는 버전별 서브디렉터리를 사용하나, 기존 마운트 경로 유지
+      PGDATA: /var/lib/postgresql/data
     # 프로덕션 PostgreSQL 성능 튜닝 — 8~16GB RAM 서버 기준
     command: >
       postgres
@@ -123,7 +125,7 @@ services:
           memory: 512m
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.4-alpine
     restart: unless-stopped
     command: >
       redis-server
@@ -319,7 +321,7 @@ services:
   # FLOWER_USER / FLOWER_PASSWORD 를 .env 에 반드시 설정 필요
   # ---------------------------------------------------------------------------
   flower:
-    image: mher/flower:2.0
+    image: mher/flower:2.0.1
     restart: unless-stopped
     # basic_auth를 커맨드에서 환경변수로 이동 — ps aux 노출 방지
     command: >
@@ -376,7 +378,7 @@ services:
           memory: 128m
 
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.29-alpine
     restart: unless-stopped
     ulimits:
       nofile:
@@ -435,7 +437,7 @@ services:
           memory: 128m
 
   prometheus:
-    image: prom/prometheus:v2.55.1
+    image: prom/prometheus:v3.11.0
     restart: unless-stopped
     ports:
       - "127.0.0.1:9090:9090"
@@ -465,7 +467,7 @@ services:
           memory: 128m
 
   grafana:
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:12.4.3
     restart: unless-stopped
     ports:
       - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
@@ -505,7 +507,7 @@ services:
   # OpenTelemetry Collector (profiles: ["tracing"] — 선택적 활성화)
   # ---------------------------------------------------------------------------
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.104.0
+    image: otel/opentelemetry-collector-contrib:0.150.1
     profiles: ["tracing"]
     restart: unless-stopped
     command: ["--config=/etc/otel-collector-config.yaml"]
@@ -538,7 +540,7 @@ services:
     logging: *default-logging
 
   pg-backup:
-    image: postgres:17
+    image: postgres:18
     restart: unless-stopped
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
