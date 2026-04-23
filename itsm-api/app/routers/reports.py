@@ -1254,6 +1254,18 @@ def get_time_tracking_report(
 # Task 6: 멀티 프로젝트 통합 뷰
 # ---------------------------------------------------------------------------
 
+@router.get("/project-count")
+def get_project_count(
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_agent),
+):
+    """활성 프로젝트 수 — Header 메뉴에서 단일 프로젝트 여부 판단용 경량 엔드포인트."""
+    from ..models import SLARecord
+    sla_pids = {r[0] for r in db.query(SLARecord.project_id).distinct().all() if r[0]}
+    time_pids = {r[0] for r in db.query(TimeEntry.project_id).distinct().all() if r[0]}
+    return {"count": len(sla_pids | time_pids)}
+
+
 @router.get("/multi-project")
 def get_multi_project_stats(
     db: Session = Depends(get_db),

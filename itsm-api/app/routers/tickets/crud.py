@@ -654,7 +654,6 @@ def get_calendar_tickets(
             SLARecord.sla_deadline <= last_day.replace(tzinfo=None),
         ).limit(500).all()
         sla_iids_in_month = {r.gitlab_issue_iid for r in sla_q}
-        {r.gitlab_issue_iid: r.sla_deadline.isoformat() for r in sla_q}
     except Exception as e:
         logger.warning("Calendar: SLA query failed: %s", e)
 
@@ -688,12 +687,13 @@ def get_calendar_tickets(
 
         iid = issue.get("iid") or issue.get("id")
         labels = issue.get("labels", [])
+        from .helpers import label_to_status, label_to_priority
         status = next(
-            (lb.split("::")[1] for lb in labels if lb.startswith("status::")),
+            (label_to_status(lb) for lb in labels if lb.startswith("status::")),
             "open" if issue.get("state") == "opened" else "closed",
         )
         priority = next(
-            (lb.split("::")[1] for lb in labels if lb.startswith("prio::")),
+            (label_to_priority(lb) for lb in labels if lb.startswith("prio::")),
             "medium",
         )
         sla_rec = sla_map.get(iid)

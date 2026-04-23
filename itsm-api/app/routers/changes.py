@@ -227,6 +227,46 @@ def change_stats(
     return {status: count for status, count in rows}
 
 
+@router.get("/calendar/month")
+def changes_in_month(
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_agent),
+):
+    """해당 월과 스케줄 윈도우가 겹치는 변경 요청 목록 (캘린더 오버레이용).
+
+    반환: [{id, title, status, risk_level, change_type, scheduled_start_at, scheduled_end_at}, …]
+    """
+    import calendar as _cal
+    from datetime import datetime as _dt
+    start = _dt(year, month, 1)
+    end = _dt(year, month, _cal.monthrange(year, month)[1], 23, 59, 59)
+    rows = (
+        db.query(ChangeRequest)
+        .filter(
+            ChangeRequest.scheduled_start_at != None,  # noqa: E711
+            ChangeRequest.scheduled_start_at <= end,
+            (ChangeRequest.scheduled_end_at == None) | (ChangeRequest.scheduled_end_at >= start),  # noqa: E711
+        )
+        .order_by(ChangeRequest.scheduled_start_at.asc())
+        .limit(500)
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "title": r.title,
+            "status": r.status,
+            "risk_level": r.risk_level,
+            "change_type": r.change_type,
+            "scheduled_start_at": r.scheduled_start_at.isoformat() if r.scheduled_start_at else None,
+            "scheduled_end_at": r.scheduled_end_at.isoformat() if r.scheduled_end_at else None,
+        }
+        for r in rows
+    ]
+
+
 @router.get("/{change_id}")
 def get_change(
     change_id: int,
