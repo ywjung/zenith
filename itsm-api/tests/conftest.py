@@ -170,6 +170,21 @@ def auth_cookies(role: str = "user", user_id: str = "42") -> dict:
     return {"itsm_token": make_token(role=role, user_id=user_id)}
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """slowapi 인메모리 레이트리밋은 테스트 간 상태가 누적되어 다수 요청 시
+    엉뚱한 429를 유발한다. 각 테스트 전에 모든 limiter를 reset한다."""
+    from app import rate_limit as _rl
+    for _name in ("limiter", "user_limiter", "login_limiter"):
+        _lim = getattr(_rl, _name, None)
+        if _lim is not None:
+            try:
+                _lim.reset()
+            except Exception:
+                pass
+    yield
+
+
 @pytest.fixture
 def user_cookies():
     return auth_cookies("user")

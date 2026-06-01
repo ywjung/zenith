@@ -461,7 +461,7 @@ def test_update_ticket_status_waiting_pauses_sla(client, admin_cookies):
     ):
         resp = client.patch(
             "/tickets/42",
-            json={"status": "waiting"},
+            json={"status": "waiting", "change_reason": "고객 회신 대기"},
             cookies=admin_cookies,
         )
     assert resp.status_code == 200
@@ -477,7 +477,7 @@ def test_update_ticket_status_reopen(client, admin_cookies):
     ):
         resp = client.patch(
             "/tickets/42",
-            json={"status": "reopened"},
+            json={"status": "reopened", "change_reason": "재발 확인되어 재오픈"},
             cookies=admin_cookies,
         )
     assert resp.status_code == 200
