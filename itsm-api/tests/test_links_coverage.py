@@ -6,6 +6,14 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 
+# get_ticket_links는 이제 _can_user_view_issue로 view 권한을 검증한다(IDOR 방지).
+# 신청자가 토큰 유저(hong)인 비밀 아님 이슈를 get_issue 목으로 제공한다.
+_VIEWABLE_ISSUE = {
+    "iid": 1, "description": "**작성자:** hong", "author": {"username": "hong"},
+    "confidential": False, "labels": [], "state": "opened",
+}
+
+
 # ---------------------------------------------------------------------------
 # Lines 33-36 — get_ticket_links builds result with status from labels
 # ---------------------------------------------------------------------------
@@ -28,6 +36,7 @@ class TestGetTicketLinksGitlab:
         ]
 
         with patch("app.routers.tickets.links.gitlab_client") as mock_gl:
+            mock_gl.get_issue.return_value = _VIEWABLE_ISSUE
             mock_gl.get_issue_links.return_value = mock_links
 
             resp = client.get(
@@ -40,7 +49,7 @@ class TestGetTicketLinksGitlab:
         data = resp.json()
         assert len(data) == 1
         link = data[0]
-        assert link["iid"] == 42
+        assert link["target_iid"] == 42
         assert link["link_type"] == "relates_to"
         assert link["status"] == "in_progress"  # extracted from "status::in_progress"
         assert link["state"] == "opened"
@@ -63,6 +72,7 @@ class TestGetTicketLinksGitlab:
         ]
 
         with patch("app.routers.tickets.links.gitlab_client") as mock_gl:
+            mock_gl.get_issue.return_value = _VIEWABLE_ISSUE
             mock_gl.get_issue_links.return_value = mock_links
 
             resp = client.get(
@@ -78,6 +88,7 @@ class TestGetTicketLinksGitlab:
     def test_returns_empty_list_when_no_links(self, client, user_cookies):
         """get_ticket_links returns empty list when GitLab returns no links."""
         with patch("app.routers.tickets.links.gitlab_client") as mock_gl:
+            mock_gl.get_issue.return_value = _VIEWABLE_ISSUE
             mock_gl.get_issue_links.return_value = []
 
             resp = client.get(
@@ -104,6 +115,7 @@ class TestGetTicketLinksGitlab:
         ]
 
         with patch("app.routers.tickets.links.gitlab_client") as mock_gl:
+            mock_gl.get_issue.return_value = _VIEWABLE_ISSUE
             mock_gl.get_issue_links.return_value = mock_links
 
             resp = client.get(
@@ -137,8 +149,9 @@ class TestCreateTicketLinkGitlab:
         assert resp.status_code == 201
         assert resp.json()["ok"] is True
 
-    def test_create_link_returns_502_when_gitlab_returns_none(self, client, admin_cookies):
-        """Line 66: create_ticket_link returns 502 when GitLab returns None."""
+    def test_create_link_gitlab_none_falls_back_to_local_db(self, client, admin_cookies):
+        """GitLab 링크 생성 실패(None) 시 502가 아니라 로컬 DB에만 저장하고 201로 폴백한다.
+        (GitLab CE 미지원 등 — 'Fall through — still write to local DB')"""
         with patch("app.routers.tickets.links.gitlab_client") as mock_gl:
             mock_gl.create_issue_link.return_value = None
 
@@ -149,8 +162,8 @@ class TestCreateTicketLinkGitlab:
                 cookies=admin_cookies,
             )
 
-        assert resp.status_code == 502
-        assert "GitLab 이슈 링크 생성에 실패" in resp.json()["detail"]
+        assert resp.status_code == 201
+        assert resp.json()["ok"] is True
 
     def test_create_link_invalid_link_type_returns_422(self, client, admin_cookies):
         """create_ticket_link returns 422 for invalid link_type."""
@@ -177,15 +190,15 @@ class TestCreateTicketLinkGitlab:
 
         assert resp.status_code == 201
 
-    def test_create_link_is_blocked_by_type(self, client, admin_cookies):
-        """create_ticket_link accepts 'is_blocked_by' link type."""
+    def test_create_link_duplicate_of_type(self, client, admin_cookies):
+        """create_ticket_link accepts 'duplicate_of' (로컬 DB 전용) link type."""
         with patch("app.routers.tickets.links.gitlab_client") as mock_gl:
             mock_gl.create_issue_link.return_value = {"id": 12}
 
             resp = client.post(
                 "/tickets/3/links",
                 params={"project_id": "1"},
-                json={"target_iid": 4, "link_type": "is_blocked_by"},
+                json={"target_iid": 4, "link_type": "duplicate_of"},
                 cookies=admin_cookies,
             )
 
