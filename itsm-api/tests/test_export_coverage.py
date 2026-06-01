@@ -12,6 +12,10 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+# 라벨은 한글화(feat: GitLab 라벨 전면 한글화)되어 status::처리중 등으로 생성된다.
+# 테스트는 언어에 무관하도록 라벨 변환 함수로 기대값을 만든다.
+from app.routers.tickets.helpers import status_to_label, priority_to_label
+
 
 # ---------------------------------------------------------------------------
 # Shared fake data
@@ -73,7 +77,7 @@ class TestExportCsv:
         call_kwargs = mock_gl.call_args
         kwargs = call_kwargs.kwargs if call_kwargs.kwargs else call_kwargs[1]
         assert kwargs.get("state") == "opened"
-        assert "status::in_progress" in (kwargs.get("labels") or "")
+        assert status_to_label("in_progress") in (kwargs.get("labels") or "")
 
     def test_export_csv_state_all(self, client, admin_cookies):
         """state=all → gl_state='all'."""
@@ -95,7 +99,7 @@ class TestExportCsv:
             resp = client.get("/tickets/export/csv?priority=high", cookies=admin_cookies)
         assert resp.status_code == 200
         kwargs = mock_gl.call_args.kwargs if mock_gl.call_args.kwargs else mock_gl.call_args[1]
-        assert "prio::high" in (kwargs.get("labels") or "")
+        assert priority_to_label("high") in (kwargs.get("labels") or "")
 
     def test_export_csv_combined_filters(self, client, admin_cookies):
         """state + category + priority all at once."""
@@ -107,9 +111,9 @@ class TestExportCsv:
         assert resp.status_code == 200
         kwargs = mock_gl.call_args.kwargs if mock_gl.call_args.kwargs else mock_gl.call_args[1]
         labels = kwargs.get("labels") or ""
-        assert "status::in_progress" in labels
+        assert status_to_label("in_progress") in labels
         assert "cat::software" in labels
-        assert "prio::critical" in labels
+        assert priority_to_label("critical") in labels
 
     def test_export_csv_requires_auth(self, client):
         resp = client.get("/tickets/export/csv")
@@ -184,7 +188,7 @@ class TestExportXlsx:
         kwargs = mock_gl.call_args.kwargs if mock_gl.call_args.kwargs else mock_gl.call_args[1]
         labels = kwargs.get("labels") or ""
         assert "cat::hardware" in labels
-        assert "prio::low" in labels
+        assert priority_to_label("low") in labels
 
 
 # ---------------------------------------------------------------------------
