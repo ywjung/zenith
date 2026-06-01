@@ -27,8 +27,10 @@ jobs:
       - name: Run pip-audit
         working-directory: itsm-api
         run: |
+          # pip-audit의 출력 형식 플래그는 --format (구버전 호환 별칭 --output-format 아님).
+          # 잘못된 인자로 argparse 오류가 나 스캔이 실제로 돌지 않던 버그 수정.
           pip-audit -r requirements.txt \
-            --output-format json \
+            --format json \
             --output pip-audit-results.json \
             || (cat pip-audit-results.json && exit 1)
 
