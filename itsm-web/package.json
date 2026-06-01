@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
+    "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests",
     "test:ci": "jest --ci --coverage --passWithNoTests",
     "test:e2e": "playwright test",

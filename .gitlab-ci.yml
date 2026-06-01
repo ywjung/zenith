@@ -103,6 +103,7 @@ lint:frontend:
     - npm ci --prefer-offline
   script:
     - npm run lint
+    - npm run typecheck   # tsc --noEmit (strict) — 빌드 전에 타입 오류 차단
   allow_failure: false
 
 # =============================================================================
@@ -124,7 +125,7 @@ test:backend:
     - cd itsm-api
     - pip install -r requirements-dev.txt --quiet
   script:
-    - pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --junitxml=test-results.xml -x
+    - pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --junitxml=test-results.xml --cov-fail-under=95
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     when: always
