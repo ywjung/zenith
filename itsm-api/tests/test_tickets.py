@@ -4,7 +4,7 @@ from unittest.mock import patch
 FAKE_ISSUE = {
     "iid": 1,
     "title": "프린터가 작동하지 않아요",
-    "description": "**신청자:** 홍길동\n**이메일:** hong@example.com\n\n---\n\n프린터 연결 안됨",
+    "description": "**신청자:** 홍길동\n**이메일:** hong@example.com\n**작성자:** hong\n\n---\n\n프린터 연결 안됨",
     "state": "opened",
     "labels": ["cat::hardware", "prio::medium", "status::open"],
     "created_at": "2024-01-01T00:00:00Z",
@@ -29,20 +29,39 @@ VALID_PAYLOAD = {
 
 # ── list ──────────────────────────────────────────────────────────────────────
 
-def test_list_tickets(client, admin_cookies):
-    """Admin role uses get_issues (server-side filtering), not get_all_issues."""
-    with patch("app.gitlab_client.get_issues", return_value=([FAKE_ISSUE], 1)):
-        resp = client.get("/tickets/", cookies=admin_cookies)
+def _seed_search_index(db_session, iid=1, **overrides):
+    """Admin/agent 목록은 TicketSearchIndex DB 인덱스에서 구성된다 — 행을 시드한다."""
+    from app.models import TicketSearchIndex
+    from datetime import datetime, timezone
+    row = TicketSearchIndex(
+        iid=iid, project_id="1", title="프린터가 작동하지 않아요",
+        description_text="프린터 연결 안됨", state="opened",
+        labels_json=["cat::hardware", "prio::medium", "status::open"],
+        author_username="hong", created_at=datetime.now(timezone.utc),
+    )
+    for k, v in overrides.items():
+        setattr(row, k, v)
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+def test_list_tickets(client, admin_cookies, db_session):
+    """Admin은 TicketSearchIndex DB 인덱스에서 목록을 구성한다(GitLab 호출 없음)."""
+    _seed_search_index(db_session, iid=1)
+    resp = client.get("/tickets/", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == 1
     assert data["tickets"][0]["iid"] == 1
 
 
-def test_list_tickets_gitlab_error(client, admin_cookies):
+def test_list_tickets_independent_of_gitlab(client, admin_cookies, db_session):
+    """Admin 목록은 DB 인덱스 기반이라 GitLab 장애와 무관하게 200을 반환한다."""
+    _seed_search_index(db_session, iid=2)
     with patch("app.gitlab_client.get_issues", side_effect=Exception("connection refused")):
         resp = client.get("/tickets/", cookies=admin_cookies)
-    assert resp.status_code == 502
+    assert resp.status_code == 200
 
 
 # ── create ────────────────────────────────────────────────────────────────────
@@ -398,7 +417,11 @@ def test_patch_ticket_reopened_with_sla_record(client, admin_cookies, db_session
         patch("app.gitlab_client.update_issue", return_value=updated),
         patch("app.gitlab_client.ensure_labels"),
     ):
-        resp = client.patch("/tickets/1", json={"status": "reopened"}, cookies=admin_cookies)
+        resp = client.patch(
+            "/tickets/1",
+            json={"status": "reopened", "change_reason": "재발 확인되어 재오픈"},
+            cookies=admin_cookies,
+        )
     assert resp.status_code in (200, 201)
 
 
@@ -439,8 +462,14 @@ def test_patch_ticket_status_change_notification_exception(client, admin_cookies
 
 # ── @mention notification exception ──────────────────────────────────────────
 
-def test_add_comment_mention_notification_exception(client, admin_cookies):
-    """@mention SessionLocal raises → exception swallowed (lines 2079-2080)."""
+def test_add_comment_mention_notification_exception(client):
+    """@mention SessionLocal raises → exception swallowed (lines 2079-2080).
+
+    auth의 is_active 검사도 SessionLocal을 쓰므로, 전역 패치가 admin 인증을
+    fail-closed(503) 시키지 않도록 user_id를 비숫자로 둬 인증 단계의
+    UserRole DB 조회를 건너뛴다(auth.py: isdigit() 가드)."""
+    from tests.conftest import make_token
+    admin_cookies = {"itsm_token": make_token(role="admin", user_id="admin-api")}
     note_resp = {
         "id": 1,
         "body": '<span class="mention" data-id="agentuser">@agentuser</span>',
