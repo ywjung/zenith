@@ -151,7 +151,7 @@ migrate:check:
     POSTGRES_DB: itsm_test
     POSTGRES_USER: itsm
     POSTGRES_PASSWORD: itsm_test_pw
-    DATABASE_URL: "postgresql://itsm:itsm_test_pw@postgres/itsm_test"
+    DATABASE_URL: "postgresql+psycopg://itsm:itsm_test_pw@postgres/itsm_test"
     SECRET_KEY: "ci-alembic-check-secret-key-32ch"
     GITLAB_API_URL: "http://localhost"
     GITLAB_PROJECT_TOKEN: "test-token"

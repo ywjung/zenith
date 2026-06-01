@@ -35,7 +35,10 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://itsm:itsm_test@localhost:5432/itsm_test
+      # ENVIRONMENT=development: 프로덕션 검증기(GITLAB_WEBHOOK_SECRET 필수 등)를
+      # 비활성화해 마이그레이션 검증 시 Settings 로드가 실패하지 않도록 한다.
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://itsm:itsm_test@localhost:5432/itsm_test
       SECRET_KEY: ci_test_key_that_is_long_enough_32chars
       GITLAB_URL: http://localhost
       GITLAB_PROJECT_TOKEN: ci_token
@@ -88,7 +91,7 @@ jobs:
 
       - name: Verify all tests pass against migrated DB
         env:
-          DATABASE_URL: postgresql://itsm:itsm_test@localhost:5432/itsm_test
+          DATABASE_URL: postgresql+psycopg://itsm:itsm_test@localhost:5432/itsm_test
           REDIS_URL: memory://
         run: |
           pip install pytest pytest-cov
