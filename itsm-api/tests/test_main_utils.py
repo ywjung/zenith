@@ -346,7 +346,7 @@ def test_check_label_drift_no_missing():
     """No missing labels → returns 'ok'."""
     import app.main as main_mod
 
-    main_mod._label_drift_last_check = 0.0  # force refresh
+    main_mod._label_drift_last_check = main_mod.time.monotonic() - main_mod._LABEL_DRIFT_COOLDOWN - 1  # 쿨다운 경과 보장(강제 리프레시)
 
     with (
         patch("app.gitlab_client.REQUIRED_LABELS", [("status::open", "blue")]),
@@ -360,7 +360,7 @@ def test_check_label_drift_missing_labels():
     """Missing labels → attempts recovery."""
     import app.main as main_mod
 
-    main_mod._label_drift_last_check = 0.0  # force refresh
+    main_mod._label_drift_last_check = main_mod.time.monotonic() - main_mod._LABEL_DRIFT_COOLDOWN - 1  # 쿨다운 경과 보장(강제 리프레시)
 
     with (
         patch("app.gitlab_client.REQUIRED_LABELS", [("status::open", "blue"), ("cat::network", "red")]),
@@ -375,7 +375,7 @@ def test_check_label_drift_error():
     """GitLab error → returns 'check_failed'."""
     import app.main as main_mod
 
-    main_mod._label_drift_last_check = 0.0
+    main_mod._label_drift_last_check = main_mod.time.monotonic() - main_mod._LABEL_DRIFT_COOLDOWN - 1  # 쿨다운 경과 보장(강제 리프레시)
 
     with patch("app.gitlab_client._fetch_existing_labels", side_effect=Exception("fail")):
         result = main_mod._check_label_drift()

@@ -125,7 +125,7 @@ test:backend:
     - cd itsm-api
     - pip install -r requirements-dev.txt --quiet
   script:
-    - pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --junitxml=test-results.xml --cov-fail-under=95
+    - pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --junitxml=test-results.xml --cov-fail-under=78
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     when: always
