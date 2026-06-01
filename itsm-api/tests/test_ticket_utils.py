@@ -425,23 +425,19 @@ def test_scan_with_clamav_disabled():
         _scan_with_clamav(b"content", "test.txt")  # should not raise
 
 
-def test_scan_with_clamav_connection_fails_strict_mode():
-    """ClamAV connection fails in strict mode → 503 (covers lines 218-238)."""
-    import pytest
-    from fastapi import HTTPException
+def test_scan_with_clamav_unavailable_fails_open():
+    """ClamAV 사용 불가(연결 불가) → 업로드 허용(fail-open, raise 없음).
+
+    _scan_with_clamav는 이제 app.clamav.scan_bytes에 위임하며, CLAMAV_STRICT는
+    레거시로 무시된다(config.py). 스캔 불가 시 (True, 'unavailable') → 통과."""
     from app.routers.tickets import _scan_with_clamav
 
     with (
         patch("app.routers.tickets.helpers.get_settings") as mock_cfg,
-        patch("socket.create_connection", side_effect=Exception("connection refused")),
+        patch("app.clamav.scan_bytes", return_value=(True, "unavailable")),
     ):
         mock_cfg.return_value.CLAMAV_ENABLED = True
-        mock_cfg.return_value.CLAMAV_STRICT = True
-        mock_cfg.return_value.CLAMAV_HOST = "clamav"
-        mock_cfg.return_value.CLAMAV_PORT = 3310
-        with pytest.raises(HTTPException) as exc:
-            _scan_with_clamav(b"content", "test.txt")
-    assert exc.value.status_code == 503
+        _scan_with_clamav(b"content", "test.txt")  # should not raise
 
 
 def test_scan_with_clamav_connection_fails_non_strict():
@@ -481,27 +477,19 @@ def test_scan_with_clamav_clean_file():
 
 
 def test_scan_with_clamav_virus_found():
-    """ClamAV returns FOUND → 400 (covers lines 233+)."""
+    """ClamAV가 위협 탐지 → 422 raise (scan_bytes가 (False, signature) 반환)."""
     import pytest
     from fastapi import HTTPException
     from app.routers.tickets import _scan_with_clamav
 
-    mock_socket = MagicMock()
-    mock_socket.recv.return_value = b"stream: Eicar-Test-Signature FOUND"
-    mock_socket.__enter__ = MagicMock(return_value=mock_socket)
-    mock_socket.__exit__ = MagicMock(return_value=False)
-
     with (
         patch("app.routers.tickets.helpers.get_settings") as mock_cfg,
-        patch("socket.create_connection", return_value=mock_socket),
+        patch("app.clamav.scan_bytes", return_value=(False, "Eicar-Test-Signature")),
     ):
         mock_cfg.return_value.CLAMAV_ENABLED = True
-        mock_cfg.return_value.CLAMAV_STRICT = True
-        mock_cfg.return_value.CLAMAV_HOST = "clamav"
-        mock_cfg.return_value.CLAMAV_PORT = 3310
         with pytest.raises(HTTPException) as exc:
             _scan_with_clamav(b"malware", "test.txt")
-    assert exc.value.status_code == 400
+    assert exc.value.status_code == 422
 
 
 # ── _detect_mime_from_bytes: ImportError and exception paths ──────────────────
@@ -635,20 +623,27 @@ def test_get_stats_as_user(client, user_cookies):
     assert "open" in data or "all" in data
 
 
-def test_get_stats_user_filter_own(client):
-    """User with username sees only own tickets (covers line 558-560)."""
+def test_get_stats_user_filter_own(client, db_session):
+    """User는 본인이 신청한 티켓만 집계된다 — 통계는 TicketSearchIndex(author) 기반."""
     import time
     import jwt as _jwt
+    from app.models import TicketSearchIndex
+    from datetime import datetime, timezone
     token = _jwt.encode({
         "sub": "42", "role": "user", "username": "hong", "name": "홍",
         "exp": int(time.time()) + 3600, "gitlab_token": "tok",
     }, "test-secret-key-at-least-32-chars-long", algorithm="HS256")
 
-    issue_mine = {**FAKE_ISSUE, "description": "**신청자:** hong\n---\n내용", "iid": 2}
-    issue_other = {**FAKE_ISSUE, "description": "**신청자:** other\n---\n내용", "iid": 3}
+    now = datetime.now(timezone.utc)
+    db_session.add(TicketSearchIndex(
+        iid=2, project_id="1", title="mine", state="opened",
+        labels_json=["status::open"], author_username="hong", created_at=now))
+    db_session.add(TicketSearchIndex(
+        iid=3, project_id="1", title="other", state="opened",
+        labels_json=["status::open"], author_username="other", created_at=now))
+    db_session.commit()
 
-    with patch("app.gitlab_client.get_all_issues", return_value=[issue_mine, issue_other]):
-        resp = client.get("/tickets/stats", cookies={"itsm_token": token})
+    resp = client.get("/tickets/stats", cookies={"itsm_token": token})
     assert resp.status_code == 200
     # Only mine is counted
     data = resp.json()

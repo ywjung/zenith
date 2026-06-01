@@ -26,7 +26,7 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
       REDIS_URL: redis://localhost:6379/0
       ENVIRONMENT: development
       SECRET_KEY: ci_test_secret_key_32chars_at_least

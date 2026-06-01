@@ -92,6 +92,10 @@ class SLARecord(Base):
         Index("ix_sla_records_breach_check", "breached", "sla_deadline"),
         Index("ix_sla_records_updated_at", "updated_at"),
         Index("ix_sla_records_active_project", "project_id", "resolved_at", "breached"),
+        # 리포트(DORA·SLA준수·주간)는 created_at/resolved_at 단독 필터를 쓴다 — 복합
+        # 인덱스의 선행 컬럼(project_id)이 아니므로 단독 인덱스로 풀스캔을 방지한다.
+        Index("ix_sla_records_created_at", "created_at"),
+        Index("ix_sla_records_resolved_at", "resolved_at"),
     )
 
 

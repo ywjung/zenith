@@ -10,6 +10,57 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# JSONB 라벨 포함(@>) — 방언 이식성 헬퍼
+#
+# 운영은 Postgres JSONB의 `@>` 연산자를 쓴다. 그러나 테스트 DB(sqlite)는 `@>`를
+# 파싱하지 못한다. 커스텀 컴파일 구문으로 Postgres에서는 기존과 100% 동일하게
+# `@>`를, 그 외(sqlite)에서는 JSON 텍스트 LIKE 폴백을 생성한다.
+# ---------------------------------------------------------------------------
+from sqlalchemy.ext.compiler import compiles as _compiles
+from sqlalchemy.sql.expression import ColumnElement as _ColumnElement
+from sqlalchemy.types import Boolean as _Boolean
+
+
+class _LabelsContain(_ColumnElement):
+    type = _Boolean()
+    inherit_cache = True
+
+    def __init__(self, col, json_val):
+        self.col = col
+        self.json_val = json_val  # JSON 문자열, 예: '["problem"]'
+
+
+@_compiles(_LabelsContain, "postgresql")
+def _labels_contain_pg(element, compiler, **kw):
+    from sqlalchemy import cast, literal
+    from sqlalchemy.dialects.postgresql import JSONB
+    return compiler.process(
+        element.col.op("@>")(cast(literal(element.json_val), JSONB)), **kw
+    )
+
+
+@_compiles(_LabelsContain)
+def _labels_contain_default(element, compiler, **kw):
+    import json as _json
+    from sqlalchemy import cast, String, and_, true
+    try:
+        vals = _json.loads(element.json_val)
+    except Exception:
+        vals = []
+    if not isinstance(vals, list):
+        vals = [vals]
+    if not vals:
+        return compiler.process(true(), **kw)
+    conds = [cast(element.col, String).like(f'%"{v}"%') for v in vals]
+    return compiler.process(and_(*conds), **kw)
+
+
+def labels_jsonb_contains(col, json_val):
+    """col(JSON 배열) ⊇ json_val. Postgres=`@>`, 그 외=LIKE 폴백 (방언 이식)."""
+    return _LabelsContain(col, json_val)
+
+
 from ...auth import get_current_user  # noqa: F401 (re-exported for convenience)
 from ...config import get_settings
 from ... import gitlab_client
@@ -450,13 +501,20 @@ def status_to_label(status: str) -> str:
     """내부 상태값 → GitLab 라벨명. 예: 'open' → 'status::접수됨'"""
     return STATUS_LABEL.get(status, f"status::{status}")
 
+def _normalize_enum_value(val: str) -> str:
+    """손상된 라벨값 정규화. 'PriorityEnum.MEDIUM' → 'medium' (enum이 잘못 str화된 경우)."""
+    if "." in val:
+        val = val.rsplit(".", 1)[-1]
+    return val.lower() if val.isupper() or "_" in val else val
+
+
 def label_to_status(label: str) -> str:
     """GitLab 라벨명 → 내부 상태값. 예: 'status::접수됨' → 'open'"""
     if label in STATUS_LABEL_REV:
         return STATUS_LABEL_REV[label]
     # 하위 호환: 영문 라벨도 지원
     if label.startswith("status::"):
-        return label[8:]
+        return _normalize_enum_value(label[8:])
     return label
 
 def priority_to_label(priority: str) -> str:
@@ -468,7 +526,7 @@ def label_to_priority(label: str) -> str:
     if label in PRIORITY_LABEL_REV:
         return PRIORITY_LABEL_REV[label]
     if label.startswith("prio::"):
-        return label[6:]
+        return _normalize_enum_value(label[6:])
     return label
 
 # 이 상태로 전환 시 change_reason 필수 입력
@@ -691,6 +749,17 @@ def _can_user_view_issue(issue: dict, user: dict) -> bool:
 
     # role==user: 본인이 신청한 티켓만
     return is_requester
+
+
+def _can_user_see_internal_notes(user: dict) -> bool:
+    """
+    SEC: confidential/internal 노트 열람 권한.
+    developer 이상(운영팀)만 내부 노트를 볼 수 있다. role==user(신청자 포함)는
+    자기 티켓이라도 내부 staff 노트를 봐선 안 된다.
+    """
+    from ...rbac import ROLE_LEVELS
+    role = user.get("role", "user") or "user"
+    return ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS.get("developer", 0)
 
 
 def _sla_to_dict(record) -> dict:

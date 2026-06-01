@@ -191,22 +191,33 @@ def test_notification_stream_requires_auth(client):
     assert resp.status_code == 401
 
 
-def test_notification_stream_redis_connection_error(client, user_cookies):
-    """When Redis connection fails, generator returns immediately (covers lines 100-102)."""
+def test_notification_stream_redis_connection_error():
+    """Redis connection error → 브라우저 재시도 힌트(retry) 후 종료.
+
+    SSE 스트림은 무한 keep-alive 루프를 돌기 때문에 TestClient.get()으로 본문을
+    끝까지 읽으면 영구 hang이 발생한다(CI 6h 타임아웃의 원인). 따라서 제너레이터를
+    직접 구동하되 is_disconnected=True로 즉시 종료시킨다(test_sse_streams.py와 동일 패턴).
+    """
     import asyncio
+    from app.routers.notifications_router import notification_stream
 
-    async def fake_subscribe(*args, **kwargs):
-        raise Exception("Connection refused")
+    async def _inner():
+        mock_request = MagicMock()
+        mock_request.is_disconnected = AsyncMock(return_value=True)
+        mock_user = {"sub": "42"}
 
-    mock_pubsub = AsyncMock()
-    mock_pubsub.subscribe.side_effect = Exception("Connection refused")
+        mock_pubsub = AsyncMock()
+        mock_pubsub.subscribe.side_effect = Exception("Connection refused")
+        mock_redis = MagicMock()
+        mock_redis.pubsub.return_value = mock_pubsub
 
-    mock_redis = AsyncMock()
-    mock_redis.pubsub.return_value = mock_pubsub
+        with patch("redis.asyncio.from_url", return_value=mock_redis):
+            response = await notification_stream(mock_request, mock_user)
+            events = []
+            async for chunk in response.body_iterator:
+                events.append(chunk)
+        return events
 
-    with patch("redis.asyncio.from_url", return_value=mock_redis):
-        try:
-            resp = client.get("/notifications/stream", cookies=user_cookies)
-            assert resp.status_code == 200
-        except Exception:
-            pass  # streaming responses may raise when generator closes early
+    events = asyncio.new_event_loop().run_until_complete(_inner())
+    # subscribe 실패 → except 경로에서 retry 힌트 1회 yield 후 종료 (is_disconnected=True)
+    assert events == ["retry: 30000\n\n"]

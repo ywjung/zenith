@@ -100,11 +100,11 @@ def test_list_tickets_sla_filter_over(client, admin_cookies):
     assert resp.status_code == 200
 
 
-def test_list_tickets_gitlab_error(client, admin_cookies):
-    """GitLab error in list_tickets → 502 (covers lines 905-907)."""
+def test_list_tickets_independent_of_gitlab(client, admin_cookies):
+    """Admin 목록은 TicketSearchIndex DB 인덱스 기반이라 GitLab 장애와 무관하게 200."""
     with patch("app.gitlab_client.get_issues", side_effect=Exception("fail")):
         resp = client.get("/tickets/", cookies=admin_cookies)
-    assert resp.status_code == 502
+    assert resp.status_code == 200
 
 
 # ─── POST /tickets/upload — upload_attachment (lines 918-947) ─────────────────
@@ -461,7 +461,7 @@ def test_update_ticket_status_waiting_pauses_sla(client, admin_cookies):
     ):
         resp = client.patch(
             "/tickets/42",
-            json={"status": "waiting"},
+            json={"status": "waiting", "change_reason": "고객 회신 대기"},
             cookies=admin_cookies,
         )
     assert resp.status_code == 200
@@ -477,7 +477,7 @@ def test_update_ticket_status_reopen(client, admin_cookies):
     ):
         resp = client.patch(
             "/tickets/42",
-            json={"status": "reopened"},
+            json={"status": "reopened", "change_reason": "재발 확인되어 재오픈"},
             cookies=admin_cookies,
         )
     assert resp.status_code == 200
@@ -487,7 +487,8 @@ def test_update_ticket_status_reopen(client, admin_cookies):
 
 def test_get_resolution_note_empty(client, admin_cookies):
     """No resolution note → empty dict (covers lines 1905-1914)."""
-    resp = client.get("/tickets/42/resolution", cookies=admin_cookies)
+    with patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE):
+        resp = client.get("/tickets/42/resolution", cookies=admin_cookies)
     assert resp.status_code == 200
     assert resp.json() == {}
 
@@ -509,7 +510,8 @@ def test_get_resolution_note_with_data(client, admin_cookies, db_session):
     db_session.commit()
     db_session.refresh(rn)
 
-    resp = client.get("/tickets/42/resolution", cookies=admin_cookies)
+    with patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE):
+        resp = client.get("/tickets/42/resolution", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()
     assert data["note"] == "해결 내용"
@@ -600,7 +602,10 @@ def test_get_comments_success(client, admin_cookies):
             "confidential": False,
         },
     ]
-    with patch("app.gitlab_client.get_notes", return_value=fake_notes):
+    with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
+        patch("app.gitlab_client.get_notes", return_value=fake_notes),
+    ):
         resp = client.get("/tickets/42/comments", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()
@@ -714,10 +719,10 @@ def test_get_linked_mrs_error(client, pl_cookies):
 # ─── GET /tickets/{iid}/sla (lines 1336-1340) ────────────────────────────────
 
 def test_get_ticket_sla_no_record(client, developer_cookies):
-    """No SLA record → None (covers lines 1336-1340)."""
+    """No SLA record → 빈 객체 {} (covers lines 1336-1340)."""
     resp = client.get("/tickets/42/sla", cookies=developer_cookies)
     assert resp.status_code == 200
-    assert resp.json() is None
+    assert resp.json() == {}
 
 
 # ─── PATCH /tickets/{iid}/sla (lines 1352-1374) ──────────────────────────────
@@ -878,7 +883,10 @@ def test_get_timeline_success(client, admin_cookies):
          "author": {"name": "GitLab", "avatar_url": None},
          "created_at": "2024-01-02T12:00:00Z"},
     ]
-    with patch("app.gitlab_client.get_notes", return_value=notes):
+    with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
+        patch("app.gitlab_client.get_notes", return_value=notes),
+    ):
         resp = client.get("/tickets/42/timeline", cookies=admin_cookies)
     assert resp.status_code == 200
     events = resp.json()
@@ -890,7 +898,10 @@ def test_get_timeline_success(client, admin_cookies):
 
 def test_get_timeline_notes_error_continues(client, admin_cookies):
     """GitLab notes error doesn't fail — empty events returned (covers lines 2168-2169)."""
-    with patch("app.gitlab_client.get_notes", side_effect=Exception("gitlab down")):
+    with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
+        patch("app.gitlab_client.get_notes", side_effect=Exception("gitlab down")),
+    ):
         resp = client.get("/tickets/42/timeline", cookies=admin_cookies)
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
@@ -1077,21 +1088,22 @@ def test_get_stats_redis_cache_hit(client, developer_cookies):
     assert data["all"] == 10
 
 
-def test_get_stats_admin_with_sla_db_query(client, admin_cookies):
-    """Stats admin role: SLA DB query (lines 641-648)."""
-    from unittest.mock import MagicMock, patch as _patch
+def test_get_stats_admin_with_sla_db_query(client, admin_cookies, db_session):
+    """Admin 통계의 sla_over는 SLARecord(breached/overdue)를 DB에서 집계한다.
 
-    mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.count.return_value = 2
-    mock_sl = MagicMock()
-    mock_sl.return_value.__enter__ = MagicMock(return_value=mock_db)
-    mock_sl.return_value.__exit__ = MagicMock(return_value=False)
+    엔드포인트의 SLA 블록은 SessionLocal()을 쓰지만 테스트는 StaticPool 단일
+    인메모리 DB를 공유하므로 db_session으로 시드한 레코드가 그대로 보인다."""
+    from app.models import SLARecord
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    for iid in (1, 2):
+        db_session.add(SLARecord(
+            gitlab_issue_iid=iid, project_id="1", priority="high",
+            sla_deadline=now, breached=True,
+        ))
+    db_session.commit()
 
-    with (
-        _patch("app.gitlab_client.get_issues", return_value=([FAKE_ISSUE], 1)),
-        _patch("app.database.SessionLocal", mock_sl),
-    ):
-        resp = client.get("/tickets/stats", cookies=admin_cookies)
+    resp = client.get("/tickets/stats", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("sla_over") == 2
@@ -1099,11 +1111,11 @@ def test_get_stats_admin_with_sla_db_query(client, admin_cookies):
 
 # ─── Stats: GitLab error → 502 (lines 656-658) ───────────────────────────────
 
-def test_get_stats_gitlab_error_returns_502(client, admin_cookies):
-    """When GitLab raises, stats endpoint returns 502 (lines 656-658)."""
+def test_get_stats_independent_of_gitlab(client, admin_cookies):
+    """Admin 통계는 TicketSearchIndex DB 기반이라 GitLab 장애와 무관하게 200."""
     with patch("app.gitlab_client.get_issues", side_effect=Exception("gitlab down")):
         resp = client.get("/tickets/stats", cookies=admin_cookies)
-    assert resp.status_code == 502
+    assert resp.status_code == 200
 
 
 # ─── CSV export: state/category/priority/formula-injection (lines 1092, 1099, 1101, 1117) ─────
@@ -1128,9 +1140,10 @@ def test_export_csv_category_and_priority(client, admin_cookies):
         )
     assert resp.status_code == 200
     # verify labels were built with cat:: and prio::
+    from app.routers.tickets.helpers import priority_to_label
     call_kwargs = mock_get.call_args[1]
     assert "cat::network" in (call_kwargs.get("labels") or "")
-    assert "prio::high" in (call_kwargs.get("labels") or "")
+    assert priority_to_label("high") in (call_kwargs.get("labels") or "")
 
 
 # ─── Create ticket: department/location (lines 1170, 1172, 1182, 1184) ───────
@@ -1387,6 +1400,7 @@ def test_get_timeline_redis_error_falls_back(client, admin_cookies):
         "created_at": "2024-01-01T00:00:00Z", "confidential": False,
     }
     with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
         patch("app.routers.tickets.comments._get_redis", return_value=mock_r),
         patch("app.gitlab_client.get_notes", return_value=[note]),
     ):
@@ -1405,6 +1419,7 @@ def test_get_timeline_audit_log_error_non_fatal(client, admin_cookies):
         "created_at": "2024-01-01T00:00:00Z", "confidential": False,
     }
     with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
         patch("app.gitlab_client.get_notes", return_value=[note]),
         patch("app.routers.tickets.AuditLog", side_effect=Exception("db error")),
     ):
@@ -1426,6 +1441,7 @@ def test_get_timeline_redis_cache_save_error(client, admin_cookies):
         "created_at": "2024-01-01T00:00:00Z", "confidential": False,
     }
     with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
         patch("app.routers.tickets.comments._get_redis", return_value=mock_r),
         patch("app.gitlab_client.get_notes", return_value=[note]),
     ):

@@ -12,16 +12,7 @@ interface ServiceTypesCtx {
   getEmoji: (value: string) => string
 }
 
-const defaultCtx: ServiceTypesCtx = {
-  serviceTypes: [],
-  reload: () => {},
-  getLabel: (v) => v,
-  getEmoji: () => '📋',
-}
-
-const ServiceTypesContext = createContext<ServiceTypesCtx>(defaultCtx)
-
-// Fallback labels for when API is not yet loaded
+// Fallback labels for when API is not yet loaded (or no Provider mounted)
 const FALLBACK: Record<string, { label: string; emoji: string }> = {
   hardware: { label: '하드웨어',   emoji: '🖥️' },
   software: { label: '소프트웨어', emoji: '💻' },
@@ -29,6 +20,15 @@ const FALLBACK: Record<string, { label: string; emoji: string }> = {
   account:  { label: '계정/권한',  emoji: '👤' },
   other:    { label: '기타',       emoji: '📋' },
 }
+
+const defaultCtx: ServiceTypesCtx = {
+  serviceTypes: [],
+  reload: () => {},
+  getLabel: (v) => FALLBACK[v]?.label ?? v,
+  getEmoji: (v) => FALLBACK[v]?.emoji ?? '📋',
+}
+
+const ServiceTypesContext = createContext<ServiceTypesCtx>(defaultCtx)
 
 export function ServiceTypesProvider({ children }: { children: React.ReactNode }) {
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])

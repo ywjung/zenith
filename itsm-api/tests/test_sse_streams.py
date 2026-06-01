@@ -83,7 +83,8 @@ def test_notification_stream_redis_connection_error():
         return events
 
     events = _run(_inner())
-    assert events == []
+    # subscribe 실패 → 브라우저 재시도 힌트(retry) 1회 yield 후 종료
+    assert events == ["retry: 30000\n\n"]
 
 
 def test_notification_stream_message_delivered():

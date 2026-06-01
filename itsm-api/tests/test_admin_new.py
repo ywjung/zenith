@@ -814,16 +814,19 @@ def test_update_outbound_webhook(client, admin_cookies, db_session):
     db_session.commit()
     db_session.refresh(hook)
 
-    resp = client.put(
-        f"/admin/outbound-webhooks/{hook.id}",
-        json={
-            "name": "업데이트후 훅",
-            "url": "http://external.example.com/hook2",
-            "events": ["ticket_updated"],
-            "enabled": False,
-        },
-        cookies=admin_cookies,
-    )
+    # SSRF 검증은 실 DNS 해석을 수행 — 샌드박스에서 external.example.com 해석이
+    # 불가하므로 안전 URL로 간주하도록 목 처리(검증 로직은 보안 테스트에서 별도 검증).
+    with patch("app.security.is_safe_external_url", return_value=(True, "")):
+        resp = client.put(
+            f"/admin/outbound-webhooks/{hook.id}",
+            json={
+                "name": "업데이트후 훅",
+                "url": "http://external.example.com/hook2",
+                "events": ["ticket_updated"],
+                "enabled": False,
+            },
+            cookies=admin_cookies,
+        )
     assert resp.status_code == 200
     assert resp.json()["name"] == "업데이트후 훅"
 
@@ -901,7 +904,7 @@ def test_get_filter_options_with_sla_policies(client, admin_cookies, db_session)
         ))
     db_session.commit()
 
-    resp = client.get("/admin/filter-options")
+    resp = client.get("/admin/filter-options", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()
     assert "priorities" in data

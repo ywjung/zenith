@@ -152,6 +152,7 @@ def test_get_category_labels_from_db():
     from app.models import ServiceType
     mock_type = MagicMock(spec=ServiceType)
     mock_type.value = "software"
+    mock_type.label = "software"  # 라벨은 t.label 기준으로 생성됨
     mock_type.color = "#3498db"
     mock_db = MagicMock()
     mock_db.__enter__.return_value = mock_db
@@ -891,7 +892,8 @@ def test_get_category_labels_with_meta_returns_list():
     mock_db.query.return_value.order_by.return_value.all.return_value = [mock_type]
     with patch("app.database.SessionLocal", return_value=mock_db):
         result = get_category_labels_with_meta()
-    assert result[0]["name"] == "cat::software"
+    # 라벨 한글화: cat:: 라벨은 t.label(한글) 기준으로 생성된다.
+    assert result[0]["name"] == "cat::소프트웨어"
     assert result[0]["service_label"] == "소프트웨어"
 
 
@@ -1102,10 +1104,14 @@ def test_get_label_sync_status_with_group():
     """Group labels included when group configured."""
     from app.gitlab_client import get_label_sync_status
 
+    # REQUIRED_LABELS는 한글화되어 있으므로(status::접수됨 등) 라벨 변환 함수로 생성한다.
+    from app.routers.tickets.helpers import status_to_label, priority_to_label
+    _open = status_to_label("open")
+    _low = priority_to_label("low")
     project_resp = MagicMock(is_success=True)
-    project_resp.json.return_value = [{"name": "status::open"}]
+    project_resp.json.return_value = [{"name": _open}]
     group_resp = MagicMock(is_success=True)
-    group_resp.json.return_value = [{"name": "status::open"}, {"name": "prio::low"}]
+    group_resp.json.return_value = [{"name": _open}, {"name": _low}]
     mock_client = MagicMock()
     mock_client.get.side_effect = [project_resp, group_resp]
     mock_ctx = MagicMock()
@@ -1126,8 +1132,8 @@ def test_get_label_sync_status_with_group():
         result = get_label_sync_status()
 
     assert result["group_label_count"] == 2
-    # status::open is in both project and group → synced
-    open_label = next(l for l in result["labels"] if l["name"] == "status::open")
+    # 접수됨 라벨이 project·group 양쪽에 존재 → synced
+    open_label = next(l for l in result["labels"] if l["name"] == _open)
     assert open_label["in_project"] is True
     assert open_label["in_group"] is True
 

@@ -3,9 +3,10 @@
 
 # ── list ───────────────────────────────────────────────────────────────────────
 
-def test_list_faq_requires_auth(client):
+def test_list_faq_public_access(client):
+    """FAQ 목록은 포털 공개용 — 비인증 접근도 200."""
     resp = client.get("/faq")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
 
 
 def test_list_faq_empty(client, user_cookies):

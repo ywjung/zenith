@@ -1,5 +1,21 @@
 """Tests for /tickets/{iid}/custom-fields endpoints."""
+import pytest
+from unittest.mock import patch as _patch
+
 from app.models import CustomFieldDef
+
+# custom-fields 엔드포인트는 _can_user_view_issue로 view 권한을 검증한다(IDOR).
+# 신청자가 토큰 유저(hong)인 비밀 아님 이슈를 get_issue 목으로 제공한다.
+_VIEWABLE_ISSUE = {
+    "iid": 1, "description": "**작성자:** hong", "author": {"username": "hong"},
+    "confidential": False, "labels": [], "state": "opened",
+}
+
+
+@pytest.fixture(autouse=True)
+def _mock_view_issue():
+    with _patch("app.gitlab_client.get_issue", return_value=_VIEWABLE_ISSUE):
+        yield
 
 
 def _create_field(client, admin_cookies, field_type="text", name="test_field", label="테스트 필드", options=None):

@@ -114,10 +114,13 @@ def get_widget_extra_stats(
         sla_breached_total = 0
 
     try:
+        # FIX: ticket_type_meta에는 assignee_username 컬럼이 없어 위젯이 항상 비어 있었다.
+        # 담당자 정보는 ticket_search_index에 있으며, 워크로드는 미해결(opened) 티켓 기준.
         workload_rows = db.execute(text(
             "SELECT assignee_username, COUNT(*) as cnt "
-            "FROM ticket_type_meta "
+            "FROM ticket_search_index "
             "WHERE assignee_username IS NOT NULL AND assignee_username != '' "
+            "AND state = 'opened' "
             "GROUP BY assignee_username ORDER BY cnt DESC LIMIT 10"
         )).all()
         team_workload = [{"username": r[0], "count": r[1]} for r in workload_rows]

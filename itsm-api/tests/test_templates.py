@@ -127,7 +127,16 @@ def test_get_links_requires_auth(client):
 
 
 def test_get_links_empty(client, user_cookies):
-    resp = client.get("/tickets/1/links?project_id=1", cookies=user_cookies)
+    from unittest.mock import patch
+    # get_ticket_links는 _can_user_view_issue(IDOR) 검증을 위해 get_issue를 호출한다.
+    viewable = {"iid": 1, "description": "**작성자:** hong",
+                "author": {"username": "hong"}, "confidential": False,
+                "labels": [], "state": "opened"}
+    with (
+        patch("app.gitlab_client.get_issue", return_value=viewable),
+        patch("app.gitlab_client.get_issue_links", return_value=[]),
+    ):
+        resp = client.get("/tickets/1/links?project_id=1", cookies=user_cookies)
     assert resp.status_code == 200
     assert resp.json() == []
 

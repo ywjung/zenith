@@ -23,14 +23,15 @@ def _get_my_rating(iid: int, username: str, db: Session) -> Optional[Rating]:
     )
 
 
-def _assert_ratable(iid: int):
-    """처리완료(resolved) 또는 종료(closed) 상태인지 확인."""
+def _assert_ratable(iid: int) -> dict:
+    """처리완료(resolved) 또는 종료(closed) 상태인지 확인하고 이슈를 반환."""
     try:
         issue = gitlab_client.get_issue(iid)
         labels = issue.get("labels", [])
         is_resolved = "status::resolved" in labels
         if issue["state"] != "closed" and not is_resolved:
             raise HTTPException(status_code=400, detail="처리완료 또는 종료된 티켓만 평가할 수 있습니다.")
+        return issue
     except HTTPException:
         raise
     except Exception as e:
@@ -60,7 +61,13 @@ def create_rating(
     if existing:
         raise HTTPException(status_code=409, detail="이미 평가를 완료한 티켓입니다. 수정 API를 이용하세요.")
 
-    _assert_ratable(iid)
+    issue = _assert_ratable(iid)
+
+    # SEC M4: 평점 위조 방지 — 해당 티켓의 신청자(requester)만 평가할 수 있다.
+    from .tickets.helpers import _get_issue_requester
+    requester_username, _ = _get_issue_requester(issue)
+    if not requester_username or requester_username != username:
+        raise HTTPException(status_code=403, detail="본인이 신청한 티켓만 평가할 수 있습니다.")
 
     employee_name = user.get("name") or username
     employee_email = user.get("email") or data.employee_email

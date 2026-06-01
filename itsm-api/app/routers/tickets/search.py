@@ -20,6 +20,7 @@ from .helpers import (
     _scan_with_clamav,
     _strip_image_metadata,
     _validate_magic_bytes,
+    labels_jsonb_contains,
     status_to_label,
     label_to_status,
     label_to_priority,
@@ -141,10 +142,8 @@ def get_ticket_stats(
             # ── DB 기반 빠른 경로: user/developer 통계를 TicketSearchIndex에서 계산 ──
             from ...models import TicketSearchIndex as _TSI
             from ...database import get_db as _get_db_func
-            from sqlalchemy import cast, literal
-            from sqlalchemy.dialects.postgresql import JSONB as _JSONB
             def _jc(col, val):
-                return col.op("@>")(cast(literal(val), _JSONB))
+                return labels_jsonb_contains(col, val)
             _db = next(_get_db_func())
             try:
                 _base = _db.query(_TSI)
@@ -202,10 +201,8 @@ def get_ticket_stats(
         # ── agent/admin DB 빠른 경로 — TicketSearchIndex에서 SQL COUNT
         from ...models import TicketSearchIndex as _TSI
         from ...database import get_db as _get_db_func
-        from sqlalchemy import cast, literal
-        from sqlalchemy.dialects.postgresql import JSONB as _JSONB
         def _jc2(col, val):
-            return col.op("@>")(cast(literal(val), _JSONB))
+            return labels_jsonb_contains(col, val)
         _db = next(_get_db_func())
         try:
             _base = _db.query(_TSI)
@@ -375,8 +372,7 @@ def list_kanban_tickets(
     from ...models import TicketSearchIndex as _TSI, SLARecord as _SLA, UserRole as _UR
     from ...database import SessionLocal
     from .helpers import label_to_priority, label_to_status
-    from sqlalchemy import cast, literal, func
-    from sqlalchemy.dialects.postgresql import JSONB as _JSONB
+    from sqlalchemy import func
     from datetime import datetime as _dt, timezone as _tz
 
     role = _user.get("role", "user")
@@ -392,7 +388,7 @@ def list_kanban_tickets(
             return _json.loads(_cached)
 
     def _jc(col, val):
-        return col.op("@>")(cast(literal(val), _JSONB))
+        return labels_jsonb_contains(col, val)
 
     t0 = _dt.now()
     with SessionLocal() as db:
@@ -514,19 +510,21 @@ async def upload_attachment(
     project_id: Optional[str] = Query(default=None),
     _user: dict = Depends(get_current_user),
 ):
+    import asyncio
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="파일 크기는 10MB를 초과할 수 없습니다.")
     mime = (file.content_type or "application/octet-stream").split(";")[0].strip().lower()
     if mime not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=415, detail="허용되지 않는 파일 형식입니다.")
-    _validate_magic_bytes(content, mime)
-    content = _strip_image_metadata(content, mime)
-    _scan_with_clamav(content, file.filename or "file")
+    # magic·PIL·ClamAV 소켓 스캔은 블로킹 — 스레드로 오프로드해 이벤트 루프 starvation 방지.
+    await asyncio.to_thread(_validate_magic_bytes, content, mime)
+    content = await asyncio.to_thread(_strip_image_metadata, content, mime)
+    await asyncio.to_thread(_scan_with_clamav, content, file.filename or "file")
 
-    # MinIO 우선 시도 — 설정 없으면 GitLab 폴백
+    # MinIO 우선 시도 — 설정 없으면 GitLab 폴백 (동기 네트워크 I/O도 오프로드)
     from ... import storage as _storage
-    minio_result = _storage.upload_file(content, file.filename or "file", mime)
+    minio_result = await asyncio.to_thread(_storage.upload_file, content, file.filename or "file", mime)
     if minio_result:
         url = minio_result["url"]
         name = file.filename or "file"
@@ -544,7 +542,8 @@ async def upload_attachment(
 
     pid = project_id or get_settings().GITLAB_PROJECT_ID
     try:
-        result = gitlab_client.upload_file(
+        result = await asyncio.to_thread(
+            gitlab_client.upload_file,
             pid,
             file.filename or "file",
             content,

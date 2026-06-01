@@ -161,7 +161,7 @@ def update_comment(
     if _r:
         pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
         try:
-            _r.delete(f"itsm:timeline:{pid}:{iid}")
+            _r.delete(f"itsm:timeline:{pid}:{iid}:full", f"itsm:timeline:{pid}:{iid}:public")
         except Exception:
             pass
 
@@ -200,7 +200,7 @@ def delete_comment(
     if _r:
         pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
         try:
-            _r.delete(f"itsm:timeline:{pid}:{iid}")
+            _r.delete(f"itsm:timeline:{pid}:{iid}:full", f"itsm:timeline:{pid}:{iid}:public")
         except Exception:
             pass
 
@@ -213,10 +213,13 @@ def get_comments(
 ):
     try:
         # SEC #1 (IDOR): 티켓 view 권한 검증
-        from .helpers import _can_user_view_issue
+        from .helpers import _can_user_view_issue, _can_user_see_internal_notes
         issue = gitlab_client.get_issue(iid, project_id=project_id)
         if not _can_user_view_issue(issue, _user):
             raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+
+        # SEC C2: developer 미만은 confidential 내부 노트를 볼 수 없다.
+        see_internal = _can_user_see_internal_notes(_user)
 
         notes = gitlab_client.get_notes(iid, project_id=project_id)
         return [
@@ -231,6 +234,7 @@ def get_comments(
             }
             for n in notes
             if not n.get("system", False)
+            and (see_internal or not n.get("confidential", False))
         ]
     except HTTPException:
         raise
@@ -249,9 +253,23 @@ def get_timeline(
     """댓글 + 감사로그 + GitLab 시스템 노트를 시간순으로 병합한 타임라인."""
     import json as _json
     from ...config import get_settings as _gs
+    from .helpers import _can_user_view_issue, _can_user_see_internal_notes
+
+    # SEC C1 (IDOR): 티임라인은 confidential 노트 + 감사로그를 노출하므로 view 권한 필수.
+    try:
+        issue = gitlab_client.get_issue(iid, project_id=project_id)
+    except Exception as e:
+        logger.error("Timeline get_issue #%d error: %s", iid, e)
+        raise HTTPException(status_code=502, detail="티켓을 조회할 수 없습니다.")
+    if not _can_user_view_issue(issue, user):
+        raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+    # SEC C2: developer 미만은 confidential 내부 노트 제외.
+    see_internal = _can_user_see_internal_notes(user)
 
     _pid = project_id or str(_gs().GITLAB_PROJECT_ID)
-    _cache_key = f"itsm:timeline:{_pid}:{iid}"
+    # 캐시 키는 내부 노트 가시성에 따라 분리 — 권한 다른 사용자 간 캐시 누출 방지.
+    _scope = "full" if see_internal else "public"
+    _cache_key = f"itsm:timeline:{_pid}:{iid}:{_scope}"
     _TTL = 60
 
     _r = _get_redis()
@@ -269,6 +287,8 @@ def get_timeline(
     try:
         notes = gitlab_client.get_notes(iid, project_id=project_id)
         for n in notes:
+            if not n.get("system", False) and n.get("confidential", False) and not see_internal:
+                continue
             if n.get("system", False):
                 events.append({
                     "type": "system",

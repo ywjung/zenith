@@ -12,6 +12,10 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+# 라벨은 한글화(feat: GitLab 라벨 전면 한글화)되어 status::처리중 등으로 생성된다.
+# 테스트는 언어에 무관하도록 라벨 변환 함수로 기대값을 만든다.
+from app.routers.tickets.helpers import status_to_label, priority_to_label
+
 
 # ---------------------------------------------------------------------------
 # Shared fake data
@@ -73,7 +77,7 @@ class TestExportCsv:
         call_kwargs = mock_gl.call_args
         kwargs = call_kwargs.kwargs if call_kwargs.kwargs else call_kwargs[1]
         assert kwargs.get("state") == "opened"
-        assert "status::in_progress" in (kwargs.get("labels") or "")
+        assert status_to_label("in_progress") in (kwargs.get("labels") or "")
 
     def test_export_csv_state_all(self, client, admin_cookies):
         """state=all → gl_state='all'."""
@@ -95,7 +99,7 @@ class TestExportCsv:
             resp = client.get("/tickets/export/csv?priority=high", cookies=admin_cookies)
         assert resp.status_code == 200
         kwargs = mock_gl.call_args.kwargs if mock_gl.call_args.kwargs else mock_gl.call_args[1]
-        assert "prio::high" in (kwargs.get("labels") or "")
+        assert priority_to_label("high") in (kwargs.get("labels") or "")
 
     def test_export_csv_combined_filters(self, client, admin_cookies):
         """state + category + priority all at once."""
@@ -107,9 +111,9 @@ class TestExportCsv:
         assert resp.status_code == 200
         kwargs = mock_gl.call_args.kwargs if mock_gl.call_args.kwargs else mock_gl.call_args[1]
         labels = kwargs.get("labels") or ""
-        assert "status::in_progress" in labels
+        assert status_to_label("in_progress") in labels
         assert "cat::software" in labels
-        assert "prio::critical" in labels
+        assert priority_to_label("critical") in labels
 
     def test_export_csv_requires_auth(self, client):
         resp = client.get("/tickets/export/csv")
@@ -184,7 +188,7 @@ class TestExportXlsx:
         kwargs = mock_gl.call_args.kwargs if mock_gl.call_args.kwargs else mock_gl.call_args[1]
         labels = kwargs.get("labels") or ""
         assert "cat::hardware" in labels
-        assert "prio::low" in labels
+        assert priority_to_label("low") in labels
 
 
 # ---------------------------------------------------------------------------
@@ -192,37 +196,37 @@ class TestExportXlsx:
 # ---------------------------------------------------------------------------
 
 class TestImportCsv:
-    def test_import_csv_missing_columns_returns_422(self, client, admin_cookies):
-        """CSV without required columns → 422."""
-        content = b"title,description\ntest ticket,some desc"
+    def test_import_csv_missing_title_returns_422(self, client, admin_cookies):
+        """필수 컬럼은 title 뿐 — title 없으면 422."""
+        content = b"description,category\nsome desc,network"
         resp = client.post(
             "/tickets/import/csv",
             files={"file": ("test.csv", content, "text/csv")},
             cookies=admin_cookies,
         )
         assert resp.status_code == 422
-        assert "누락된 필수 컬럼" in resp.json()["detail"]
+        assert "title" in resp.json()["error"]["message"]
 
-    def test_import_csv_missing_some_columns(self, client, admin_cookies):
-        """Only partial required columns present → 422 listing missing ones."""
-        content = b"title,description,category\nfoo,bar,baz"
-        resp = client.post(
-            "/tickets/import/csv",
-            files={"file": ("test.csv", content, "text/csv")},
-            cookies=admin_cookies,
-        )
-        assert resp.status_code == 422
-        detail = resp.json()["detail"]
-        assert "priority" in detail or "employee_name" in detail or "employee_email" in detail
+    def test_import_csv_only_title_is_accepted(self, client, admin_cookies):
+        """title만 있으면 나머지 컬럼은 선택 — 정상 처리(201)."""
+        content = b"title,description,category\nfoo bar baz title,bar,baz"
+        with patch("app.gitlab_client.create_issue", return_value={"iid": 1}):
+            resp = client.post(
+                "/tickets/import/csv",
+                files={"file": ("test.csv", content, "text/csv")},
+                cookies=admin_cookies,
+            )
+        assert resp.status_code == 201
+        assert resp.json()["imported"] == 1
 
     def test_import_csv_too_many_rows_returns_422(self, client, admin_cookies):
-        """More than 500 rows → 422."""
+        """최대 200행 초과 → 422."""
         rows = [
             {
                 "title": f"t{i}", "description": "d", "category": "network",
                 "priority": "medium", "employee_name": "홍길동", "employee_email": f"a{i}@b.com",
             }
-            for i in range(501)
+            for i in range(201)
         ]
         content = _csv_content(rows)
         resp = client.post(
@@ -231,10 +235,10 @@ class TestImportCsv:
             cookies=admin_cookies,
         )
         assert resp.status_code == 422
-        assert "500행" in resp.json()["detail"]
+        assert "200행" in resp.json()["error"]["message"]
 
-    def test_import_csv_dry_run(self, client, admin_cookies):
-        """dry_run=true → no GitLab calls, returns success list."""
+    def test_import_csv_single_row(self, client, admin_cookies):
+        """단일 행 임포트 → imported=1, create_issue 1회 호출."""
         rows = [
             {
                 "title": "네트워크 장애 티켓", "description": "네트워크 연결이 안 됩니다",
@@ -243,21 +247,20 @@ class TestImportCsv:
             }
         ]
         content = _csv_content(rows)
-        with patch("app.gitlab_client.create_issue") as mock_create:
+        with patch("app.gitlab_client.create_issue", return_value={"iid": 1}) as mock_create:
             resp = client.post(
-                "/tickets/import/csv?dry_run=true",
+                "/tickets/import/csv",
                 files={"file": ("test.csv", content, "text/csv")},
                 cookies=admin_cookies,
             )
         assert resp.status_code == 201
         data = resp.json()
-        assert data["total"] == 1
-        assert len(data["success"]) == 1
-        assert data["success"][0]["title"] == "네트워크 장애 티켓"
-        mock_create.assert_not_called()
+        assert data["imported"] == 1
+        assert data["failed"] == []
+        mock_create.assert_called_once()
 
-    def test_import_csv_dry_run_multiple_rows(self, client, admin_cookies):
-        """dry_run with 3 rows → 3 success entries, no GitLab calls."""
+    def test_import_csv_multiple_rows(self, client, admin_cookies):
+        """3개 행 임포트 → imported=3, create_issue 3회 호출."""
         rows = [
             {
                 "title": f"소프트웨어 티켓 {i:03d}", "description": "소프트웨어 문제가 발생했습니다",
@@ -267,16 +270,15 @@ class TestImportCsv:
             for i in range(3)
         ]
         content = _csv_content(rows)
-        with patch("app.gitlab_client.create_issue") as mock_create:
+        with patch("app.gitlab_client.create_issue", return_value={"iid": 1}) as mock_create:
             resp = client.post(
-                "/tickets/import/csv?dry_run=true",
+                "/tickets/import/csv",
                 files={"file": ("test.csv", content, "text/csv")},
                 cookies=admin_cookies,
             )
         assert resp.status_code == 201
-        assert resp.json()["total"] == 3
-        assert len(resp.json()["success"]) == 3
-        mock_create.assert_not_called()
+        assert resp.json()["imported"] == 3
+        assert mock_create.call_count == 3
 
     def test_import_csv_actual_create(self, client, admin_cookies):
         """Normal import → gitlab create_issue is called once per valid row."""
@@ -297,12 +299,12 @@ class TestImportCsv:
             )
         assert resp.status_code == 201
         data = resp.json()
-        assert data["total"] == 1
-        assert data["success"][0]["iid"] == 99
+        assert data["imported"] == 1
         mock_create.assert_called_once()
 
-    def test_import_csv_actual_create_with_optional_cols(self, client, admin_cookies):
-        """Optional department/location columns are included in GitLab description."""
+    def test_import_csv_extra_cols_ignored(self, client, admin_cookies):
+        """단순화된 임포트는 title/description/category/priority/assignee_username만 사용 —
+        department/location 등 부가 컬럼은 무시하고 정상 처리한다."""
         rows = [
             {
                 "title": "옵셔널 컬럼 테스트 티켓", "description": "부서 및 위치 정보 포함",
@@ -320,10 +322,8 @@ class TestImportCsv:
                 cookies=admin_cookies,
             )
         assert resp.status_code == 201
-        assert resp.json()["success"][0]["iid"] == 55
-        call_kwargs = mock_create.call_args.kwargs if mock_create.call_args.kwargs else mock_create.call_args[1]
-        assert "IT팀" in call_kwargs.get("description", "")
-        assert "서울" in call_kwargs.get("description", "")
+        assert resp.json()["imported"] == 1
+        mock_create.assert_called_once()
 
     def test_import_csv_create_failure_goes_to_failed(self, client, admin_cookies):
         """When gitlab create_issue raises, row goes to failed list."""
@@ -343,7 +343,7 @@ class TestImportCsv:
             )
         assert resp.status_code == 201
         data = resp.json()
-        assert data["total"] == 1
+        assert data["imported"] == 0
         assert len(data["failed"]) == 1
         assert data["failed"][0]["row"] == 2
 
@@ -371,7 +371,8 @@ class TestImportCsv:
             )
         assert resp.status_code == 201
         data = resp.json()
-        assert data["total"] == 2
+        assert data["imported"] == 1
+        assert len(data["failed"]) == 1
 
     def test_import_csv_cp949_encoding(self, client, admin_cookies):
         """CP949 encoded file should decode without error."""

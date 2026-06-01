@@ -162,7 +162,8 @@ def test_mark_resolved_sets_timestamps():
     mock_record.sla_deadline = now + timedelta(hours=4)
 
     mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = mock_record
+    # mark_resolved는 .with_for_update()를 거쳐 first()를 호출(TOCTOU 방지)
+    mock_db.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = mock_record
 
     mark_resolved(mock_db, iid=1, project_id="1")
     assert mock_record.resolved_at is not None
@@ -204,7 +205,8 @@ def test_pause_sla_sets_paused_at():
     mock_record.resolved_at = None  # MagicMock 기본값은 truthy이므로 명시 필요
 
     mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = mock_record
+    # pause_sla도 .with_for_update()를 거쳐 first()를 호출
+    mock_db.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = mock_record
 
     pause_sla(mock_db, iid=1, project_id="1")
     assert mock_record.paused_at is not None
@@ -792,7 +794,8 @@ def test_check_and_send_warnings_with_staff_creates_notification():
 
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.with_for_update.return_value.all.return_value = [mock_record]
-    mock_db.query.return_value.filter.return_value.all.return_value = [mock_staff]
+    # staff 조회는 N+1 방지를 위해 .limit(500)을 거친다
+    mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = [mock_staff]
 
     with (
         patch("app.notifications.notify_sla_warning"),
