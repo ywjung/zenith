@@ -1378,7 +1378,8 @@ def test_add_comment_notification_get_issue_error(client, admin_cookies):
     }
     with (
         patch("app.gitlab_client.add_note", return_value=note),
-        patch("app.gitlab_client.get_issue", side_effect=Exception("gitlab down")),
+        # 1번째 get_issue(IDOR view-check)는 성공, 2번째(알림 경로)는 실패 → 알림 실패 non-fatal
+        patch("app.gitlab_client.get_issue", side_effect=[FAKE_ISSUE, Exception("gitlab down")]),
     ):
         resp = client.post(
             "/tickets/42/comments",

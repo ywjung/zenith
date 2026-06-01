@@ -58,6 +58,16 @@ def add_comment(
             detail="GitLab 세션이 만료됐습니다. 다시 로그인해 주세요.",
         )
 
+    # SEC L1 (IDOR): 볼 수 없는 티켓에 댓글을 작성하는 것을 차단.
+    from .helpers import _can_user_view_issue
+    try:
+        _issue = gitlab_client.get_issue(iid, project_id=project_id)
+    except Exception as e:
+        logger.error("add_comment get_issue %d error: %s", iid, e)
+        raise HTTPException(status_code=502, detail="티켓을 조회할 수 없습니다.")
+    if not _can_user_view_issue(_issue, user):
+        raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+
     sanitized_body = _sanitize_comment(data.body)
 
     try:

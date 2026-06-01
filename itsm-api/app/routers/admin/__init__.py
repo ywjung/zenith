@@ -761,9 +761,13 @@ def test_outbound_webhook(
 ):
     """테스트 페이로드를 발송해 연결 상태를 확인한다."""
     from ...outbound_webhook import _send_one
+    from ...security import validate_external_url
     hook = db.query(OutboundWebhook).filter(OutboundWebhook.id == hook_id).first()
     if not hook:
         raise HTTPException(404, "웹훅을 찾을 수 없습니다.")
+    # SEC M1 (SSRF): 등록 후 DNS가 내부망/메타데이터로 재지정됐을 수 있으므로 전송 직전 재검증.
+    # (전송 워커는 재검증하지만 이 /test 경로만 누락돼 있었다.)
+    validate_external_url(hook.url, "웹훅 URL")
     status = _send_one(hook.url, {"event": "test", "message": "ITSM 웹훅 테스트"}, hook.secret)
     return {"status": status, "success": 200 <= status < 300}
 
