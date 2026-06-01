@@ -46,10 +46,10 @@ jobs:
       E2E_BASE_URL: http://localhost:8111
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # ── API 서버 시작 ──
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
           cache: pip
@@ -92,7 +92,7 @@ print(token)
           echo "E2E_ADMIN_TOKEN=$TOKEN" >> $GITHUB_ENV
 
       # ── 프론트엔드 빌드 & 서버 시작 ──
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -137,7 +137,7 @@ print(token)
         run: npm run test:e2e
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
