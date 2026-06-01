@@ -487,7 +487,8 @@ def test_update_ticket_status_reopen(client, admin_cookies):
 
 def test_get_resolution_note_empty(client, admin_cookies):
     """No resolution note → empty dict (covers lines 1905-1914)."""
-    resp = client.get("/tickets/42/resolution", cookies=admin_cookies)
+    with patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE):
+        resp = client.get("/tickets/42/resolution", cookies=admin_cookies)
     assert resp.status_code == 200
     assert resp.json() == {}
 
@@ -509,7 +510,8 @@ def test_get_resolution_note_with_data(client, admin_cookies, db_session):
     db_session.commit()
     db_session.refresh(rn)
 
-    resp = client.get("/tickets/42/resolution", cookies=admin_cookies)
+    with patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE):
+        resp = client.get("/tickets/42/resolution", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()
     assert data["note"] == "해결 내용"
@@ -1128,9 +1130,10 @@ def test_export_csv_category_and_priority(client, admin_cookies):
         )
     assert resp.status_code == 200
     # verify labels were built with cat:: and prio::
+    from app.routers.tickets.helpers import priority_to_label
     call_kwargs = mock_get.call_args[1]
     assert "cat::network" in (call_kwargs.get("labels") or "")
-    assert "prio::high" in (call_kwargs.get("labels") or "")
+    assert priority_to_label("high") in (call_kwargs.get("labels") or "")
 
 
 # ─── Create ticket: department/location (lines 1170, 1172, 1182, 1184) ───────

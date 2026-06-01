@@ -152,6 +152,7 @@ def test_get_category_labels_from_db():
     from app.models import ServiceType
     mock_type = MagicMock(spec=ServiceType)
     mock_type.value = "software"
+    mock_type.label = "software"  # 라벨은 t.label 기준으로 생성됨
     mock_type.color = "#3498db"
     mock_db = MagicMock()
     mock_db.__enter__.return_value = mock_db
@@ -891,7 +892,8 @@ def test_get_category_labels_with_meta_returns_list():
     mock_db.query.return_value.order_by.return_value.all.return_value = [mock_type]
     with patch("app.database.SessionLocal", return_value=mock_db):
         result = get_category_labels_with_meta()
-    assert result[0]["name"] == "cat::software"
+    # 라벨 한글화: cat:: 라벨은 t.label(한글) 기준으로 생성된다.
+    assert result[0]["name"] == "cat::소프트웨어"
     assert result[0]["service_label"] == "소프트웨어"
 
 
