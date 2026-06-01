@@ -70,7 +70,7 @@ class TestUpdateComment:
             cookies=cookies,
         )
         assert resp.status_code == 401
-        assert "GitLab 세션" in resp.json()["detail"]
+        assert "GitLab 세션" in resp.json()["error"]["message"]
 
     def test_update_comment_gitlab_error_returns_502(self, client, user_cookies):
         """update_note raises → 502."""
@@ -81,7 +81,7 @@ class TestUpdateComment:
                 cookies=user_cookies,
             )
         assert resp.status_code == 502
-        assert "댓글 수정" in resp.json()["detail"]
+        assert "댓글 수정" in resp.json()["error"]["message"]
 
     def test_update_comment_success_with_redis(self, client, user_cookies):
         """Successful update: Redis cache is invalidated."""
@@ -157,7 +157,7 @@ class TestDeleteComment:
         with patch("app.gitlab_client.delete_note", side_effect=Exception("GitLab error")):
             resp = client.delete("/tickets/1/comments/10", cookies=user_cookies)
         assert resp.status_code == 502
-        assert "댓글 삭제" in resp.json()["detail"]
+        assert "댓글 삭제" in resp.json()["error"]["message"]
 
     def test_delete_comment_success_with_redis(self, client, user_cookies):
         """Successful delete: Redis cache invalidated."""

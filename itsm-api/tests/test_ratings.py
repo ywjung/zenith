@@ -48,7 +48,7 @@ def test_create_rating_open_ticket(client, user_cookies):
     with patch("app.gitlab_client.get_issue", return_value=OPENED_ISSUE):
         resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=user_cookies)
     assert resp.status_code == 400
-    assert "처리완료 또는 종료된" in resp.json()["detail"]
+    assert "처리완료 또는 종료된" in resp.json()["error"]["message"]
 
 
 def test_create_rating_invalid_score(client, user_cookies):
