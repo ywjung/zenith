@@ -109,7 +109,13 @@ def test_ticket_custom_fields_schema(client, admin_cookies):
     )
     assert create_resp.status_code == 201, f"Field creation failed: {create_resp.text}"
 
-    resp = client.get("/tickets/1/custom-fields", cookies=admin_cookies)
+    # custom-fields는 _can_user_view_issue(IDOR) 검증을 위해 get_issue를 호출한다.
+    from unittest.mock import patch
+    viewable = {"iid": 1, "description": "**작성자:** hong",
+                "author": {"username": "hong"}, "confidential": False,
+                "labels": [], "state": "opened"}
+    with patch("app.gitlab_client.get_issue", return_value=viewable):
+        resp = client.get("/tickets/1/custom-fields", cookies=admin_cookies)
 
     assert resp.status_code == 200, f"Unexpected status: {resp.status_code}"
     data = resp.json()

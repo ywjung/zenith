@@ -1127,7 +1127,10 @@ try:
             if any(path.startswith(p) for p in _LEGACY_API_PREFIXES):
                 response.headers["Deprecation"] = "true"
                 response.headers["Sunset"] = "Wed, 31 Dec 2026 23:59:59 GMT"
-                response.headers["Link"] = '</api/v1' + path + '>; rel="successor-version"'
+                # HTTP 헤더는 latin-1만 허용 — 한글 슬러그 등 비ASCII 경로는
+                # 퍼센트 인코딩해야 UnicodeEncodeError(500)를 방지한다.
+                from urllib.parse import quote as _quote
+                response.headers["Link"] = '</api/v1' + _quote(path) + '>; rel="successor-version"'
             return response
 
     app.add_middleware(_DeprecationMiddleware)

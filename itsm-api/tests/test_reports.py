@@ -352,8 +352,8 @@ def test_breakdown_with_waiting_and_resolved_status(client, admin_cookies):
         resp = client.get("/reports/breakdown", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()
-    # waiting → in_progress, resolved → resolved bucket, other → open
-    assert data["by_status"]["in_progress"] >= 1
+    # waiting → waiting bucket(독립), resolved → resolved bucket, other → open
+    assert data["by_status"]["waiting"] >= 1
     assert data["by_status"]["resolved"] >= 1
 
 
