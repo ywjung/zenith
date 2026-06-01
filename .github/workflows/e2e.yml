@@ -75,20 +75,7 @@ jobs:
       - name: Generate E2E admin token
         working-directory: itsm-api
         run: |
-          TOKEN=$(python3 -c "
-import json, base64, time, sys
-from app.auth import create_token, store_gitlab_token
-user = {'id': 1, 'username': 'e2e_admin', 'name': 'E2E Admin', 'email': 'e2e@test.com', 'avatar_url': None, 'organization': ''}
-token = create_token(user, gitlab_token='e2e_fake_gitlab_token', role='admin')
-payload_b64 = token.split('.')[1]
-payload_b64 += '=' * (4 - len(payload_b64) % 4)
-payload = json.loads(base64.b64decode(payload_b64))
-jti = payload['jti']
-exp = payload['exp']
-ttl = exp - int(time.time())
-store_gitlab_token(jti, 'e2e_fake_gitlab_token', ttl)
-print(token)
-")
+          TOKEN=$(python3 scripts/gen_e2e_token.py)
           echo "E2E_ADMIN_TOKEN=$TOKEN" >> $GITHUB_ENV
 
       # ── 프론트엔드 빌드 & 서버 시작 ──
