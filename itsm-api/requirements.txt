@@ -29,5 +29,5 @@ minio>=7.2.20
 clamd>=1.0.2
 croniter>=2.0.0
 pywebpush>=2.0.0
-anthropic>=0.40.0
+anthropic>=0.105.2
 openai>=1.50.0
