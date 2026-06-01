@@ -510,19 +510,21 @@ async def upload_attachment(
     project_id: Optional[str] = Query(default=None),
     _user: dict = Depends(get_current_user),
 ):
+    import asyncio
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="파일 크기는 10MB를 초과할 수 없습니다.")
     mime = (file.content_type or "application/octet-stream").split(";")[0].strip().lower()
     if mime not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=415, detail="허용되지 않는 파일 형식입니다.")
-    _validate_magic_bytes(content, mime)
-    content = _strip_image_metadata(content, mime)
-    _scan_with_clamav(content, file.filename or "file")
+    # magic·PIL·ClamAV 소켓 스캔은 블로킹 — 스레드로 오프로드해 이벤트 루프 starvation 방지.
+    await asyncio.to_thread(_validate_magic_bytes, content, mime)
+    content = await asyncio.to_thread(_strip_image_metadata, content, mime)
+    await asyncio.to_thread(_scan_with_clamav, content, file.filename or "file")
 
-    # MinIO 우선 시도 — 설정 없으면 GitLab 폴백
+    # MinIO 우선 시도 — 설정 없으면 GitLab 폴백 (동기 네트워크 I/O도 오프로드)
     from ... import storage as _storage
-    minio_result = _storage.upload_file(content, file.filename or "file", mime)
+    minio_result = await asyncio.to_thread(_storage.upload_file, content, file.filename or "file", mime)
     if minio_result:
         url = minio_result["url"]
         name = file.filename or "file"
@@ -540,7 +542,8 @@ async def upload_attachment(
 
     pid = project_id or get_settings().GITLAB_PROJECT_ID
     try:
-        result = gitlab_client.upload_file(
+        result = await asyncio.to_thread(
+            gitlab_client.upload_file,
             pid,
             file.filename or "file",
             content,

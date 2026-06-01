@@ -675,12 +675,14 @@ async def upload_kb_attachment(
     if mime not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=415, detail="허용되지 않는 파일 형식입니다.")
 
-    _validate_magic_bytes(content, mime)
+    import asyncio
+    # magic·PIL·ClamAV 소켓 스캔은 블로킹 — 스레드로 오프로드해 이벤트 루프 starvation 방지.
+    await asyncio.to_thread(_validate_magic_bytes, content, mime)
     # 이미지 EXIF 메타데이터 제거
-    content = _strip_image_metadata(content, mime)
+    content = await asyncio.to_thread(_strip_image_metadata, content, mime)
     # ClamAV 바이러스 스캔
     fname = file.filename or "file"
-    is_safe, detail = _clam_scan(content, fname)
+    is_safe, detail = await asyncio.to_thread(_clam_scan, content, fname)
     if not is_safe:
         write_audit_log(
             db, _user, "kb.upload.infected", "kb_file", fname,
@@ -692,9 +694,9 @@ async def upload_kb_attachment(
             detail=f"파일에서 악성코드가 감지되었습니다: {detail}",
         )
 
-    # MinIO 우선 업로드 시도, 미설정 또는 실패 시 GitLab 폴백
+    # MinIO 우선 업로드 시도, 미설정 또는 실패 시 GitLab 폴백 (동기 네트워크도 오프로드)
     from .. import storage as _storage
-    minio_result = _storage.upload_file(content, file.filename or "file", mime)
+    minio_result = await asyncio.to_thread(_storage.upload_file, content, file.filename or "file", mime)
     if minio_result:
         return {
             "markdown": f"![{file.filename}]({minio_result['url']})" if mime.startswith("image/") else f"[{file.filename}]({minio_result['url']})",
@@ -709,7 +711,7 @@ async def upload_kb_attachment(
 
     pid = project_id or get_settings().GITLAB_PROJECT_ID
     try:
-        result = gitlab_client.upload_file(pid, file.filename or "file", content, mime)
+        result = await asyncio.to_thread(gitlab_client.upload_file, pid, file.filename or "file", content, mime)
         return {
             "markdown": result.get("markdown", ""),
             "url": result.get("url", ""),
