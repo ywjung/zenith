@@ -3,6 +3,22 @@ import asyncio
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _mock_ticket_view():
+    """ticket_event_stream에 IDOR view-check(get_issue + _can_user_view_issue)가 추가됐다.
+    스트림 동작(redis/keepalive/cleanup) 단위 테스트는 권한을 통과하도록 목 처리한다.
+    (권한 차단 자체는 test_ticket_event_stream_forbidden에서 별도 검증.)"""
+    viewable = {"iid": 1, "confidential": False, "labels": [], "state": "opened",
+                "description": "", "author": {"username": "x"}}
+    with (
+        patch("app.gitlab_client.get_issue", return_value=viewable),
+        patch("app.routers.tickets.helpers._can_user_view_issue", return_value=True),
+    ):
+        yield
+
 
 def _run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
@@ -392,3 +408,25 @@ def test_ticket_event_stream_finally_cleanup_exception():
 
     events = _run(_inner())
     assert isinstance(events, list)
+
+
+def test_ticket_event_stream_forbidden():
+    """SEC L2: 볼 수 없는 티켓의 이벤트 스트림 구독은 404로 차단된다."""
+    from fastapi import HTTPException
+    from app.routers.tickets.stream import ticket_event_stream
+
+    async def _inner():
+        mock_request = MagicMock()
+        mock_user = {"sub": "99", "role": "user", "username": "mallory"}
+        # view-check를 실제로 거부시킴 (autouse 목을 이 테스트에서만 덮어씀)
+        with (
+            patch("app.gitlab_client.get_issue", return_value={
+                "iid": 1, "confidential": False, "labels": [], "state": "opened",
+                "description": "**작성자:** someone_else", "author": {"username": "someone_else"}}),
+            patch("app.routers.tickets.helpers._can_user_view_issue", return_value=False),
+        ):
+            return await ticket_event_stream(mock_request, iid=1, _user=mock_user)
+
+    with pytest.raises(HTTPException) as exc:
+        _run(_inner())
+    assert exc.value.status_code == 404

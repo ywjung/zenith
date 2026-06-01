@@ -1106,7 +1106,11 @@ def test_test_outbound_webhook_success(client, admin_cookies, db_session):
     db_session.commit()
     db_session.refresh(hook)
 
-    with patch("app.outbound_webhook._send_one", return_value=200):
+    with (
+        patch("app.outbound_webhook._send_one", return_value=200),
+        # SSRF 재검증은 실 DNS 해석을 하므로 샌드박스에서 안전 URL로 간주하도록 목.
+        patch("app.security.is_safe_external_url", return_value=(True, "")),
+    ):
         resp = client.post(f"/admin/outbound-webhooks/{hook.id}/test", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()

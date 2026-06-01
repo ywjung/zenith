@@ -3,12 +3,13 @@ import asyncio
 import logging
 from typing import AsyncGenerator, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from starlette.requests import Request
 
 from ...auth import get_current_user
 from ...config import get_settings
+from ... import gitlab_client
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,17 @@ async def ticket_event_stream(
     """
     settings = get_settings()
     pid = project_id or str(settings.GITLAB_PROJECT_ID)
+
+    # SEC L2 (IDOR): 볼 수 없는 티켓의 실시간 이벤트 스트림 구독을 차단.
+    from .helpers import _can_user_view_issue
+    try:
+        _issue = await asyncio.to_thread(gitlab_client.get_issue, iid, project_id=project_id)
+    except Exception as e:
+        logger.error("Ticket SSE get_issue %d error: %s", iid, e)
+        raise HTTPException(status_code=502, detail="티켓을 조회할 수 없습니다.")
+    if not _can_user_view_issue(_issue, _user):
+        raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+
     channel = f"ticket:events:{pid}:{iid}"
 
     async def event_generator() -> AsyncGenerator[str, None]:
