@@ -21,8 +21,9 @@ def test_update_config_requires_auth(client):
 
 
 def test_update_config_success(client, user_cookies):
+    # 위젯 id는 DEFAULT_WIDGETS의 유효 id만 허용된다(임의 id는 필터링됨).
     widgets = [
-        {"id": "stats_bar", "visible": True, "order": 0},
+        {"id": "sla_status", "visible": True, "order": 0},
         {"id": "my_tickets", "visible": False, "order": 1},
     ]
     resp = client.put("/dashboard/config", json={"widgets": widgets}, cookies=user_cookies)
@@ -34,12 +35,12 @@ def test_update_config_success(client, user_cookies):
 
 def test_update_config_persists(client, user_cookies):
     """Saved config should be returned on subsequent GET."""
-    widgets = [{"id": "custom_widget", "visible": True, "order": 99}]
+    widgets = [{"id": "sla_status", "visible": True, "order": 99}]
     client.put("/dashboard/config", json={"widgets": widgets}, cookies=user_cookies)
     resp = client.get("/dashboard/config", cookies=user_cookies)
     assert resp.status_code == 200
     ids = [w["id"] for w in resp.json()["widgets"]]
-    assert "custom_widget" in ids
+    assert "sla_status" in ids
 
 
 def test_update_config_truncates_at_20(client, user_cookies):
