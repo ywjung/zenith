@@ -751,6 +751,17 @@ def _can_user_view_issue(issue: dict, user: dict) -> bool:
     return is_requester
 
 
+def _can_user_see_internal_notes(user: dict) -> bool:
+    """
+    SEC: confidential/internal 노트 열람 권한.
+    developer 이상(운영팀)만 내부 노트를 볼 수 있다. role==user(신청자 포함)는
+    자기 티켓이라도 내부 staff 노트를 봐선 안 된다.
+    """
+    from ...rbac import ROLE_LEVELS
+    role = user.get("role", "user") or "user"
+    return ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS.get("developer", 0)
+
+
 def _sla_to_dict(record) -> dict:
     from ...schemas import SLARecordResponse
     return SLARecordResponse.model_validate(record).model_dump()

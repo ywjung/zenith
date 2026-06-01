@@ -883,7 +883,10 @@ def test_get_timeline_success(client, admin_cookies):
          "author": {"name": "GitLab", "avatar_url": None},
          "created_at": "2024-01-02T12:00:00Z"},
     ]
-    with patch("app.gitlab_client.get_notes", return_value=notes):
+    with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
+        patch("app.gitlab_client.get_notes", return_value=notes),
+    ):
         resp = client.get("/tickets/42/timeline", cookies=admin_cookies)
     assert resp.status_code == 200
     events = resp.json()
@@ -895,7 +898,10 @@ def test_get_timeline_success(client, admin_cookies):
 
 def test_get_timeline_notes_error_continues(client, admin_cookies):
     """GitLab notes error doesn't fail — empty events returned (covers lines 2168-2169)."""
-    with patch("app.gitlab_client.get_notes", side_effect=Exception("gitlab down")):
+    with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
+        patch("app.gitlab_client.get_notes", side_effect=Exception("gitlab down")),
+    ):
         resp = client.get("/tickets/42/timeline", cookies=admin_cookies)
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
@@ -1394,6 +1400,7 @@ def test_get_timeline_redis_error_falls_back(client, admin_cookies):
         "created_at": "2024-01-01T00:00:00Z", "confidential": False,
     }
     with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
         patch("app.routers.tickets.comments._get_redis", return_value=mock_r),
         patch("app.gitlab_client.get_notes", return_value=[note]),
     ):
@@ -1412,6 +1419,7 @@ def test_get_timeline_audit_log_error_non_fatal(client, admin_cookies):
         "created_at": "2024-01-01T00:00:00Z", "confidential": False,
     }
     with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
         patch("app.gitlab_client.get_notes", return_value=[note]),
         patch("app.routers.tickets.AuditLog", side_effect=Exception("db error")),
     ):
@@ -1433,6 +1441,7 @@ def test_get_timeline_redis_cache_save_error(client, admin_cookies):
         "created_at": "2024-01-01T00:00:00Z", "confidential": False,
     }
     with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
         patch("app.routers.tickets.comments._get_redis", return_value=mock_r),
         patch("app.gitlab_client.get_notes", return_value=[note]),
     ):

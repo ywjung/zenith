@@ -1235,6 +1235,10 @@ def clone_ticket(
     except Exception:
         raise HTTPException(status_code=404, detail="원본 티켓을 찾을 수 없습니다.")
 
+    # SEC H1 (IDOR): 볼 수 없는 티켓을 복제해 본문(PII 포함)을 탈취하는 것을 방지.
+    if not _can_user_view_issue(original, user):
+        raise HTTPException(status_code=404, detail="원본 티켓을 찾을 수 없습니다.")
+
     orig_labels = original.get("labels", [])
     category = next((lb[5:] for lb in orig_labels if lb.startswith("cat::")), "other")
     priority = next((lb[6:] for lb in orig_labels if lb.startswith("prio::")), "medium")

@@ -625,7 +625,10 @@ def test_get_timeline_redis_cache_hit(client, admin_cookies):
     cached_data = [{"type": "comment", "id": "gl-1", "body": "cached comment", "created_at": "2024-01-01T00:00:00Z"}]
     mock_r = MagicMock()
     mock_r.get.return_value = json.dumps(cached_data)
-    with patch("app.routers.tickets.comments._get_redis", return_value=mock_r):
+    with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
+        patch("app.routers.tickets.comments._get_redis", return_value=mock_r),
+    ):
         resp = client.get("/tickets/1/timeline", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()
@@ -652,7 +655,10 @@ def test_get_timeline_includes_audit_log(client, admin_cookies, db_session):
     db_session.add(log)
     db_session.commit()
 
-    with patch("app.gitlab_client.get_notes", return_value=[]):
+    with (
+        patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE),
+        patch("app.gitlab_client.get_notes", return_value=[]),
+    ):
         resp = client.get("/tickets/1/timeline", cookies=admin_cookies)
     assert resp.status_code == 200
     data = resp.json()

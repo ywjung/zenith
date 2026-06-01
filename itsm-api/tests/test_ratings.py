@@ -4,7 +4,7 @@ from unittest.mock import patch
 CLOSED_ISSUE = {
     "iid": 1,
     "title": "해결된 티켓",
-    "description": "**신청자:** 홍길동\n**이메일:** hong@example.com\n\n---\n\n내용",
+    "description": "**신청자:** 홍길동\n**이메일:** hong@example.com\n**작성자:** hong\n\n---\n\n내용",
     "state": "closed",
     "labels": ["cat::software", "prio::low", "status::resolved"],
     "created_at": "2024-01-01T00:00:00Z",
@@ -32,6 +32,18 @@ def test_create_rating(client, user_cookies):
     data = resp.json()
     assert data["score"] == 5
     assert data["gitlab_issue_iid"] == 1
+
+
+def test_create_rating_non_requester_forbidden(client):
+    """SEC M4: 신청자가 아닌 사용자는 평가할 수 없다 (평점 위조 방지)."""
+    from tests.conftest import make_token
+    other_cookies = {"itsm_token": make_token(username="mallory", user_id="99")}
+    with (
+        patch("app.gitlab_client.get_issue", return_value=CLOSED_ISSUE),
+        patch("app.gitlab_client.add_note", return_value={}),
+    ):
+        resp = client.post("/tickets/1/ratings", json=RATING_PAYLOAD, cookies=other_cookies)
+    assert resp.status_code == 403
 
 
 def test_create_rating_duplicate(client, user_cookies):

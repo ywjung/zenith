@@ -203,6 +203,13 @@ class TestDeleteComment:
 # ---------------------------------------------------------------------------
 
 class TestGetTimeline:
+    @pytest.fixture(autouse=True)
+    def _mock_view(self):
+        """SEC C1: get_timeline now fetches the issue for a view-permission check.
+        Mock it with a requester-owned issue so the authenticated test user passes."""
+        with patch("app.gitlab_client.get_issue", return_value=FAKE_ISSUE):
+            yield
+
     def _setup_notes(self):
         return [
             {**FAKE_NOTE, "system": False},
