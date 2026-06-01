@@ -38,6 +38,7 @@ from .helpers import (
     _attach_sla_deadlines,
     _can_requester_modify,
     _can_user_view_issue,
+    labels_jsonb_contains,
     _dispatch_notification,
     _extract_meta,
     _invalidate_ticket_list_cache,
@@ -166,10 +167,8 @@ def list_tickets(
         _use_db_fast_path = (role == "user" or bool(created_by_username) or bool(assignee_username)) and not sla
         if _use_db_fast_path:
             from ...models import TicketSearchIndex as _TSI
-            from sqlalchemy import cast, literal
-            from sqlalchemy.dialects.postgresql import JSONB as _JSONB
             def _jsonb_contains(col, val):
-                return col.op("@>")(cast(literal(val), _JSONB))
+                return labels_jsonb_contains(col, val)
             q = db.query(_TSI)
 
             # 작성자 필터
@@ -340,10 +339,8 @@ def list_tickets(
 
         # ── agent/admin DB 빠른 경로 — TicketSearchIndex에서 iid 조회 후 페이지분만 GitLab 상세 호출
         from ...models import TicketSearchIndex as _TSI
-        from sqlalchemy import cast, literal
-        from sqlalchemy.dialects.postgresql import JSONB as _JSONB
         def _jc(col, val):
-            return col.op("@>")(cast(literal(val), _JSONB))
+            return labels_jsonb_contains(col, val)
         q = db.query(_TSI)
         pid = project_id or str(get_settings().GITLAB_PROJECT_ID)
         q = q.filter(_TSI.project_id == pid)

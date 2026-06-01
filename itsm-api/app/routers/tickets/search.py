@@ -20,6 +20,7 @@ from .helpers import (
     _scan_with_clamav,
     _strip_image_metadata,
     _validate_magic_bytes,
+    labels_jsonb_contains,
     status_to_label,
     label_to_status,
     label_to_priority,
@@ -141,10 +142,8 @@ def get_ticket_stats(
             # ── DB 기반 빠른 경로: user/developer 통계를 TicketSearchIndex에서 계산 ──
             from ...models import TicketSearchIndex as _TSI
             from ...database import get_db as _get_db_func
-            from sqlalchemy import cast, literal
-            from sqlalchemy.dialects.postgresql import JSONB as _JSONB
             def _jc(col, val):
-                return col.op("@>")(cast(literal(val), _JSONB))
+                return labels_jsonb_contains(col, val)
             _db = next(_get_db_func())
             try:
                 _base = _db.query(_TSI)
@@ -202,10 +201,8 @@ def get_ticket_stats(
         # ── agent/admin DB 빠른 경로 — TicketSearchIndex에서 SQL COUNT
         from ...models import TicketSearchIndex as _TSI
         from ...database import get_db as _get_db_func
-        from sqlalchemy import cast, literal
-        from sqlalchemy.dialects.postgresql import JSONB as _JSONB
         def _jc2(col, val):
-            return col.op("@>")(cast(literal(val), _JSONB))
+            return labels_jsonb_contains(col, val)
         _db = next(_get_db_func())
         try:
             _base = _db.query(_TSI)
@@ -375,8 +372,7 @@ def list_kanban_tickets(
     from ...models import TicketSearchIndex as _TSI, SLARecord as _SLA, UserRole as _UR
     from ...database import SessionLocal
     from .helpers import label_to_priority, label_to_status
-    from sqlalchemy import cast, literal, func
-    from sqlalchemy.dialects.postgresql import JSONB as _JSONB
+    from sqlalchemy import func
     from datetime import datetime as _dt, timezone as _tz
 
     role = _user.get("role", "user")
@@ -392,7 +388,7 @@ def list_kanban_tickets(
             return _json.loads(_cached)
 
     def _jc(col, val):
-        return col.op("@>")(cast(literal(val), _JSONB))
+        return labels_jsonb_contains(col, val)
 
     t0 = _dt.now()
     with SessionLocal() as db:

@@ -10,6 +10,57 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# JSONB 라벨 포함(@>) — 방언 이식성 헬퍼
+#
+# 운영은 Postgres JSONB의 `@>` 연산자를 쓴다. 그러나 테스트 DB(sqlite)는 `@>`를
+# 파싱하지 못한다. 커스텀 컴파일 구문으로 Postgres에서는 기존과 100% 동일하게
+# `@>`를, 그 외(sqlite)에서는 JSON 텍스트 LIKE 폴백을 생성한다.
+# ---------------------------------------------------------------------------
+from sqlalchemy.ext.compiler import compiles as _compiles
+from sqlalchemy.sql.expression import ColumnElement as _ColumnElement
+from sqlalchemy.types import Boolean as _Boolean
+
+
+class _LabelsContain(_ColumnElement):
+    type = _Boolean()
+    inherit_cache = True
+
+    def __init__(self, col, json_val):
+        self.col = col
+        self.json_val = json_val  # JSON 문자열, 예: '["problem"]'
+
+
+@_compiles(_LabelsContain, "postgresql")
+def _labels_contain_pg(element, compiler, **kw):
+    from sqlalchemy import cast, literal
+    from sqlalchemy.dialects.postgresql import JSONB
+    return compiler.process(
+        element.col.op("@>")(cast(literal(element.json_val), JSONB)), **kw
+    )
+
+
+@_compiles(_LabelsContain)
+def _labels_contain_default(element, compiler, **kw):
+    import json as _json
+    from sqlalchemy import cast, String, and_, true
+    try:
+        vals = _json.loads(element.json_val)
+    except Exception:
+        vals = []
+    if not isinstance(vals, list):
+        vals = [vals]
+    if not vals:
+        return compiler.process(true(), **kw)
+    conds = [cast(element.col, String).like(f'%"{v}"%') for v in vals]
+    return compiler.process(and_(*conds), **kw)
+
+
+def labels_jsonb_contains(col, json_val):
+    """col(JSON 배열) ⊇ json_val. Postgres=`@>`, 그 외=LIKE 폴백 (방언 이식)."""
+    return _LabelsContain(col, json_val)
+
+
 from ...auth import get_current_user  # noqa: F401 (re-exported for convenience)
 from ...config import get_settings
 from ... import gitlab_client
