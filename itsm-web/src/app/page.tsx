@@ -323,11 +323,36 @@ function HomeContent() {
   }, [refreshStats])
 
   // SSE 알림 수신 시 stats 갱신 (티켓 변경 이벤트 반영)
+  // 연결이 끊기면 지수 백오프(1s→최대 30s)로 재연결 — 일시적 네트워크/프록시 타임아웃에
+  // 영구 종료되지 않도록 함. 정상 수신 시 백오프를 리셋한다.
   useEffect(() => {
-    const es = new EventSource(`${API_BASE}/notifications/stream`, { withCredentials: true })
-    es.onmessage = () => { refreshStats() }
-    es.onerror = () => { es.close() }
-    return () => es.close()
+    let es: EventSource | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let retryDelay = 1000
+    let closed = false
+
+    const connect = () => {
+      if (closed) return
+      es = new EventSource(`${API_BASE}/notifications/stream`, { withCredentials: true })
+      es.onmessage = () => {
+        retryDelay = 1000
+        refreshStats()
+      }
+      es.onerror = () => {
+        es?.close()
+        es = null
+        if (closed) return
+        reconnectTimer = setTimeout(connect, retryDelay)
+        retryDelay = Math.min(retryDelay * 2, 30_000)
+      }
+    }
+    connect()
+
+    return () => {
+      closed = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      es?.close()
+    }
   }, [refreshStats])
 
   const load = useCallback(async () => {
