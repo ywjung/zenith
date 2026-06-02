@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { useAuth } from '@/context/AuthContext'
 import { API_BASE } from '@/lib/constants'
 import { toast } from 'sonner'
@@ -12,6 +13,7 @@ import { toast } from 'sonner'
  *   - refresh 성공 → exp 재조회, 실패 → /login?next=<현재경로>
  */
 export default function SessionExpireWarning() {
+  const t = useTranslations()
   const { user } = useAuth()
   const [exp, setExp] = useState<number | null>(null)
   const [show, setShow] = useState(false)
@@ -68,15 +70,15 @@ export default function SessionExpireWarning() {
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include' })
       if (res.ok) {
-        toast.success('세션이 연장되었습니다.')
+        toast.success(t('components_sessionexpirewarning.session_extended_success'))
         setShow(false)
         dismissedExpRef.current = null  // 새 exp로 갱신되면 다시 표시 가능
         await fetchExp()
       } else {
-        toast.error('세션 연장에 실패했습니다. 다시 로그인해주세요.')
+        toast.error(t('components_sessionexpirewarning.session_extend_failed'))
       }
     } catch {
-      toast.error('네트워크 오류로 세션 연장에 실패했습니다.')
+      toast.error(t('components_sessionexpirewarning.session_extend_network_error'))
     } finally {
       refreshingRef.current = false
     }
@@ -105,12 +107,12 @@ export default function SessionExpireWarning() {
         <div className="flex items-start gap-3 mb-4">
           <div className="text-2xl">⏰</div>
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">세션이 곧 만료됩니다</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{t('components_sessionexpirewarning.session_expiring_title')}</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               <span className="font-mono font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
                 {min}:{sec.toString().padStart(2, '0')}
               </span>
-              {' '}후 자동 로그아웃됩니다.
+              {' '}{t('components_sessionexpirewarning.auto_logout_suffix')}
             </p>
           </div>
         </div>
@@ -120,14 +122,14 @@ export default function SessionExpireWarning() {
             onClick={dismiss}
             className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
           >
-            나중에
+            {t('components_sessionexpirewarning.later_button')}
           </button>
           <button
             type="button"
             onClick={extend}
             className="px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md font-medium transition-all"
           >
-            세션 연장
+            {t('components_sessionexpirewarning.extend_button')}
           </button>
         </div>
       </div>

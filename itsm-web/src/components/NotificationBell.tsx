@@ -10,6 +10,7 @@ import { API_BASE } from '@/lib/constants'
 export default function NotificationBell() {
   const t = useTranslations('notifications')
   const tc = useTranslations('common')
+  const tI18n = useTranslations()
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
@@ -192,7 +193,7 @@ export default function NotificationBell() {
           <span
             className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-badge-pulse"
             aria-live="polite"
-            aria-label={`읽지 않은 알림 ${unreadCount}개`}
+            aria-label={tI18n('components_notificationbell.unread_count_label', { count: unreadCount })}
           >
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
@@ -261,7 +262,7 @@ export default function NotificationBell() {
                         aria-label={t('mark_read_title')}
                       />
                     ) : (
-                      <span className="shrink-0 text-[10px] text-gray-300 dark:text-gray-600 mt-1.5" title="읽음" aria-label="읽음">✓</span>
+                      <span className="shrink-0 text-[10px] text-gray-300 dark:text-gray-600 mt-1.5" title={tI18n('components_notificationbell.read_label')} aria-label={tI18n('components_notificationbell.read_label')}>✓</span>
                     )}
                   </div>
                 </div>

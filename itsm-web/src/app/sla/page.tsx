@@ -95,6 +95,7 @@ function TrendChart({ trend }: { trend: { date: string; count: number }[] }) {
 
 function SLADashboardContent() {
   const t = useTranslations('sla_page')
+  const tI18n = useTranslations()
   const tTicket = useTranslations('ticket')
   const tc = useTranslations('common')
   const { isAgent } = useAuth()
@@ -230,7 +231,7 @@ function SLADashboardContent() {
         </div>
         {/* 7일 준수율 */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">7일 준수율</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{tI18n('app_sla_page.compliance_7d_label')}</div>
           {data.compliance_rate_7d != null ? (
             <div className="flex items-end gap-1">
               <span className={`text-2xl font-bold ${
@@ -243,15 +244,15 @@ function SLADashboardContent() {
               <span className="text-sm text-gray-400 dark:text-gray-500 mb-1">%</span>
             </div>
           ) : (
-            <div className="text-sm text-gray-400 dark:text-gray-500">데이터 없음</div>
+            <div className="text-sm text-gray-400 dark:text-gray-500">{tI18n('app_sla_page.no_data')}</div>
           )}
           <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-            {data.resolved_count_7d ?? 0}건 해결
+            {tI18n('app_sla_page.resolved_count', { count: data.resolved_count_7d ?? 0 })}
           </div>
         </div>
         {/* MTTR */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">평균 해결 시간</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{tI18n('app_sla_page.mttr_label')}</div>
           {data.mttr_hours_7d != null ? (
             <div className="flex items-end gap-1">
               <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
@@ -260,13 +261,13 @@ function SLADashboardContent() {
               <span className="text-sm text-gray-400 dark:text-gray-500 mb-1">h</span>
             </div>
           ) : (
-            <div className="text-sm text-gray-400 dark:text-gray-500">데이터 없음</div>
+            <div className="text-sm text-gray-400 dark:text-gray-500">{tI18n('app_sla_page.no_data')}</div>
           )}
-          <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">MTTR · 7일 기준</div>
+          <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{tI18n('app_sla_page.mttr_caption')}</div>
         </div>
         {/* 가장 위험한 티켓 */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">최우선 조치 대상</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{tI18n('app_sla_page.top_priority_label')}</div>
           {data.worst_offenders && data.worst_offenders.length > 0 ? (
             <Link href={`/tickets/${data.worst_offenders[0].iid}`} className="block group">
               <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-blue-600">
@@ -276,11 +277,11 @@ function SLADashboardContent() {
                 {data.worst_offenders[0].title}
               </div>
               <div className="text-[10px] text-red-600 dark:text-red-400 mt-0.5 font-mono">
-                {data.worst_offenders[0].elapsed_pct.toFixed(0)}% · {data.worst_offenders[0].breached ? '위반' : '임박'}
+                {data.worst_offenders[0].elapsed_pct.toFixed(0)}% · {data.worst_offenders[0].breached ? tI18n('app_sla_page.status_breached') : tI18n('app_sla_page.status_warning')}
               </div>
             </Link>
           ) : (
-            <div className="text-sm text-green-600 dark:text-green-400">✓ 양호</div>
+            <div className="text-sm text-green-600 dark:text-green-400">✓ {tI18n('app_sla_page.healthy')}</div>
           )}
         </div>
       </div>
@@ -293,7 +294,7 @@ function SLADashboardContent() {
             <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm overflow-hidden">
               <div className="px-4 py-2.5 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
                 <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  우선순위별 현황
+                  {tI18n('app_sla_page.by_priority_title')}
                 </h2>
               </div>
               <div className="p-4 space-y-2">
@@ -344,7 +345,7 @@ function SLADashboardContent() {
             <div className="bg-white dark:bg-gray-900 rounded-lg border dark:border-gray-700 shadow-sm overflow-hidden">
               <div className="px-4 py-2.5 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
                 <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  담당자별 부하 Top 10
+                  {tI18n('app_sla_page.by_assignee_title')}
                 </h2>
               </div>
               <div className="p-4">
@@ -375,7 +376,7 @@ function SLADashboardContent() {
                   })}
                 </div>
                 <div className="flex items-center justify-end gap-3 pt-2 mt-2 border-t dark:border-gray-700/50 text-[10px] text-gray-500 dark:text-gray-400">
-                  <span>위반 · 임박 / 전체</span>
+                  <span>{tI18n('app_sla_page.workload_legend')}</span>
                 </div>
               </div>
             </div>

@@ -18,6 +18,7 @@ const OPENAI_MODEL_KEY: Record<string, string> = {
 
 export default function AISettingsPage() {
   const t = useTranslations('admin.ai_settings')
+  const tI18n = useTranslations()
   const [settings, setSettings] = useState<AISettingsData | null>(null)
 
   const [form, setForm] = useState({
@@ -328,9 +329,9 @@ export default function AISettingsPage() {
           {ollamaFetched && ollamaModels.length > 0 && (
             <div className="space-y-1">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                모델 선택
+                {tI18n('app_admin_ai_settings_page.model_select_label')}
                 <span className="ml-2 text-xs font-normal text-green-600 dark:text-green-400">
-                  ✓ {ollamaModels.length}개 모델 발견
+                  ✓ {tI18n('app_admin_ai_settings_page.models_found', { count: ollamaModels.length })}
                 </span>
               </label>
               <div className="space-y-1.5 max-h-52 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 p-1">

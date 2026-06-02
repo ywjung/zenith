@@ -156,10 +156,10 @@ export default function KeyboardShortcuts() {
     { key: 'g → p', desc: t('shortcuts.portal') },
     { key: 'g → h', desc: t('shortcuts.help') },
     { key: 'n', desc: t('shortcuts.new_ticket') },
-    { key: 'c', desc: '댓글 입력창 포커스 (티켓 상세)' },
-    { key: 'e', desc: '티켓 편집 (티켓 상세)' },
-    { key: 's', desc: '다음 상태로 전환 (티켓 상세)' },
-    { key: 'j / k', desc: '다음/이전 댓글 스크롤 (티켓 상세)' },
+    { key: 'c', desc: t('components_keyboardshortcuts.focus_comment_input') },
+    { key: 'e', desc: t('components_keyboardshortcuts.edit_ticket') },
+    { key: 's', desc: t('components_keyboardshortcuts.next_status') },
+    { key: 'j / k', desc: t('components_keyboardshortcuts.scroll_comments') },
     { key: 'r', desc: t('shortcuts.refresh') },
     { key: '/', desc: t('shortcuts.search_focus') },
     { key: '⌘K / Ctrl+K', desc: t('shortcuts.global_search') },
@@ -172,7 +172,7 @@ export default function KeyboardShortcuts() {
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 overflow-hidden animate-scaleIn" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
           <h2 className="text-base font-bold text-gray-900 dark:text-white">{t('shortcuts.title')}</h2>
-          <button onClick={() => setShowHelp(false)} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-lg leading-none" aria-label="닫기">✕</button>
+          <button onClick={() => setShowHelp(false)} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-lg leading-none" aria-label={t('components_keyboardshortcuts.close')}>✕</button>
         </div>
         <div className="p-4 space-y-1">
           {shortcuts.map(s => (

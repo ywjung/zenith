@@ -69,6 +69,7 @@ const LIMIT = 50
 
 function AuditContent() {
   const t = useTranslations('admin.audit')
+  const tI18n = useTranslations()
   const { isAgent } = useAuth()
 
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
@@ -156,7 +157,7 @@ function AuditContent() {
     return (
       <div className="text-center py-20">
         <div className="text-4xl mb-3">🔒</div>
-        <p className="text-gray-500">에이전트 이상 권한이 필요합니다.</p>
+        <p className="text-gray-500">{tI18n('app_admin_audit_page.agent_permission_required')}</p>
       </div>
     )
   }

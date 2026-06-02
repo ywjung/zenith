@@ -228,9 +228,9 @@ function TabWatches() {
       {/* 상태별 필터 칩 */}
       <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center gap-2 flex-wrap">
         {([
-          { v: 'all', label: '전체', count: watches.length },
-          { v: 'active', label: '진행 중', count: activeCount },
-          { v: 'closed', label: '종료됨', count: closedCount },
+          { v: 'all', label: t('app_app_notifications_page.filter_all'), count: watches.length },
+          { v: 'active', label: t('app_app_notifications_page.filter_active'), count: activeCount },
+          { v: 'closed', label: t('app_app_notifications_page.filter_closed'), count: closedCount },
         ] as const).map(({ v, label, count }) => (
           <button
             key={v}

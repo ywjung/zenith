@@ -69,6 +69,7 @@ function GanttContent() {
   const t = useTranslations('gantt')
   const ts = useTranslations('ticket.status')
   const tp = useTranslations('ticket.priority')
+  const tI18n = useTranslations()
   const [days, setDays] = useState<14 | 30 | 60>(30)
   const [tickets, setTickets] = useState<GanttTicket[]>([])
   const [links, setLinks] = useState<GanttLink[]>([])
@@ -161,7 +162,7 @@ function GanttContent() {
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('col_ticket')}</span>
             {!loading && (
               <span className="text-xs text-gray-400 dark:text-gray-500">
-                ({tickets.length}건)
+                {tI18n('app_gantt_page.ticket_count', { n: tickets.length })}
               </span>
             )}
           </div>
@@ -519,7 +520,7 @@ function GanttContent() {
               </svg>
               <div>
                 <span className="font-medium text-red-500 dark:text-red-400">{t('today')}</span>
-                <p className="text-gray-400 dark:text-gray-500 mt-0.5">현재 날짜 기준선</p>
+                <p className="text-gray-400 dark:text-gray-500 mt-0.5">{tI18n('app_gantt_page.today_line_desc')}</p>
               </div>
             </div>
           </div>

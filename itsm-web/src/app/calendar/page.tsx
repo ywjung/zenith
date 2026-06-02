@@ -80,6 +80,7 @@ function SlidePanel({
 }) {
   const t = useTranslations('calendar')
   const ts = useTranslations('ticket.status')
+  const tI18n = useTranslations()
 
   useEffect(() => {
     if (!date) return
@@ -131,7 +132,7 @@ function SlidePanel({
           )}
           {changes.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">🛠️ 변경 일정 ({changes.length})</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">🛠️ {tI18n('app_calendar_page.change_schedule_count', { count: changes.length })}</p>
               {changes.map(c => (
                 <Link
                   key={c.id}
@@ -139,7 +140,7 @@ function SlidePanel({
                   className="block p-2.5 rounded-lg border border-indigo-100 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${RISK_COLOR[c.risk_level] ?? 'bg-gray-400'}`} title={`위험도: ${c.risk_level}`} />
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${RISK_COLOR[c.risk_level] ?? 'bg-gray-400'}`} title={tI18n('app_calendar_page.risk_level_label', { level: c.risk_level })} />
                     <span className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate flex-1">{c.title}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${CHANGE_STATUS_BG[c.status] ?? 'bg-gray-100 text-gray-500'}`}>{c.status}</span>
                   </div>
@@ -204,6 +205,7 @@ function matchesStatus(tk: CalendarTicket, f: StatusFilter): boolean {
 
 function CalendarContent() {
   const t = useTranslations('calendar')
+  const tI18n = useTranslations()
   const router = useRouter()
   const { user, isAgent } = useAuth()
   const now = new Date()
@@ -407,9 +409,9 @@ function CalendarContent() {
               onClick={goToday}
               disabled={isCurrentMonth}
               className="ml-1 px-2.5 py-1 text-xs font-medium rounded-md border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              title="이번 달로 이동"
+              title={tI18n('app_calendar_page.go_to_this_month')}
             >
-              오늘
+              {tI18n('app_calendar_page.today')}
             </button>
           </div>
           {/* 범례 (우측) */}
@@ -437,16 +439,16 @@ function CalendarContent() {
 
         {/* 월 요약 바 */}
         <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-          <span className="text-gray-500 dark:text-gray-400">이달 요약:</span>
-          <SummaryStat label="생성" value={monthSummary.created} />
-          <SummaryStat label="해결" value={monthSummary.resolved} accent="emerald" />
-          <SummaryStat label="미해결" value={monthSummary.open} accent={monthSummary.open > 0 ? 'amber' : undefined} />
-          <SummaryStat label="SLA 위반" value={monthSummary.breached} accent={monthSummary.breached > 0 ? 'red' : undefined} />
+          <span className="text-gray-500 dark:text-gray-400">{tI18n('app_calendar_page.month_summary')}</span>
+          <SummaryStat label={tI18n('app_calendar_page.summary_created')} value={monthSummary.created} />
+          <SummaryStat label={tI18n('app_calendar_page.summary_resolved')} value={monthSummary.resolved} accent="emerald" />
+          <SummaryStat label={tI18n('app_calendar_page.summary_open')} value={monthSummary.open} accent={monthSummary.open > 0 ? 'amber' : undefined} />
+          <SummaryStat label={tI18n('app_calendar_page.summary_sla_breached')} value={monthSummary.breached} accent={monthSummary.breached > 0 ? 'red' : undefined} />
           <SummaryStat label="Critical" value={monthSummary.critical} accent={monthSummary.critical > 0 ? 'red' : undefined} />
-          {isAgent && <SummaryStat label="변경일정" value={monthSummary.changes} accent="indigo" />}
+          {isAgent && <SummaryStat label={tI18n('app_calendar_page.summary_changes')} value={monthSummary.changes} accent="indigo" />}
           {user && monthSummary.open > 0 && monthSummary.created > 0 && (
             <span className="text-gray-400 ml-auto">
-              해결률 {Math.round((monthSummary.resolved / monthSummary.created) * 100)}%
+              {tI18n('app_calendar_page.resolution_rate', { rate: Math.round((monthSummary.resolved / monthSummary.created) * 100) })}
             </span>
           )}
         </div>
@@ -454,9 +456,9 @@ function CalendarContent() {
         {/* 필터 툴바 */}
         <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
           <div className="flex items-center gap-1">
-            <span className="text-gray-500 dark:text-gray-400 mr-1">상태</span>
+            <span className="text-gray-500 dark:text-gray-400 mr-1">{tI18n('app_calendar_page.filter_status')}</span>
             {(['all', 'open', 'in_progress', 'waiting', 'resolved'] as StatusFilter[]).map(s => {
-              const labels: Record<StatusFilter, string> = { all: '전체', open: '오픈', in_progress: '진행중', waiting: '대기', resolved: '해결/완료' }
+              const labels: Record<StatusFilter, string> = { all: tI18n('app_calendar_page.status_all'), open: tI18n('app_calendar_page.status_open'), in_progress: tI18n('app_calendar_page.status_in_progress'), waiting: tI18n('app_calendar_page.status_waiting'), resolved: tI18n('app_calendar_page.status_resolved_closed') }
               return (
                 <button
                   key={s}
@@ -473,9 +475,9 @@ function CalendarContent() {
             })}
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-gray-500 dark:text-gray-400 mr-1">우선순위</span>
+            <span className="text-gray-500 dark:text-gray-400 mr-1">{tI18n('app_calendar_page.filter_priority')}</span>
             {(['all', 'critical', 'high', 'medium', 'low'] as PriorityFilter[]).map(p => {
-              const labels: Record<PriorityFilter, string> = { all: '전체', critical: '긴급', high: '높음', medium: '보통', low: '낮음' }
+              const labels: Record<PriorityFilter, string> = { all: tI18n('app_calendar_page.priority_all'), critical: tI18n('app_calendar_page.priority_critical'), high: tI18n('app_calendar_page.priority_high'), medium: tI18n('app_calendar_page.priority_medium'), low: tI18n('app_calendar_page.priority_low') }
               return (
                 <button
                   key={p}
@@ -500,7 +502,7 @@ function CalendarContent() {
                 onChange={e => setShowChanges(e.target.checked)}
                 className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <span className="text-gray-600 dark:text-gray-400">🛠️ 변경 일정 표시</span>
+              <span className="text-gray-600 dark:text-gray-400">🛠️ {tI18n('app_calendar_page.show_change_schedule')}</span>
             </label>
           )}
           {(statusFilter !== 'all' || priorityFilter !== 'all') && (
@@ -508,7 +510,7 @@ function CalendarContent() {
               onClick={() => { setStatusFilter('all'); setPriorityFilter('all') }}
               className="ml-auto text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 underline"
             >
-              필터 초기화 ({filteredTickets.length}/{tickets.length})
+              {tI18n('app_calendar_page.reset_filters', { shown: filteredTickets.length, total: tickets.length })}
             </button>
           )}
         </div>
@@ -559,7 +561,7 @@ function CalendarContent() {
                 key={dateStr}
                 onClick={() => setSelectedDate(isSelected ? null : dateStr)}
                 onDoubleClick={() => router.push(`/tickets/new?sla_due_date=${dateStr}`)}
-                title={isOverdue ? 'SLA 위반 미해결 티켓이 있습니다' : isImminent ? 'SLA 마감 임박 (2일 이내)' : '더블클릭으로 새 티켓 생성'}
+                title={isOverdue ? tI18n('app_calendar_page.cell_title_overdue') : isImminent ? tI18n('app_calendar_page.cell_title_imminent') : tI18n('app_calendar_page.cell_title_create')}
                 className={`
                   min-h-[96px] border-b border-r border-gray-100 dark:border-gray-800 p-1.5 cursor-pointer transition-colors relative
                   ${isSelected
@@ -593,8 +595,8 @@ function CalendarContent() {
                     `}>
                       {day}
                     </div>
-                    {isOverdue && <span className="text-[9px] leading-tight text-red-600 dark:text-red-400 font-bold" title="SLA 위반">⚠️</span>}
-                    {!isOverdue && isImminent && <span className="text-[9px] leading-tight text-amber-600 dark:text-amber-400" title="SLA 임박">⏳</span>}
+                    {isOverdue && <span className="text-[9px] leading-tight text-red-600 dark:text-red-400 font-bold" title={tI18n('app_calendar_page.sla_overdue')}>⚠️</span>}
+                    {!isOverdue && isImminent && <span className="text-[9px] leading-tight text-amber-600 dark:text-amber-400" title={tI18n('app_calendar_page.sla_imminent')}>⏳</span>}
                   </div>
                   {isHoliday && (
                     <span

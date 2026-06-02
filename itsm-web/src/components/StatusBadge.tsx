@@ -15,16 +15,16 @@ const STATUS_STYLES: Record<string, string> = {
   closed:            'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/50',
 }
 
-const STATUS_TOOLTIPS: Record<string, string> = {
-  open:              '신규 접수된 티켓 — 담당자 배정 대기 중',
-  approved:          '승인 완료 — 작업 시작 준비',
-  in_progress:       '담당자가 작업 진행 중',
-  waiting:           '신청자/외부 응답 대기 중 (SLA 일시 정지 가능)',
-  resolved:          '작업 완료 — 신청자 확인 대기',
-  testing:           '변경/배포 전 테스트 진행 중',
-  ready_for_release: '운영 환경 배포 준비 완료',
-  released:          '운영 환경 반영 완료',
-  closed:            '최종 종료 — 더 이상 변경되지 않음',
+const STATUS_TOOLTIP_KEYS: Record<string, string> = {
+  open:              'components_statusbadge.status_tooltip_open',
+  approved:          'components_statusbadge.status_tooltip_approved',
+  in_progress:       'components_statusbadge.status_tooltip_in_progress',
+  waiting:           'components_statusbadge.status_tooltip_waiting',
+  resolved:          'components_statusbadge.status_tooltip_resolved',
+  testing:           'components_statusbadge.status_tooltip_testing',
+  ready_for_release: 'components_statusbadge.status_tooltip_ready_for_release',
+  released:          'components_statusbadge.status_tooltip_released',
+  closed:            'components_statusbadge.status_tooltip_closed',
 }
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -34,11 +34,11 @@ const PRIORITY_STYLES: Record<string, string> = {
   critical: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700/50',
 }
 
-const PRIORITY_TOOLTIPS: Record<string, string> = {
-  low:      '낮음 — SLA 168시간 (7일)',
-  medium:   '보통 — SLA 72시간 (3일)',
-  high:     '높음 — SLA 24시간',
-  critical: '긴급 — SLA 8시간 · 즉시 대응 필요',
+const PRIORITY_TOOLTIP_KEYS: Record<string, string> = {
+  low:      'components_statusbadge.priority_tooltip_low',
+  medium:   'components_statusbadge.priority_tooltip_medium',
+  high:     'components_statusbadge.priority_tooltip_high',
+  critical: 'components_statusbadge.priority_tooltip_critical',
 }
 
 // 우선순위별 SLA 목표 시간 (시간 단위)
@@ -54,7 +54,7 @@ export function StatusBadge({ status }: { status?: string }) {
   const key = status ?? 'open'
   let label: string
   try { label = t(`ticket.status.${key}`) } catch { label = key }
-  const tooltip = STATUS_TOOLTIPS[key] ? `${label} — ${STATUS_TOOLTIPS[key]}` : label
+  const tooltip = STATUS_TOOLTIP_KEYS[key] ? `${label} — ${t(STATUS_TOOLTIP_KEYS[key])}` : label
   return (
     <span
       title={tooltip}
@@ -71,7 +71,7 @@ export function PriorityBadge({ priority }: { priority?: string }) {
   const key = priority ?? 'medium'
   let label: string
   try { label = t(`ticket.priority.${key}`) } catch { label = key }
-  const tooltip = PRIORITY_TOOLTIPS[key] ? `${label} — ${PRIORITY_TOOLTIPS[key]}` : label
+  const tooltip = PRIORITY_TOOLTIP_KEYS[key] ? `${label} — ${t(PRIORITY_TOOLTIP_KEYS[key])}` : label
   return (
     <span
       title={tooltip}
@@ -116,10 +116,10 @@ export function SlaBadge({
     return (
       <span
         className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs border bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
-        title="SLA 일시정지 — 신청자/외부 응답 대기 중"
+        title={t('components_statusbadge.sla_paused_tooltip')}
       >
         <span aria-hidden="true">⏸</span>
-        SLA 일시정지
+        {t('components_statusbadge.sla_paused_label')}
       </span>
     )
   }
@@ -177,8 +177,8 @@ export function SlaBadge({
       </span>
       <span
         className="hidden md:inline-block w-12 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"
-        title={`SLA 진행률 ${pct}%`}
-        aria-label={`SLA 진행률 ${pct}퍼센트`}
+        title={t('components_statusbadge.sla_progress_title', { pct })}
+        aria-label={t('components_statusbadge.sla_progress_aria', { pct })}
       >
         <span
           className={`block h-full ${barColor} transition-all duration-500`}

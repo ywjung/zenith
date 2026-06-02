@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useAuth } from '@/context/AuthContext'
 import { API_BASE } from '@/lib/constants'
 
@@ -23,6 +24,7 @@ interface HealthResponse {
  * 30초마다 /api/health 폴링. 서비스 중단 원인을 즉시 파악.
  */
 export default function HealthBadge() {
+  const t = useTranslations()
   const { isAdmin } = useAuth()
   const [health, setHealth] = useState<Health | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -67,7 +69,7 @@ export default function HealthBadge() {
     >
       <button
         type="button"
-        aria-label="시스템 헬스"
+        aria-label={t('components_healthbadge.system_health')}
         className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium shadow-lg border backdrop-blur
           ${allOk
             ? 'bg-white/80 dark:bg-gray-800/80 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'

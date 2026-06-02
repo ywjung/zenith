@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 
 /**
  * 클립보드 복사 버튼 — 텍스트 복사 후 토스트 알림.
@@ -24,6 +25,7 @@ export default function CopyButton({
   iconOnly?: boolean
   children?: React.ReactNode
 }) {
+  const t = useTranslations()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async (e: React.MouseEvent) => {
@@ -32,10 +34,10 @@ export default function CopyButton({
     try {
       await navigator.clipboard.writeText(value)
       setCopied(true)
-      toast.success(successMessage || '복사되었습니다.')
+      toast.success(successMessage || t('components_copybutton.copy_success'))
       setTimeout(() => setCopied(false), 1500)
     } catch {
-      toast.error('복사 실패')
+      toast.error(t('components_copybutton.copy_failed'))
     }
   }
 
@@ -43,7 +45,7 @@ export default function CopyButton({
     <button
       type="button"
       onClick={handleCopy}
-      aria-label={label || '복사'}
+      aria-label={label || t('components_copybutton.copy_aria_label')}
       className={`inline-flex items-center gap-1 text-xs hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${className}`}
     >
       {copied ? (

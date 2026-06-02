@@ -57,6 +57,7 @@ function ProfileContent() {
   const { user } = useAuth()
   const router = useRouter()
   const t = useTranslations('profile')
+  const tI18n = useTranslations()
 
   const [stats, setStats] = useState<MyStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
@@ -86,7 +87,7 @@ function ProfileContent() {
       const result = await uploadAvatar(file)
       setAvatarUrl(result.avatar_url)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '아바타 업로드 실패')
+      setError(err instanceof Error ? err.message : tI18n('app_profile_page.avatar_upload_failed'))
     } finally {
       setAvatarUploading(false)
       // input 초기화 (같은 파일 재선택 허용)
@@ -183,7 +184,7 @@ function ProfileContent() {
     setPushError('')
     try {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        setPushError('이 브라우저는 Web Push를 지원하지 않습니다.')
+        setPushError(tI18n('app_profile_page.push_unsupported'))
         return
       }
       const reg = await navigator.serviceWorker.ready
@@ -201,7 +202,7 @@ function ProfileContent() {
         const { publicKey } = await fetchPushVapidKey()
         const perm = await Notification.requestPermission()
         if (perm !== 'granted') {
-          setPushError('알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.')
+          setPushError(tI18n('app_profile_page.push_permission_denied'))
           return
         }
         const urlBase64ToUint8Array = (base64: string) => {
@@ -220,7 +221,7 @@ function ProfileContent() {
         setPushSubscribed(true)
       }
     } catch (err: unknown) {
-      setPushError(err instanceof Error ? err.message : 'Web Push 오류가 발생했습니다.')
+      setPushError(err instanceof Error ? err.message : tI18n('app_profile_page.push_error'))
     } finally {
       setPushLoading(false)
     }
@@ -291,7 +292,7 @@ function ProfileContent() {
               onClick={() => avatarInputRef.current?.click()}
               disabled={avatarUploading}
               className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:cursor-not-allowed"
-              title="아바타 변경"
+              title={tI18n('app_profile_page.change_avatar')}
             >
               {avatarUploading ? (
                 <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
@@ -445,9 +446,9 @@ function ProfileContent() {
       {/* Web Push 알림 */}
       {pushEnabled && (
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">브라우저 푸시 알림</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">{tI18n('app_profile_page.browser_push_title')}</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            티켓 상태 변경 시 이 브라우저로 알림을 받습니다.
+            {tI18n('app_profile_page.browser_push_desc')}
           </p>
           {pushError && (
             <p className="text-sm text-red-600 dark:text-red-400 mb-3">{pushError}</p>
@@ -456,7 +457,7 @@ function ProfileContent() {
             <div className="flex items-center gap-2">
               <span className={`inline-block w-2 h-2 rounded-full ${pushSubscribed ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
               <span className="text-sm text-gray-700 dark:text-gray-300">
-                {pushSubscribed ? '구독 중' : '구독 안 함'}
+                {pushSubscribed ? tI18n('app_profile_page.subscribed') : tI18n('app_profile_page.not_subscribed')}
               </span>
             </div>
             <button
@@ -468,7 +469,7 @@ function ProfileContent() {
                   : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
             >
-              {pushLoading ? '처리 중...' : pushSubscribed ? '구독 해제' : '구독하기'}
+              {pushLoading ? tI18n('app_profile_page.processing') : pushSubscribed ? tI18n('app_profile_page.unsubscribe') : tI18n('app_profile_page.subscribe')}
             </button>
           </div>
         </div>
@@ -478,8 +479,8 @@ function ProfileContent() {
       <div className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 shadow-sm p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">🔔 커스텀 알림 규칙</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">조건에 맞는 티켓 이벤트에만 알림을 받도록 설정합니다.</p>
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">🔔 {tI18n('app_profile_page.custom_rules_title')}</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{tI18n('app_profile_page.custom_rules_desc')}</p>
           </div>
           <button
             onClick={() => {
@@ -489,11 +490,11 @@ function ProfileContent() {
             }}
             className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
           >
-            + 규칙 추가
+            + {tI18n('app_profile_page.add_rule')}
           </button>
         </div>
         {notifRules.length === 0 ? (
-          <p className="text-xs text-gray-400 dark:text-gray-500">설정된 규칙이 없습니다. 기본 알림 설정만 적용됩니다.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">{tI18n('app_profile_page.no_rules')}</p>
         ) : (
           <div className="space-y-2">
             {notifRules.map(rule => (
@@ -514,8 +515,8 @@ function ProfileContent() {
                   <div className="flex flex-wrap gap-1 mt-0.5">
                     {rule.match_priorities.map(p => <span key={p} className="text-[10px] px-1 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded">{p}</span>)}
                     {rule.match_categories.map(c => <span key={c} className="text-[10px] px-1 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">{c}</span>)}
-                    {rule.match_sla_warning && <span className="text-[10px] px-1 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded">SLA임박</span>}
-                    <span className="text-[10px] text-gray-400 dark:text-gray-600 ml-1">→ {[rule.notify_in_app && '앱', rule.notify_email && '이메일', rule.notify_push && '푸시'].filter(Boolean).join(' ')}</span>
+                    {rule.match_sla_warning && <span className="text-[10px] px-1 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded">{tI18n('app_profile_page.sla_imminent')}</span>}
+                    <span className="text-[10px] text-gray-400 dark:text-gray-600 ml-1">→ {[rule.notify_in_app && tI18n('app_profile_page.channel_app'), rule.notify_email && tI18n('app_profile_page.channel_email'), rule.notify_push && tI18n('app_profile_page.channel_push')].filter(Boolean).join(' ')}</span>
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
@@ -526,7 +527,7 @@ function ProfileContent() {
                       setShowRuleModal(true)
                     }}
                     className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                  >수정</button>
+                  >{tI18n('app_profile_page.edit')}</button>
                   <button
                     onClick={async () => {
                       try {
@@ -535,7 +536,7 @@ function ProfileContent() {
                       } catch { /* 삭제 실패 무시 — 목록 갱신하지 않으면 UI 일관성 유지 */ }
                     }}
                     className="text-xs text-red-500 hover:underline"
-                  >삭제</button>
+                  >{tI18n('app_profile_page.delete')}</button>
                 </div>
               </div>
             ))}
@@ -548,17 +549,17 @@ function ProfileContent() {
         <div className="fixed inset-0 bg-black/50 animate-fadeIn backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md animate-scaleIn">
             <div className="p-5 border-b dark:border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{editRule ? '알림 규칙 수정' : '새 알림 규칙'}</h3>
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{editRule ? tI18n('app_profile_page.edit_rule_title') : tI18n('app_profile_page.new_rule_title')}</h3>
             </div>
             <div className="p-5 space-y-4">
               <input
-                placeholder="규칙 이름 *"
+                placeholder={tI18n('app_profile_page.rule_name_placeholder')}
                 value={ruleForm.name}
                 onChange={e => setRuleForm(f => ({ ...f, name: e.target.value }))}
                 className="w-full text-sm border dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               <div>
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">우선순위 조건 (비어있으면 모두)</p>
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">{tI18n('app_profile_page.priority_condition')}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {['critical', 'high', 'medium', 'low'].map(p => (
                     <label key={p} className="flex items-center gap-1 text-xs cursor-pointer">
@@ -571,13 +572,13 @@ function ProfileContent() {
               <div className="flex flex-wrap gap-3">
                 <label className="flex items-center gap-1 text-xs cursor-pointer">
                   <input type="checkbox" checked={ruleForm.match_sla_warning} onChange={e => setRuleForm(f => ({ ...f, match_sla_warning: e.target.checked }))} className="rounded text-red-500" />
-                  SLA 임박 시에만
+                  {tI18n('app_profile_page.sla_only')}
                 </label>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">알림 채널</p>
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">{tI18n('app_profile_page.notif_channels')}</p>
                 <div className="flex gap-3">
-                  {[['notify_in_app', '앱 내'], ['notify_email', '이메일'], ['notify_push', 'Web Push']].map(([k, label]) => (
+                  {[['notify_in_app', tI18n('app_profile_page.channel_in_app')], ['notify_email', tI18n('app_profile_page.channel_email')], ['notify_push', 'Web Push']].map(([k, label]) => (
                     <label key={k} className="flex items-center gap-1 text-xs cursor-pointer">
                       <input type="checkbox" checked={ruleForm[k as keyof NotificationRuleCreate] as boolean} onChange={e => setRuleForm(f => ({ ...f, [k]: e.target.checked }))} className="rounded text-blue-600" />
                       {label}
@@ -587,7 +588,7 @@ function ProfileContent() {
               </div>
             </div>
             <div className="p-5 border-t dark:border-gray-700 flex justify-end gap-2">
-              <button onClick={() => setShowRuleModal(false)} className="text-sm px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">취소</button>
+              <button onClick={() => setShowRuleModal(false)} className="text-sm px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">{tI18n('app_profile_page.cancel')}</button>
               <button
                 disabled={!ruleForm.name.trim() || ruleSaving}
                 onClick={async () => {
@@ -602,13 +603,13 @@ function ProfileContent() {
                     }
                     setShowRuleModal(false)
                   } catch (err) {
-                    toast.error(err instanceof Error ? err.message : '저장 실패')
+                    toast.error(err instanceof Error ? err.message : tI18n('app_profile_page.save_failed'))
                   } finally {
                     setRuleSaving(false)
                   }
                 }}
                 className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >{ruleSaving ? '저장 중...' : '저장'}</button>
+              >{ruleSaving ? tI18n('app_profile_page.saving') : tI18n('app_profile_page.save')}</button>
             </div>
           </div>
         </div>
