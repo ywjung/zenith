@@ -121,6 +121,17 @@
     }
   },
   "dashboard": {
+    "toast_invalid_filter": "Ignoring unknown filter values: {values}",
+    "toast_bulk_partial": "Bulk action: {succeeded} succeeded, {failed} failed",
+    "toast_bulk_done": "Bulk action completed on {count} tickets.",
+    "toast_import_ok": "Imported {count} tickets.",
+    "toast_import_failed_suffix": " ({count} failed)",
+    "toast_csv_failed": "CSV import failed: {count} errors",
+    "load_failed": "Failed to load tickets.",
+    "all_sla_ok": "All tickets within SLA",
+    "range_today": "Today",
+    "range_7d": "7 days",
+    "range_30d": "30 days",
     "my_tickets": "My Tickets",
     "sla_status": "SLA Status",
     "recent_kb": "Recent KB Articles",
