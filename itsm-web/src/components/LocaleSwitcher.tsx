@@ -7,7 +7,11 @@ export default function LocaleSwitcher() {
   const [locale, setLocale] = useState<Locale>('ko')
 
   useEffect(() => {
-    setLocale(getLocaleFromStorage())
+    const stored = getLocaleFromStorage()
+    setLocale(stored)
+    // 기존 localStorage-only 사용자의 cookie 동기화 — cookie가 없으면 SSR·<html lang>이
+    // 기본 로케일로 고정되므로, 마운트 시 cookie를 맞춰둔다(멱등).
+    setLocaleToStorage(stored)
   }, [])
 
   function handleChange(next: Locale) {
