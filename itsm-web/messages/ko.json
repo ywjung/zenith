@@ -819,7 +819,14 @@
       "toggle_failed": "변경 실패",
       "delete_failed": "삭제 실패",
       "label_sync_link": "라벨 동기화 현황 →",
-      "saving": "저장 중..."
+      "saving": "저장 중...",
+      "option_remove": "삭제",
+      "confirm_label": "확인",
+      "sync_hint": "추가·수정 시 GitLab에 <code></code> 라벨이 자동 동기화됩니다.",
+      "label_placeholder": "예: 데이터베이스",
+      "description_placeholder": "예: database",
+      "description_placeholder_edit": "예: hardware",
+      "delete_btn": "삭제"
     },
     "assignment_rules": {
       "title": "자동 배정 규칙",
@@ -1010,7 +1017,10 @@
       "guide_3": "만료 일시를 설정하면 해당 시각 이후 자동으로 배너가 숨겨집니다.",
       "guide_4": "상태 토글(● 노출 중 / ○ 숨김)을 클릭해 즉시 활성/비활성 전환이 가능합니다.",
       "guide_5": "긴급(🚨)은 서버 장애·보안 공지, 주의(⚠️)는 점검 예고, 일반(ℹ️)은 정책 변경·안내에 사용하세요.",
-      "guide_6": "동시에 여러 개가 활성화되면 모두 중첩되어 표시됩니다. 긴급한 것만 활성화하는 것을 권장합니다."
+      "guide_6": "동시에 여러 개가 활성화되면 모두 중첩되어 표시됩니다. 긴급한 것만 활성화하는 것을 권장합니다.",
+      "close": "닫기",
+      "remove": "제거",
+      "count_suffix": "개"
     },
     "notification_channels": {
       "title": "알림 채널 설정",

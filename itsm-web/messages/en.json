@@ -819,7 +819,14 @@
       "toggle_failed": "Toggle failed",
       "delete_failed": "Delete failed",
       "label_sync_link": "Label sync status →",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "option_remove": "Remove",
+      "confirm_label": "Confirm",
+      "sync_hint": "On add/edit, the <code></code> label is auto-synced to GitLab.",
+      "label_placeholder": "e.g. Database",
+      "description_placeholder": "e.g. database",
+      "description_placeholder_edit": "e.g. hardware",
+      "delete_btn": "Delete"
     },
     "assignment_rules": {
       "title": "Assignment Rules",
@@ -1010,7 +1017,10 @@
       "guide_3": "Setting an expiry date/time will automatically hide the banner after that time.",
       "guide_4": "Click the status toggle (● Visible / ○ Hidden) to instantly activate/deactivate.",
       "guide_5": "Use Critical (🚨) for server outages and security notices, Warning (⚠️) for maintenance, Info (ℹ️) for policy changes.",
-      "guide_6": "Multiple active announcements are stacked together. It is recommended to only activate urgent ones."
+      "guide_6": "Multiple active announcements are stacked together. It is recommended to only activate urgent ones.",
+      "close": "Close",
+      "remove": "Remove",
+      "count_suffix": ""
     },
     "notification_channels": {
       "title": "Notification Channel Settings",
