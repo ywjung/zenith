@@ -20,7 +20,7 @@ _MAX_AVATAR_SIZE = 2 * 1024 * 1024  # 2MB
 
 
 @router.post("/me/avatar")
-async def upload_avatar(
+def upload_avatar(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -40,7 +40,7 @@ async def upload_avatar(
             detail="이미지 파일만 허용됩니다. (허용 형식: jpeg, png, gif, webp)",
         )
 
-    content = await file.read()
+    content = file.file.read()  # sync 핸들러 — 스레드풀에서 실행되어 이벤트 루프 비차단
     if len(content) > _MAX_AVATAR_SIZE:
         raise HTTPException(status_code=422, detail="파일 크기는 최대 2MB까지 허용됩니다.")
 
