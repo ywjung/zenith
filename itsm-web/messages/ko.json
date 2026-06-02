@@ -2187,7 +2187,10 @@
     "error_sr": "시스템 오류가 발생했습니다",
     "error_heading": "오류가 발생했습니다",
     "error_body": "페이지를 표시하는 중 문제가 발생했습니다.",
-    "error_id": "오류 ID: {id}"
+    "error_id": "오류 ID: {id}",
+    "boundary_title": "페이지를 불러오는 중 오류가 발생했습니다.",
+    "boundary_retry": "다시 시도",
+    "boundary_reload": "페이지 새로고침"
   },
   "login": {
     "tagline": "IT Service Management",

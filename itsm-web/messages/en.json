@@ -2187,7 +2187,10 @@
     "error_sr": "A system error occurred",
     "error_heading": "An error occurred",
     "error_body": "There was a problem displaying this page.",
-    "error_id": "Error ID: {id}"
+    "error_id": "Error ID: {id}",
+    "boundary_title": "An error occurred while loading the page.",
+    "boundary_retry": "Try again",
+    "boundary_reload": "Reload page"
   },
   "login": {
     "tagline": "IT Service Management",
