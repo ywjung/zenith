@@ -41,7 +41,7 @@ x-logging: &default-logging
 services:
 
   gitlab:
-    image: gitlab/gitlab-ce:18.11.1-ce.0
+    image: gitlab/gitlab-ce:18.11.4-ce.0
     container_name: gitlab
     restart: unless-stopped
     shm_size: "256m"
@@ -49,6 +49,10 @@ services:
       - "8929:8929"
       - "2224:22"
     environment:
+      # 컨테이너 재기동 시 omnibus 엔트리포인트가 번들 PostgreSQL 자동 업그레이드(16→17)를
+      # 시도하다 macOS Docker Desktop bind-mount 소켓 chmod 제약으로 크래시 루프에 빠지는 것을 방지.
+      # GitLab 18.11.4는 PG16에서 정상 동작하며, 19.0 업그레이드는 Linux/프로덕션에서 수행.
+      GITLAB_SKIP_PG_UPGRADE: "true"
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://localhost:8929'
         gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
@@ -125,7 +129,7 @@ services:
           memory: 512m
 
   redis:
-    image: redis:8.4-alpine
+    image: redis:8.8-alpine
     restart: unless-stopped
     command: >
       redis-server
@@ -158,7 +162,7 @@ services:
           memory: 256m
 
   clamav:
-    image: clamav/clamav:1.4
+    image: clamav/clamav:1.5
     platform: linux/amd64
     restart: unless-stopped
     volumes:
@@ -378,7 +382,7 @@ services:
           memory: 128m
 
   nginx:
-    image: nginx:1.29-alpine
+    image: nginx:1.31-alpine
     restart: unless-stopped
     ulimits:
       nofile:
@@ -437,7 +441,7 @@ services:
           memory: 128m
 
   prometheus:
-    image: prom/prometheus:v3.11.0
+    image: prom/prometheus:v3.12.0
     restart: unless-stopped
     ports:
       - "127.0.0.1:9090:9090"
@@ -507,7 +511,7 @@ services:
   # OpenTelemetry Collector (profiles: ["tracing"] — 선택적 활성화)
   # ---------------------------------------------------------------------------
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.150.1
+    image: otel/opentelemetry-collector-contrib:0.153.0
     profiles: ["tracing"]
     restart: unless-stopped
     command: ["--config=/etc/otel-collector-config.yaml"]
