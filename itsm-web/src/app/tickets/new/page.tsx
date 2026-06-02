@@ -65,6 +65,7 @@ function NewTicketContent() {
   const { user, isAgent } = useAuth()
   const { serviceTypes } = useServiceTypes()
   const t = useTranslations('ticket_new')
+  const tI18n = useTranslations()
   const tp = useTranslations('ticket.priority')
   const tf = useTranslations('ticket.fields')
   const tportal = useTranslations('portal')
@@ -445,7 +446,7 @@ function NewTicketContent() {
       }
       if (images.length > 0) {
         addFiles(images)
-        toast.success(`이미지 ${images.length}개를 첨부했습니다.`)
+        toast.success(tI18n('app_tickets_new_page.images_attached', { count: images.length }))
       }
     }
     window.addEventListener('paste', handlePaste)
@@ -453,7 +454,7 @@ function NewTicketContent() {
   }, [])
 
   // 마크다운 툴바
-  function insertMarkdown(prefix: string, suffix = '', placeholder = '텍스트') {
+  function insertMarkdown(prefix: string, suffix = '', placeholder = tI18n('app_tickets_new_page.markdown_placeholder')) {
     const ta = document.getElementById('desc-ta') as HTMLTextAreaElement | null
     if (!ta) return
     const start = ta.selectionStart
@@ -474,14 +475,14 @@ function NewTicketContent() {
     e.preventDefault()
     // 클라이언트 측 사전 검증 — 첫 invalid 필드로 자동 스크롤+포커스
     if (form.title.trim().length < 5) {
-      setError('제목은 최소 5자 이상이어야 합니다.')
+      setError(tI18n('app_tickets_new_page.title_min_length'))
       const titleEl = document.querySelector<HTMLInputElement>('input[name="title"]')
       titleEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       setTimeout(() => titleEl?.focus(), 300)
       return
     }
     if (!form.description || form.description.replace(/<[^>]*>/g, '').trim().length < 5) {
-      setError('내용을 5자 이상 입력해주세요.')
+      setError(tI18n('app_tickets_new_page.description_min_length'))
       const descEl = document.querySelector<HTMLElement>('[contenteditable="true"]')
       descEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       setTimeout(() => descEl?.focus(), 300)
@@ -540,10 +541,15 @@ function NewTicketContent() {
       submittedRef.current = true
       clearDraft()
       // UX3 #6: 제출 성공 시 SLA 예상 시간 안내
-      const slaMap: Record<string, string> = { critical: '8시간', high: '24시간', medium: '3일', low: '7일' }
-      const slaHint = slaMap[form.priority] || '3일'
-      toast.success(`티켓 #${ticket.iid} 등록 완료`, {
-        description: `예상 처리 기한: ${slaHint} 이내`,
+      const slaMap: Record<string, string> = {
+        critical: tI18n('app_tickets_new_page.sla_hint_critical'),
+        high: tI18n('app_tickets_new_page.sla_hint_high'),
+        medium: tI18n('app_tickets_new_page.sla_hint_medium'),
+        low: tI18n('app_tickets_new_page.sla_hint_low'),
+      }
+      const slaHint = slaMap[form.priority] || tI18n('app_tickets_new_page.sla_hint_medium')
+      toast.success(tI18n('app_tickets_new_page.ticket_created', { iid: ticket.iid }), {
+        description: tI18n('app_tickets_new_page.ticket_created_desc', { sla: slaHint }),
         duration: 5000,
       })
       router.push(`/tickets/${ticket.iid}${qs}`)
@@ -568,8 +574,8 @@ function NewTicketContent() {
         <div className="fixed inset-0 z-[9998] bg-blue-600/20 backdrop-blur-sm pointer-events-none flex items-center justify-center animate-fadeIn">
           <div className="bg-white dark:bg-gray-900 border-4 border-dashed border-blue-500 dark:border-blue-400 rounded-3xl px-12 py-16 text-center shadow-2xl">
             <div className="text-6xl mb-3 select-none">📥</div>
-            <p className="text-lg font-bold text-blue-700 dark:text-blue-300">파일을 여기에 놓으세요</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">티켓 첨부 파일로 추가됩니다</p>
+            <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{tI18n('app_tickets_new_page.drop_files_here')}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{tI18n('app_tickets_new_page.drop_files_hint')}</p>
           </div>
         </div>
       )}
@@ -589,8 +595,8 @@ function NewTicketContent() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">작성 중인 내용이 있습니다</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">페이지를 이동하면 작성한 내용이 사라집니다.<br />임시저장 후 이동하시겠습니까?</p>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{tI18n('app_tickets_new_page.leave_modal_title')}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{tI18n('app_tickets_new_page.leave_modal_line1')}<br />{tI18n('app_tickets_new_page.leave_modal_line2')}</p>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
@@ -604,7 +610,7 @@ function NewTicketContent() {
                   }}
                   className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
                 >
-                  💾 임시저장 후 이동
+                  💾 {tI18n('app_tickets_new_page.save_and_leave')}
                 </button>
                 <button
                   onClick={() => {
@@ -615,13 +621,13 @@ function NewTicketContent() {
                   }}
                   className="w-full py-2.5 px-4 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-semibold transition-colors"
                 >
-                  저장하지 않고 이동
+                  {tI18n('app_tickets_new_page.leave_without_saving')}
                 </button>
                 <button
                   onClick={() => setLeaveModal({ show: false, dest: '' })}
                   className="w-full py-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                 >
-                  계속 작성하기
+                  {tI18n('app_tickets_new_page.continue_editing')}
                 </button>
               </div>
             </div>
@@ -635,7 +641,7 @@ function NewTicketContent() {
           <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
-          임시저장 완료
+          {tI18n('app_tickets_new_page.draft_saved')}
         </div>
       )}
 
@@ -646,21 +652,21 @@ function NewTicketContent() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p className="text-sm text-amber-800 dark:text-amber-300 flex-1">
-            임시저장된 작성 내용이 있습니다.
+            {tI18n('app_tickets_new_page.draft_available')}
           </p>
           <button
             type="button"
             onClick={restoreDraft}
             className="text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline shrink-0"
           >
-            불러오기
+            {tI18n('app_tickets_new_page.restore')}
           </button>
           <button
             type="button"
             onClick={clearDraft}
             className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 shrink-0"
           >
-            삭제
+            {tI18n('app_tickets_new_page.delete')}
           </button>
         </div>
       )}
@@ -791,7 +797,7 @@ function NewTicketContent() {
                 {form.title.trim().length >= 5 && (
                   <span
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 pointer-events-none animate-fadeIn"
-                    aria-label="유효함"
+                    aria-label={tI18n('app_tickets_new_page.valid')}
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -800,7 +806,7 @@ function NewTicketContent() {
                 )}
               </div>
               {form.title.length > 0 && form.title.trim().length < 5 && (
-                <p className="mt-1 text-xs text-red-500">제목은 최소 5자 이상이어야 합니다.</p>
+                <p className="mt-1 text-xs text-red-500">{tI18n('app_tickets_new_page.title_min_length')}</p>
               )}
             </div>
 
@@ -854,7 +860,7 @@ function NewTicketContent() {
                       <span className="shrink-0">{getFileIcon(file.name)}</span>
                       <span className="truncate text-gray-700 dark:text-gray-200 flex-1">{file.name}</span>
                       <span className="text-gray-400 dark:text-gray-500 text-xs shrink-0">{formatFileSize(file.size)}</span>
-                      <button type="button" onClick={() => removeFile(idx)} className="text-gray-400 hover:text-red-500 text-xs shrink-0" aria-label="삭제">✕</button>
+                      <button type="button" onClick={() => removeFile(idx)} className="text-gray-400 hover:text-red-500 text-xs shrink-0" aria-label={tI18n('app_tickets_new_page.delete')}>✕</button>
                     </li>
                   ))}
                 </ul>
@@ -868,15 +874,15 @@ function NewTicketContent() {
               <span className="text-xl mt-0.5">🤖</span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-                  AI 분류 제안
-                  {aiLoading && <span className="ml-2 text-xs font-normal text-blue-600 dark:text-blue-400 animate-pulse">분석 중...</span>}
+                  {tI18n('app_tickets_new_page.ai_suggestion')}
+                  {aiLoading && <span className="ml-2 text-xs font-normal text-blue-600 dark:text-blue-400 animate-pulse">{tI18n('app_tickets_new_page.ai_analyzing')}</span>}
                 </p>
                 {aiSuggestion && (
                   <div className="mt-1 space-y-0.5">
                     <p className="text-sm text-blue-700 dark:text-blue-300">
-                      카테고리: <strong>{aiSuggestion.category ?? '-'}</strong>
-                      {' · '}우선순위: <strong>{aiSuggestion.priority ?? '-'}</strong>
-                      {' · '}확신도: {Math.round((aiSuggestion.confidence ?? 0) * 100)}%
+                      {tI18n('app_tickets_new_page.ai_category_label')}: <strong>{aiSuggestion.category ?? '-'}</strong>
+                      {' · '}{tI18n('app_tickets_new_page.ai_priority_label')}: <strong>{aiSuggestion.priority ?? '-'}</strong>
+                      {' · '}{tI18n('app_tickets_new_page.ai_confidence_label')}: {Math.round((aiSuggestion.confidence ?? 0) * 100)}%
                     </p>
                     {aiSuggestion.reasoning && (
                       <p className="text-xs text-blue-600 dark:text-blue-400">{aiSuggestion.reasoning}</p>
@@ -891,14 +897,14 @@ function NewTicketContent() {
                     onClick={applyAiSuggestion}
                     className="px-3 py-1 text-xs font-semibold rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
                   >
-                    적용
+                    {tI18n('app_tickets_new_page.apply')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setAiSuggestion(null)}
                     className="px-3 py-1 text-xs rounded-md border border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/30 transition-colors"
                   >
-                    무시
+                    {tI18n('app_tickets_new_page.ignore')}
                   </button>
                 </div>
               )}
@@ -1115,7 +1121,7 @@ function NewTicketContent() {
                         onChange={e => setCustomFieldValues(prev => ({ ...prev, [f.name]: e.target.value }))}
                         className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        <option value="">선택...</option>
+                        <option value="">{tI18n('app_tickets_new_page.select_placeholder')}</option>
                         {(f.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     ) : (
@@ -1142,8 +1148,8 @@ function NewTicketContent() {
                 className="w-4 h-4 text-red-600 border-gray-300 dark:border-gray-600 rounded focus:ring-red-500"
               />
               <div>
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">🔒 기밀 티켓</span>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">담당자와 관리자만 내용을 확인할 수 있습니다.</p>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">🔒 {tI18n('app_tickets_new_page.confidential_ticket')}</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{tI18n('app_tickets_new_page.confidential_desc')}</p>
               </div>
             </label>
           </div>
@@ -1163,21 +1169,21 @@ function NewTicketContent() {
               className={`relative overflow-hidden flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm flex items-center justify-center gap-2 ${(uploadingFiles || submitting) ? 'btn-progress' : ''}`}
             >
               {(uploadingFiles || submitting) && <SpinnerIcon className="w-4 h-4" />}
-              {uploadingFiles ? '파일 업로드 중...' : submitting ? '등록 중...' : '✓ 티켓 등록'}
+              {uploadingFiles ? tI18n('app_tickets_new_page.uploading_files') : submitting ? tI18n('app_tickets_new_page.submitting') : `✓ ${tI18n('app_tickets_new_page.submit_ticket')}`}
             </button>
             <button
               type="button"
               onClick={() => { saveDraft(); setHasDraft(true) }}
               className="px-4 py-2.5 border border-amber-300 dark:border-amber-600 rounded-lg text-sm text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors font-medium"
-              title="현재 내용을 임시저장합니다"
+              title={tI18n('app_tickets_new_page.save_draft_title')}
             >
-              💾 임시저장
+              💾 {tI18n('app_tickets_new_page.save_draft')}
             </button>
             <a
               href="/"
               className="px-6 py-2.5 border dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors"
             >
-              취소
+              {tI18n('app_tickets_new_page.cancel')}
             </a>
           </div>
         </div>
@@ -1187,12 +1193,12 @@ function NewTicketContent() {
 
           {/* 요청 요약 */}
           <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">요청 요약</p>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{tI18n('app_tickets_new_page.request_summary')}</p>
             <div className="space-y-2.5">
               <div className="flex items-start gap-2">
                 <span className="text-lg leading-none shrink-0 mt-0.5">{selectedCategory?.emoji ?? '📋'}</span>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-none mb-0.5">유형</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-none mb-0.5">{tI18n('app_tickets_new_page.type')}</p>
                   <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedCategory?.label ?? '-'}</p>
                   {categoryContext && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">· {categoryContext}</p>
@@ -1230,7 +1236,7 @@ function NewTicketContent() {
           {/* 중복 티켓 감지 — 유사 오픈 티켓 있으면 먼저 검토하도록 안내 */}
           {dupTickets.length > 0 && (
             <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 p-4">
-              <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 mb-2">⚠️ 비슷한 티켓이 이미 열려 있어요</p>
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 mb-2">⚠️ {tI18n('app_tickets_new_page.duplicate_tickets_title')}</p>
               <ul className="space-y-1.5">
                 {dupTickets.map(d => (
                   <li key={d.iid} className="flex items-start gap-1.5">
@@ -1246,16 +1252,16 @@ function NewTicketContent() {
                   </li>
                 ))}
               </ul>
-              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">중복 접수 전에 먼저 확인해 보세요.</p>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">{tI18n('app_tickets_new_page.duplicate_tickets_hint')}</p>
             </div>
           )}
 
           {/* KB 문서 제안 */}
           {(kbLoading || kbSuggestions.length > 0) && (
             <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm p-4">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">💡 관련 문서</p>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">💡 {tI18n('app_tickets_new_page.related_docs')}</p>
               {kbLoading ? (
-                <p className="text-xs text-gray-400 dark:text-gray-500 animate-pulse">검색 중...</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 animate-pulse">{tI18n('app_tickets_new_page.searching')}</p>
               ) : (
                 <ul className="space-y-2">
                   {kbSuggestions.map((a) => (
@@ -1274,30 +1280,30 @@ function NewTicketContent() {
                 </ul>
               )}
               <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 border-t dark:border-gray-700 pt-2 border-gray-100">
-                문서에서 해결 방법을 먼저 확인해보세요.
+                {tI18n('app_tickets_new_page.kb_hint')}
               </p>
             </div>
           )}
 
           {/* 작성 팁 */}
           <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-700/50 p-4">
-            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-2">✏️ 작성 팁</p>
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-2">✏️ {tI18n('app_tickets_new_page.writing_tips')}</p>
             <ul className="text-[11px] text-amber-700 dark:text-amber-400 space-y-1.5">
-              <li className="flex gap-1.5"><span className="shrink-0">•</span><span>언제부터 문제가 발생했는지</span></li>
-              <li className="flex gap-1.5"><span className="shrink-0">•</span><span>어떤 오류 메시지가 나오는지</span></li>
-              <li className="flex gap-1.5"><span className="shrink-0">•</span><span>이미 시도해본 방법</span></li>
-              <li className="flex gap-1.5"><span className="shrink-0">•</span><span>스크린샷이 있다면 첨부</span></li>
+              <li className="flex gap-1.5"><span className="shrink-0">•</span><span>{tI18n('app_tickets_new_page.tip_when')}</span></li>
+              <li className="flex gap-1.5"><span className="shrink-0">•</span><span>{tI18n('app_tickets_new_page.tip_error_msg')}</span></li>
+              <li className="flex gap-1.5"><span className="shrink-0">•</span><span>{tI18n('app_tickets_new_page.tip_tried')}</span></li>
+              <li className="flex gap-1.5"><span className="shrink-0">•</span><span>{tI18n('app_tickets_new_page.tip_screenshot')}</span></li>
             </ul>
           </div>
 
           {/* 처리 예상 */}
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700/50 p-4">
-            <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">⏱ 처리 예상</p>
+            <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">⏱ {tI18n('app_tickets_new_page.processing_estimate')}</p>
             <p className="text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed">
-              <span className="font-semibold">{selectedPriority ? tp(selectedPriority.value as Parameters<typeof tp>[0]) : '-'}</span> 우선순위의 경우{' '}
-              <span className="font-semibold">{selectedPriority ? t(('priority_' + selectedPriority.value + '_sla') as Parameters<typeof t>[0]) : '-'}</span> 내 처리를 목표로 합니다.
+              <span className="font-semibold">{selectedPriority ? tp(selectedPriority.value as Parameters<typeof tp>[0]) : '-'}</span> {tI18n('app_tickets_new_page.priority_case')}{' '}
+              <span className="font-semibold">{selectedPriority ? t(('priority_' + selectedPriority.value + '_sla') as Parameters<typeof t>[0]) : '-'}</span> {tI18n('app_tickets_new_page.processing_goal')}
             </p>
-            <p className="text-[10px] text-blue-500 dark:text-blue-500 mt-1">* 업무 시간 기준 / 상황에 따라 변동</p>
+            <p className="text-[10px] text-blue-500 dark:text-blue-500 mt-1">{tI18n('app_tickets_new_page.processing_note')}</p>
           </div>
         </div>
       </form>

@@ -66,18 +66,19 @@ function StatCard({
 
 function WorkerBadge({ status }: { status: 'online' | 'offline' }) {
   const t = useTranslations('admin.celery')
+  const tI18n = useTranslations()
   if (status === 'online') {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400">
         <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-        온라인
+        {tI18n('app_admin_celery_page.online')}
       </span>
     )
   }
   return (
     <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 dark:text-gray-500">
       <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-      오프라인
+      {tI18n('app_admin_celery_page.offline')}
     </span>
   )
 }
