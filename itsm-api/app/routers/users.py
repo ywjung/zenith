@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from ..audit import write_audit_log
-from ..auth import get_current_user
+from ..auth import get_current_user, clear_user_role_cache
 from ..database import get_db
 from ..models import UserRole
 from .tickets.helpers import _validate_magic_bytes, _strip_image_metadata
@@ -169,6 +169,7 @@ def anonymize_user(
         logger.error("Notification anonymize failed for id=%s: %s", gitlab_user_id, e)
         db.rollback()
         raise HTTPException(status_code=500, detail="알림 마스킹에 실패했습니다.")
+    clear_user_role_cache()  # 비활성화 즉시 반영 (auth 핫패스 TTL 캐시 무효화)
 
     # 감사 trail — PII 자체는 남기지 않고 id와 건수만 기록.
     write_audit_log(

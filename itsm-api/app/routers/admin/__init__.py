@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from ...auth import get_current_user
+from ...auth import get_current_user, clear_user_role_cache
 from ...audit import write_audit_log
 from ...config import get_settings
 from ...database import get_db
@@ -124,6 +124,7 @@ def update_user_role(
     record.role = data.role
     record.updated_at = datetime.now(timezone.utc)
     db.commit()
+    clear_user_role_cache()  # 역할 변경 즉시 반영 (auth 핫패스 TTL 캐시 무효화)
 
     write_audit_log(
         db, user, "user.role_change", "user", str(gitlab_user_id),

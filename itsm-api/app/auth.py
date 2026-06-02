@@ -25,6 +25,48 @@ _USER_STATE_CACHE: dict[str, tuple[str, float]] = {}  # user_id → (state, expi
 _USER_STATE_CACHE_MAX = 2000  # 최대 항목 수 (메모리 누수 방지)
 _USER_STATE_CACHE_LOCK = threading.Lock()  # C-03: thread-safety for concurrent access
 
+# ---------------------------------------------------------------------------
+# UserRole(role·is_active) TTL 캐시 — get_current_user 핫패스의 매 요청 DB 조회 제거.
+# 30s TTL이므로 역할 변경/비활성화는 최대 30초 내 반영된다(_USER_STATE_CACHE보다 짧음).
+# ---------------------------------------------------------------------------
+_USER_ROLE_CACHE: dict[str, tuple[str, bool, float]] = {}  # user_id → (role, is_active, expiry)
+_USER_ROLE_CACHE_MAX = 2000
+_USER_ROLE_CACHE_TTL = 30  # seconds
+_USER_ROLE_CACHE_LOCK = threading.Lock()
+
+
+def _get_user_role_state(user_id_int: int) -> tuple[str, bool] | None:
+    """DB의 (role, is_active)를 짧은 TTL 캐시로 반환. 레코드 없으면 None.
+
+    DB 예외는 호출부에서 fail-closed/open을 판단하도록 그대로 전파한다(성공만 캐싱)."""
+    key = str(user_id_int)
+    now = time.monotonic()
+    with _USER_ROLE_CACHE_LOCK:
+        cached = _USER_ROLE_CACHE.get(key)
+        if cached and now < cached[2]:
+            return (cached[0], cached[1])
+
+    from .database import SessionLocal
+    from .models import UserRole
+    with SessionLocal() as db:
+        rec = db.query(UserRole).filter(UserRole.gitlab_user_id == user_id_int).first()
+    result = (rec.role, rec.is_active) if rec else None
+
+    if result is not None:
+        with _USER_ROLE_CACHE_LOCK:
+            if len(_USER_ROLE_CACHE) >= _USER_ROLE_CACHE_MAX:
+                for k, (_, _, exp) in list(_USER_ROLE_CACHE.items()):
+                    if now >= exp:
+                        _USER_ROLE_CACHE.pop(k, None)
+            _USER_ROLE_CACHE[key] = (result[0], result[1], now + _USER_ROLE_CACHE_TTL)
+    return result
+
+
+def clear_user_role_cache() -> None:
+    """역할 변경 즉시 반영 또는 테스트 격리를 위한 캐시 초기화."""
+    with _USER_ROLE_CACHE_LOCK:
+        _USER_ROLE_CACHE.clear()
+
 
 def _get_gitlab_user_state(user_id: str) -> str:
     """Fetch GitLab user state with a simple in-process TTL cache (5 minutes)."""
@@ -300,17 +342,13 @@ def get_current_user(request: Request) -> dict:
     role = payload.get("role", "user")
     if user_id and str(user_id).isdigit():
         try:
-            from .database import SessionLocal
-            from .models import UserRole
-            with SessionLocal() as db:
-                role_rec = db.query(UserRole).filter(
-                    UserRole.gitlab_user_id == int(user_id)
-                ).first()
-                if role_rec:
-                    if not role_rec.is_active:
-                        raise HTTPException(status_code=403, detail="그룹 멤버십이 해제됐습니다. 관리자에게 문의하세요.")
-                    role = role_rec.role  # DB 역할 우선 적용
-                    payload["role"] = role  # payload에도 반영하여 return 시 최신 역할이 전달되도록 함
+            role_state = _get_user_role_state(int(user_id))  # 30s TTL 캐시 (매 요청 DB 조회 제거)
+            if role_state is not None:
+                db_role, is_active = role_state
+                if not is_active:
+                    raise HTTPException(status_code=403, detail="그룹 멤버십이 해제됐습니다. 관리자에게 문의하세요.")
+                role = db_role  # DB 역할 우선 적용
+                payload["role"] = role  # payload에도 반영하여 return 시 최신 역할이 전달되도록 함
         except HTTPException:
             raise
         except Exception as e:

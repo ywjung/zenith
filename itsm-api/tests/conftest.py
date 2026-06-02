@@ -182,6 +182,12 @@ def _reset_rate_limits():
                 _lim.reset()
             except Exception:
                 pass
+    # auth UserRole TTL 캐시도 초기화 — 테스트 간 역할 변경이 즉시 반영되도록.
+    try:
+        from app.auth import clear_user_role_cache
+        clear_user_role_cache()
+    except Exception:
+        pass
     yield
 
 
