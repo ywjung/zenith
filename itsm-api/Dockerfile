@@ -17,9 +17,12 @@ COPY . .
 ARG GIT_SHA=dev
 ENV APP_VERSION=$GIT_SHA
 
-RUN useradd --no-create-home --shell /bin/false --uid 998 --gid 0 appuser && \
-    chown -R appuser /app && \
-    mkdir -p /var/celery && chown appuser /var/celery
+# 전용 그룹 사용 — 주 그룹을 root(GID 0)로 두면 group-root 경로가 프로세스에 노출되어
+# 비root 격리가 약화됨. 전용 GID 998로 분리.
+RUN groupadd --gid 998 appuser && \
+    useradd --no-create-home --shell /bin/false --uid 998 --gid 998 appuser && \
+    chown -R appuser:appuser /app && \
+    mkdir -p /var/celery && chown appuser:appuser /var/celery
 USER appuser
 
 EXPOSE 8000
