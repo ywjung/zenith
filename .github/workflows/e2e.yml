@@ -43,7 +43,7 @@ jobs:
       GITLAB_PROJECT_TOKEN: ci_token
       GITLAB_PROJECT_ID: "1"
       ENVIRONMENT: development
-      E2E_BASE_URL: http://localhost:8111
+      E2E_BASE_URL: http://localhost:3000
 
     steps:
       - uses: actions/checkout@v6
@@ -81,7 +81,7 @@ jobs:
       # ── 프론트엔드 빌드 & 서버 시작 ──
       - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: itsm-web/package-lock.json
 

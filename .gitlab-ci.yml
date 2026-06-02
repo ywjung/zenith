@@ -96,7 +96,7 @@ lint:backend:
 
 lint:frontend:
   stage: lint
-  image: node:20-alpine
+  image: node:22-alpine
   <<: [*node-cache, *rules-lint-test]
   before_script:
     - cd itsm-web
@@ -176,7 +176,7 @@ migrate:check:
 
 test:frontend:
   stage: test
-  image: node:20-alpine
+  image: node:22-alpine
   <<: [*node-cache, *rules-lint-test]
   needs: [lint:frontend]
   before_script:

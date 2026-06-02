@@ -2,6 +2,9 @@
   "name": "itsm-web",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +13,7 @@
     "lint:fix": "next lint --fix",
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests",
-    "test:ci": "jest --ci --coverage --passWithNoTests",
+    "test:ci": "jest --ci --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "prepare": "husky"
