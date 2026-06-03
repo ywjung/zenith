@@ -158,7 +158,7 @@ def test_hostname_dns_failure_blocked():
     from app.security import is_safe_external_url
     from unittest.mock import patch
     import socket
-    with patch("socket.gethostbyname", side_effect=socket.gaierror("DNS fail")):
+    with patch("socket.getaddrinfo", side_effect=socket.gaierror("DNS fail")):
         ok, reason = is_safe_external_url("https://nonexistent.invalid.example/path")
     assert ok is False
     assert "DNS" in reason
@@ -167,7 +167,7 @@ def test_hostname_dns_failure_blocked():
 def test_hostname_resolves_to_internal_blocked():
     from app.security import is_safe_external_url
     from unittest.mock import patch
-    with patch("socket.gethostbyname", return_value="10.0.0.1"):
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("10.0.0.1", 0))]):
         ok, reason = is_safe_external_url("https://metadata.internal.example.com/")
     assert ok is False
     assert "내부망" in reason
@@ -176,7 +176,7 @@ def test_hostname_resolves_to_internal_blocked():
 def test_hostname_resolves_to_loopback_blocked():
     from app.security import is_safe_external_url
     from unittest.mock import patch
-    with patch("socket.gethostbyname", return_value="127.0.0.1"):
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("127.0.0.1", 0))]):
         ok, reason = is_safe_external_url("https://sneaky.example.com/")
     assert ok is False
 
@@ -184,7 +184,7 @@ def test_hostname_resolves_to_loopback_blocked():
 def test_hostname_resolves_to_public_ip_allowed():
     from app.security import is_safe_external_url
     from unittest.mock import patch
-    with patch("socket.gethostbyname", return_value="93.184.216.34"):
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]):
         ok, reason = is_safe_external_url("https://example.com/webhook")
     assert ok is True
 
@@ -207,7 +207,7 @@ def test_validate_external_url_passes_safe_url():
     from unittest.mock import patch
     with (
         patch("app.config.get_settings") as mock_cfg,
-        patch("socket.gethostbyname", return_value="93.184.216.34"),
+        patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
     ):
         mock_cfg.return_value.ENVIRONMENT = "production"
         # Should not raise
@@ -246,17 +246,40 @@ def test_hostname_resolves_to_ipv6_private():
     from app.security import is_safe_external_url
     from unittest.mock import patch
     # "::1" is loopback but NOT in _BLOCKED_PREFIXES (which only has IPv4 prefixes)
-    with patch("socket.gethostbyname", return_value="::1"):
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("::1", 0))]):
         ok, reason = is_safe_external_url("https://ipv6host.example.com/hook")
     assert ok is False
 
 
 def test_hostname_resolves_to_invalid_string_passes():
-    """socket.gethostbyname returns non-IP string → ValueError caught, passes (lines 72-73)."""
+    """socket.getaddrinfo returns non-IP string → ValueError caught, passes (lines 72-73)."""
     from app.security import is_safe_external_url
     from unittest.mock import patch
     # "not-an-ip" is not a valid IP, not in _BLOCKED_PREFIXES → ipaddress raises ValueError
-    with patch("socket.gethostbyname", return_value="not-an-ip-address"):
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("not-an-ip-address", 0))]):
         ok, reason = is_safe_external_url("https://somehost.example.com/hook")
     # ValueError is caught, function returns True (safe)
     assert ok is True
+
+
+def test_multiple_resolved_ips_with_internal_blocked():
+    """getaddrinfo가 공개 IP + 내부 IP를 함께 반환하면 차단 (다중 A 레코드 우회 방지)."""
+    from app.security import is_safe_external_url
+    from unittest.mock import patch
+    gai = [
+        (2, 1, 6, "", ("93.184.216.34", 0)),  # 공개 IP
+        (2, 1, 6, "", ("169.254.169.254", 0)),  # 클라우드 메타데이터 (link-local)
+    ]
+    with patch("socket.getaddrinfo", return_value=gai):
+        ok, reason = is_safe_external_url("https://evil.example.com/")
+    assert ok is False
+    assert "내부망" in reason
+
+
+def test_ipv6_loopback_in_aaaa_blocked():
+    """AAAA가 ::1로 해석되면 차단 (IPv6 우회 방지)."""
+    from app.security import is_safe_external_url
+    from unittest.mock import patch
+    with patch("socket.getaddrinfo", return_value=[(10, 1, 6, "", ("::1", 0, 0, 0))]):
+        ok, reason = is_safe_external_url("https://sneaky.example.com/")
+    assert ok is False

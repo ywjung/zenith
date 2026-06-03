@@ -711,26 +711,29 @@ def get_dora_metrics(
 
     # ── 2. Lead Time (접수 → 완료 평균, SLARecord 기반) ──────────────────
     try:
-        records = (
-            db.query(SLARecord)
-            .filter(
-                SLARecord.resolved_at.isnot(None),
-                SLARecord.created_at >= since,
-            )
+        from sqlalchemy import func as _func
+        base = db.query(SLARecord).filter(
+            SLARecord.resolved_at.isnot(None),
+            SLARecord.created_at >= since,
         )
         if pid:
-            records = records.filter(SLARecord.project_id == pid)
-        records = records.all()
+            base = base.filter(SLARecord.project_id == pid)
 
-        if records:
+        if db.bind.dialect.name == "postgresql":
+            # SQL에서 직접 평균 — 전체 행을 메모리로 로드하지 않음
+            avg_sec = base.with_entities(
+                _func.avg(_func.extract("epoch", SLARecord.resolved_at - SLARecord.created_at))
+            ).scalar()
+            lead_time_hours = round(float(avg_sec) / 3600, 1) if avg_sec is not None else None
+        else:
+            # SQLite 등 — 필요한 두 타임스탬프 컬럼만 로드해 Python 평균 (전체 행 로드 회피)
+            rows = base.with_entities(SLARecord.created_at, SLARecord.resolved_at).all()
             lead_times_h = [
-                (r.resolved_at - r.created_at).total_seconds() / 3600
-                for r in records
-                if r.resolved_at and r.created_at
+                (resolved - created).total_seconds() / 3600
+                for created, resolved in rows
+                if resolved and created
             ]
             lead_time_hours = round(sum(lead_times_h) / len(lead_times_h), 1) if lead_times_h else None
-        else:
-            lead_time_hours = None
     except Exception as e:
         logger.warning("DORA lead_time query error: %s", e)
         lead_time_hours = None
@@ -768,27 +771,29 @@ def get_dora_metrics(
 
     # ── 4. MTTR (재오픈된 티켓의 두 번째 완료까지 평균 시간) ──────────────
     try:
-        reopened_records = (
-            db.query(SLARecord)
-            .filter(
-                SLARecord.resolved_at.isnot(None),
-                SLARecord.reopened_at.isnot(None),
-                SLARecord.created_at >= since,
-            )
+        from sqlalchemy import func as _func
+        base = db.query(SLARecord).filter(
+            SLARecord.resolved_at.isnot(None),
+            SLARecord.reopened_at.isnot(None),
+            SLARecord.resolved_at > SLARecord.reopened_at,
+            SLARecord.created_at >= since,
         )
         if pid:
-            reopened_records = reopened_records.filter(SLARecord.project_id == pid)
-        reopened_records = reopened_records.all()
+            base = base.filter(SLARecord.project_id == pid)
 
-        if reopened_records:
+        if db.bind.dialect.name == "postgresql":
+            avg_sec = base.with_entities(
+                _func.avg(_func.extract("epoch", SLARecord.resolved_at - SLARecord.reopened_at))
+            ).scalar()
+            mttr_hours = round(float(avg_sec) / 3600, 1) if avg_sec is not None else None
+        else:
+            rows = base.with_entities(SLARecord.reopened_at, SLARecord.resolved_at).all()
             mttr_values = [
-                (r.resolved_at - r.reopened_at).total_seconds() / 3600
-                for r in reopened_records
-                if r.resolved_at and r.reopened_at and r.resolved_at > r.reopened_at
+                (resolved - reopened).total_seconds() / 3600
+                for reopened, resolved in rows
+                if resolved and reopened
             ]
             mttr_hours = round(sum(mttr_values) / len(mttr_values), 1) if mttr_values else None
-        else:
-            mttr_hours = None
     except Exception as e:
         logger.warning("DORA mttr query error: %s", e)
         mttr_hours = None

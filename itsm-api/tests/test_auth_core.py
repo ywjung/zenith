@@ -383,6 +383,7 @@ def test_verify_api_key_returns_user_dict_on_success():
     mock_rec.scopes = ["tickets:read"]
     mock_rec.revoked = False
     mock_rec.expires_at = None  # no expiry
+    mock_rec.last_used_at = None  # 첫 사용 — 쓰로틀 갱신 경로
 
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.first.return_value = mock_rec
@@ -686,3 +687,28 @@ def test_get_current_user_2fa_http_exception_raises(client):
     ):
         resp = client.get("/tickets/", cookies={"itsm_token": token})
     assert resp.status_code == 403
+
+
+def test_verify_api_key_throttles_last_used_write():
+    """최근 사용된 키는 last_used_at write/commit을 건너뛴다 (60s 쓰로틀)."""
+    from app.auth import _verify_api_key
+    from datetime import datetime, timezone
+    api_key = "itsm_live_test1234567890abcdef"
+    mock_rec = MagicMock()
+    mock_rec.id = 1
+    mock_rec.name = "Throttle Key"
+    mock_rec.scopes = []
+    mock_rec.revoked = False
+    mock_rec.expires_at = None
+    mock_rec.last_used_at = datetime.now(timezone.utc).replace(tzinfo=None)  # 방금 사용됨
+
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_rec
+    mock_db.__enter__ = MagicMock(return_value=mock_db)
+    mock_db.__exit__ = MagicMock(return_value=False)
+
+    with patch("app.database.SessionLocal", MagicMock(return_value=mock_db)):
+        result = _verify_api_key(api_key)
+
+    assert result is not None
+    mock_db.commit.assert_not_called()  # 60s 이내 재사용 → write 생략

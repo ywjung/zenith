@@ -258,9 +258,14 @@ def _verify_api_key(api_key: str) -> dict | None:
                 exp = rec.expires_at.replace(tzinfo=_tz.utc) if rec.expires_at.tzinfo is None else rec.expires_at
                 if datetime.now(_tz.utc) > exp:
                     return None
-            # last_used_at 갱신
-            rec.last_used_at = datetime.now(_tz.utc).replace(tzinfo=None)
-            db.commit()
+            # last_used_at 갱신 — 매 요청 write/락 경합을 피하기 위해 60s 이상 경과 시에만 기록.
+            now_naive = datetime.now(_tz.utc).replace(tzinfo=None)
+            last = rec.last_used_at
+            if last is not None and last.tzinfo is not None:
+                last = last.replace(tzinfo=None)
+            if last is None or (now_naive - last).total_seconds() >= 60:
+                rec.last_used_at = now_naive
+                db.commit()
             return {
                 "sub": f"apikey:{rec.id}",
                 "username": f"api:{rec.name}",
