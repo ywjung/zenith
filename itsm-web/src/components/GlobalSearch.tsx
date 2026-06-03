@@ -274,7 +274,7 @@ export default function GlobalSearch() {
                       setHistory(next)
                     }}
                     className="text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 text-sm px-1"
-                   aria-label="제거">
+                   aria-label={t('components_globalsearch.remove')}>
                     ×
                   </button>
                 </button>
@@ -289,7 +289,7 @@ export default function GlobalSearch() {
                 const typeBadge = r._type === 'kb'
                   ? { icon: '📚', label: 'KB', cls: 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300' }
                   : r._type === 'change'
-                    ? { icon: '🔄', label: '변경', cls: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' }
+                    ? { icon: '🔄', label: t('components_globalsearch.badge_change'), cls: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' }
                     : { icon: '📋', label: '', cls: '' }
                 return (
                 <button

@@ -250,7 +250,7 @@ function HomeContent() {
           if (invalid.some(v => v.startsWith('category='))) setCategory('')
           if (invalid.some(v => v.startsWith('priority='))) setPriority('')
           if (invalid.some(v => v.startsWith('status='))) setState('all')
-          toast.warning(`알 수 없는 필터 값 무시: ${invalid.join(', ')}`)
+          toast.warning(t('dashboard.toast_invalid_filter', { values: invalid.join(', ') }))
         }
       }
 
@@ -323,11 +323,36 @@ function HomeContent() {
   }, [refreshStats])
 
   // SSE 알림 수신 시 stats 갱신 (티켓 변경 이벤트 반영)
+  // 연결이 끊기면 지수 백오프(1s→최대 30s)로 재연결 — 일시적 네트워크/프록시 타임아웃에
+  // 영구 종료되지 않도록 함. 정상 수신 시 백오프를 리셋한다.
   useEffect(() => {
-    const es = new EventSource(`${API_BASE}/notifications/stream`, { withCredentials: true })
-    es.onmessage = () => { refreshStats() }
-    es.onerror = () => { es.close() }
-    return () => es.close()
+    let es: EventSource | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let retryDelay = 1000
+    let closed = false
+
+    const connect = () => {
+      if (closed) return
+      es = new EventSource(`${API_BASE}/notifications/stream`, { withCredentials: true })
+      es.onmessage = () => {
+        retryDelay = 1000
+        refreshStats()
+      }
+      es.onerror = () => {
+        es?.close()
+        es = null
+        if (closed) return
+        reconnectTimer = setTimeout(connect, retryDelay)
+        retryDelay = Math.min(retryDelay * 2, 30_000)
+      }
+    }
+    connect()
+
+    return () => {
+      closed = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      es?.close()
+    }
   }, [refreshStats])
 
   const load = useCallback(async () => {
@@ -353,7 +378,7 @@ function HomeContent() {
       setTickets(data.tickets)
       setTotal(data.total)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '티켓을 불러오지 못했습니다.')
+      setError(e instanceof Error ? e.message : t('dashboard.load_failed'))
     } finally {
       setLoading(false)
     }
@@ -501,12 +526,12 @@ function HomeContent() {
       if (failed > 0) {
         const firstErrs = result.errors.slice(0, 3).map(e => `#${e.iid}: ${e.error}`).join('\n')
         const more = result.errors.length > 3 ? `\n외 ${result.errors.length - 3}건` : ''
-        toast.error(`일괄 작업: ${succeeded}건 성공, ${failed}건 실패`, {
+        toast.error(t('dashboard.toast_bulk_partial', { succeeded, failed }), {
           description: firstErrs + more,
           duration: 8000,
         })
       } else {
-        toast.success(`${count}개 티켓에 일괄 작업을 완료했습니다.`)
+        toast.success(t('dashboard.toast_bulk_done', { count }))
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '일괄작업 실패'
@@ -577,10 +602,11 @@ function HomeContent() {
       setImportResult(result)
       setCsvPreview(null)
       if (result.imported > 0) {
-        toast.success(`${result.imported}건의 티켓을 가져왔습니다.${result.failed?.length ? ` (실패 ${result.failed.length}건)` : ''}`)
+        const suffix = result.failed?.length ? t('dashboard.toast_import_failed_suffix', { count: result.failed.length }) : ''
+        toast.success(t('dashboard.toast_import_ok', { count: result.imported }) + suffix)
         await load()
       } else if (result.failed?.length) {
-        toast.error(`CSV 가져오기 실패: ${result.failed.length}건의 오류`)
+        toast.error(t('dashboard.toast_csv_failed', { count: result.failed.length }))
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'CSV 가져오기 실패'
@@ -938,7 +964,7 @@ function HomeContent() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">모든 티켓 SLA 준수 중</p>
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">{t('dashboard.all_sla_ok')}</p>
                   )}
                 </div>
               )
@@ -1147,10 +1173,10 @@ function HomeContent() {
             {/* 빠른 기간 칩 */}
             <div className="flex items-center gap-1 ml-1 border-l border-gray-200 dark:border-gray-700 pl-2">
               {[
-                { label: '오늘', days: 0 },
-                { label: '7일', days: 6 },
-                { label: '30일', days: 29 },
-              ].map(({ label, days }) => {
+                { key: 'range_today', days: 0 },
+                { key: 'range_7d', days: 6 },
+                { key: 'range_30d', days: 29 },
+              ].map(({ key, days }) => {
                 const today = new Date()
                 const to = today.toISOString().slice(0, 10)
                 const fromD = new Date(today)
@@ -1159,7 +1185,7 @@ function HomeContent() {
                 const isActive = fromDate === from && toDate === to
                 return (
                   <button
-                    key={label}
+                    key={key}
                     type="button"
                     onClick={() => {
                       setFromDate(from); setToDate(to); setPage(1); syncUrl({ from, to })
@@ -1170,7 +1196,7 @@ function HomeContent() {
                         : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}
                   >
-                    {label}
+                    {t(`dashboard.${key}`)}
                   </button>
                 )
               })}

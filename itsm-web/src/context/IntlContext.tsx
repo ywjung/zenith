@@ -1,24 +1,21 @@
 'use client'
 
 import { NextIntlClientProvider } from 'next-intl'
-import { useState, useEffect } from 'react'
-import { getLocaleFromStorage, type Locale } from '@/lib/i18n'
-import koMessages from '../../messages/ko.json'
 
-export function IntlProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocale] = useState<Locale>('ko')
-  const [messages, setMessages] = useState<Record<string, unknown>>(koMessages)
-
-  useEffect(() => {
-    const loc = getLocaleFromStorage()
-    setLocale(loc)
-    if (loc === 'ko') {
-      setMessages(koMessages)
-    } else {
-      import(`../../messages/${loc}.json`).then(m => setMessages(m.default))
-    }
-  }, [])
-
+/**
+ * 서버 layout이 cookie 기반으로 결정한 locale·messages를 그대로 전달받아 적용한다.
+ * (이전: 클라이언트 localStorage에서 로케일을 읽어 messages를 비동기 로드 → SSR과 불일치,
+ *  한국어 first-paint 깜빡임 발생. 이제 서버/클라가 동일 cookie 소스로 일원화됨.)
+ */
+export function IntlProvider({
+  locale,
+  messages,
+  children,
+}: {
+  locale: string
+  messages: Record<string, unknown>
+  children: React.ReactNode
+}) {
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
       {children}

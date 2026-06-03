@@ -17,6 +17,9 @@ export function getLocaleFromStorage(): Locale {
 export function setLocaleToStorage(locale: Locale): void {
   if (typeof window === 'undefined') return
   localStorage.setItem('locale', locale)
+  // 서버(i18n/request.ts·layout)가 읽는 cookie도 함께 갱신 — 서버/클라 로케일 일원화.
+  // 이 cookie가 없으면 SSR·<html lang>이 항상 기본 로케일로 고정됨.
+  document.cookie = `locale=${locale}; path=/; max-age=31536000; samesite=lax`
 }
 
 export const LOCALE_LABELS: Record<Locale, string> = {

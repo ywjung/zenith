@@ -449,7 +449,7 @@ function ProblemsContent() {
                         {incCount > 0 && (
                           <div>
                             <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
-                              {t('link_btn')}된 티켓 ({incCount})
+                              {t('linked_tickets_heading', { n: incCount })}
                             </p>
                             <div className="space-y-1.5">
                               {incidents.map(inc => (

@@ -69,21 +69,26 @@ def is_safe_external_url(url: str, *, allow_internal: bool = False) -> tuple[boo
     except ValueError:
         pass  # 호스트명 → DNS 해석 필요
 
-    # DNS 해석 후 IP 검증
+    # DNS 해석 후 IP 검증 — A/AAAA 모든 레코드를 검증한다.
+    # (gethostbyname은 IPv4 첫 결과만 보므로, 두 번째 A 레코드나 ::1 AAAA로 우회 가능했음)
     try:
-        resolved_ip = socket.gethostbyname(host)
+        infos = socket.getaddrinfo(host, None)
     except socket.gaierror as e:
         return False, f"DNS 해석 실패: {e}"
 
-    if any(resolved_ip.startswith(prefix) for prefix in _BLOCKED_PREFIXES):
-        return False, f"내부망 IP로 해석됨: {resolved_ip} ({host})"
+    resolved_ips = {info[4][0] for info in infos}
+    if not resolved_ips:
+        return False, "DNS 해석 결과 없음"
 
-    try:
-        addr = ipaddress.ip_address(resolved_ip)
-        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
-            return False, f"내부망 IP 차단: {resolved_ip}"
-    except ValueError:
-        pass
+    for resolved_ip in resolved_ips:
+        if any(resolved_ip.startswith(prefix) for prefix in _BLOCKED_PREFIXES):
+            return False, f"내부망 IP로 해석됨: {resolved_ip} ({host})"
+        try:
+            addr = ipaddress.ip_address(resolved_ip)
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return False, f"내부망 IP 차단: {resolved_ip}"
+        except ValueError:
+            continue
 
     return True, ""
 

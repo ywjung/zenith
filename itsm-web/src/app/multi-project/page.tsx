@@ -39,6 +39,7 @@ function ProjectInitial({ name }: { name: string }) {
 
 /** 4주 준수율 스파크라인 */
 function Sparkline({ points }: { points: MultiProjectWeeklyPoint[] }) {
+  const tI18n = useTranslations()
   if (!points || points.length === 0) return <span className="text-xs text-gray-300">—</span>
   const values = points.map(p => p.compliance ?? 0)
   const max = 100
@@ -49,7 +50,7 @@ function Sparkline({ points }: { points: MultiProjectWeeklyPoint[] }) {
   const lastPct = values[values.length - 1]
   const color = lastPct >= 90 ? 'text-emerald-500' : lastPct >= 70 ? 'text-amber-500' : 'text-red-500'
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className={`w-14 h-4 ${color}`} aria-label="주간 준수율 추세">
+    <svg viewBox={`0 0 ${w} ${h}`} className={`w-14 h-4 ${color}`} aria-label={tI18n('app_multi_project_page.sparkline_aria')}>
       <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       {points.map((p, i) => {
         if (p.compliance == null) return null
@@ -66,6 +67,7 @@ type FilterGrade = 'all' | 'good' | 'warn' | 'critical'
 
 function MultiProjectContent() {
   const t = useTranslations('multi_project')
+  const tI18n = useTranslations()
   const { isAgent } = useAuth()
   const [projects, setProjects] = useState<MultiProjectStats[]>([])
   const [loading, setLoading] = useState(true)
@@ -227,7 +229,7 @@ function MultiProjectContent() {
               <p className="text-xl font-bold text-gray-900 dark:text-white">{totalSLA}<span className="text-xs font-medium ml-0.5 text-gray-400">{t('unit_cases')}</span></p>
             </div>
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 shadow-sm">
-              <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">미해결</p>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">{tI18n('app_multi_project_page.unresolved')}</p>
               <p className={`text-xl font-bold ${totalOpen > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
                 {totalOpen}<span className="text-xs font-medium ml-0.5 text-gray-400">{t('unit_cases')}</span>
               </p>
@@ -243,7 +245,7 @@ function MultiProjectContent() {
               <p className={`text-xl font-bold ${rateColor(overallRate).text}`}>{overallRate ?? '—'}<span className="text-xs font-medium ml-0.5">{overallRate != null ? '%' : ''}</span></p>
             </div>
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 shadow-sm">
-              <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">평균 MTTR</p>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">{tI18n('app_multi_project_page.avg_mttr')}</p>
               <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{avgMTTR ?? '—'}<span className="text-xs font-medium ml-0.5 text-gray-400">{avgMTTR != null ? 'h' : ''}</span></p>
             </div>
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 shadow-sm">
@@ -252,7 +254,7 @@ function MultiProjectContent() {
             </div>
             {/* 건강도 분포 카드 */}
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 shadow-sm">
-              <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-1">건강도</p>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-1">{tI18n('app_multi_project_page.health')}</p>
               <div className="flex items-center gap-1.5 text-xs font-semibold">
                 <span className="flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400">
                   <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />{gradeCounts.good}
@@ -264,7 +266,7 @@ function MultiProjectContent() {
                   <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />{gradeCounts.critical}
                 </span>
               </div>
-              <p className="text-[10px] text-gray-400 mt-0.5">양호·주의·심각</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{tI18n('app_multi_project_page.grade_legend')}</p>
             </div>
           </div>
 
@@ -278,7 +280,7 @@ function MultiProjectContent() {
                 </svg>
                 <input
                   type="search"
-                  placeholder="프로젝트 이름 검색…"
+                  placeholder={tI18n('app_multi_project_page.search_placeholder')}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full border border-gray-200 dark:border-gray-700 rounded-lg pl-8 pr-3 py-1.5 text-sm bg-white dark:bg-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
@@ -287,7 +289,7 @@ function MultiProjectContent() {
               {/* 건강도 필터 */}
               <div className="flex items-center gap-1 text-xs">
                 {(['all', 'critical', 'warn', 'good'] as const).map(g => {
-                  const labels: Record<typeof g, string> = { all: '전체', critical: '심각', warn: '주의', good: '양호' }
+                  const labels: Record<typeof g, string> = { all: tI18n('app_multi_project_page.filter_all'), critical: tI18n('app_multi_project_page.filter_critical'), warn: tI18n('app_multi_project_page.filter_warn'), good: tI18n('app_multi_project_page.filter_good') }
                   const colors: Record<typeof g, string> = {
                     all: 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400',
                     critical: 'border-red-300 dark:border-red-700 text-red-600 dark:text-red-400',
@@ -312,29 +314,29 @@ function MultiProjectContent() {
               </div>
               {/* 정렬 */}
               <div className="flex items-center gap-1 text-xs">
-                <span className="text-gray-400">정렬</span>
+                <span className="text-gray-400">{tI18n('app_multi_project_page.sort_label')}</span>
                 <select
                   value={sortKey}
                   onChange={e => setSortKey(e.target.value as SortKey)}
                   className="border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1 bg-white dark:bg-gray-800 text-sm focus:outline-none"
                 >
-                  <option value="health">건강도 점수</option>
-                  <option value="name">이름</option>
-                  <option value="breach">위반 건수</option>
-                  <option value="rate">준수율</option>
-                  <option value="open">미해결</option>
-                  <option value="tickets">총 티켓</option>
+                  <option value="health">{tI18n('app_multi_project_page.sort_health')}</option>
+                  <option value="name">{tI18n('app_multi_project_page.sort_name')}</option>
+                  <option value="breach">{tI18n('app_multi_project_page.sort_breach')}</option>
+                  <option value="rate">{tI18n('app_multi_project_page.sort_rate')}</option>
+                  <option value="open">{tI18n('app_multi_project_page.sort_open')}</option>
+                  <option value="tickets">{tI18n('app_multi_project_page.sort_tickets')}</option>
                 </select>
                 <button
                   onClick={() => setSortDesc(d => !d)}
                   className="px-1.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
-                  title={sortDesc ? '내림차순' : '오름차순'}
+                  title={sortDesc ? tI18n('app_multi_project_page.sort_desc') : tI18n('app_multi_project_page.sort_asc')}
                 >
                   {sortDesc ? '↓' : '↑'}
                 </button>
               </div>
             </div>
-            <div className="text-xs text-gray-400 mt-2">{filtered.length} / {projects.length} 프로젝트 표시</div>
+            <div className="text-xs text-gray-400 mt-2">{tI18n('app_multi_project_page.showing_count', { shown: filtered.length, total: projects.length })}</div>
           </div>
 
           {/* 프로젝트 테이블 (확장 가능 행) */}
@@ -343,20 +345,20 @@ function MultiProjectContent() {
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800/60 border-b dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                   <th className="px-3 py-2.5 text-left w-10"></th>
-                  <th className="px-3 py-2.5 text-left">프로젝트</th>
-                  <th className="px-3 py-2.5 text-left w-20">건강도</th>
-                  <th className="px-3 py-2.5 text-left w-24 hidden sm:table-cell">준수율</th>
-                  <th className="px-3 py-2.5 text-left w-20 hidden md:table-cell">4주 추세</th>
-                  <th className="px-3 py-2.5 text-left w-20 hidden lg:table-cell">미해결</th>
-                  <th className="px-3 py-2.5 text-left w-20 hidden lg:table-cell">위반</th>
-                  <th className="px-3 py-2.5 text-left w-20 hidden xl:table-cell">MTTR</th>
-                  <th className="px-3 py-2.5 text-left w-24 hidden xl:table-cell">7일 해결</th>
+                  <th className="px-3 py-2.5 text-left">{tI18n('app_multi_project_page.col_project')}</th>
+                  <th className="px-3 py-2.5 text-left w-20">{tI18n('app_multi_project_page.col_health')}</th>
+                  <th className="px-3 py-2.5 text-left w-24 hidden sm:table-cell">{tI18n('app_multi_project_page.col_rate')}</th>
+                  <th className="px-3 py-2.5 text-left w-20 hidden md:table-cell">{tI18n('app_multi_project_page.col_trend')}</th>
+                  <th className="px-3 py-2.5 text-left w-20 hidden lg:table-cell">{tI18n('app_multi_project_page.col_unresolved')}</th>
+                  <th className="px-3 py-2.5 text-left w-20 hidden lg:table-cell">{tI18n('app_multi_project_page.col_breach')}</th>
+                  <th className="px-3 py-2.5 text-left w-20 hidden xl:table-cell">{tI18n('app_multi_project_page.col_mttr')}</th>
+                  <th className="px-3 py-2.5 text-left w-24 hidden xl:table-cell">{tI18n('app_multi_project_page.col_resolved_7d')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-10 text-gray-400">일치하는 프로젝트가 없습니다.</td>
+                    <td colSpan={9} className="text-center py-10 text-gray-400">{tI18n('app_multi_project_page.no_match')}</td>
                   </tr>
                 ) : filtered.map(p => {
                   const rc = rateColor(p.sla_compliance_rate)
@@ -418,39 +420,39 @@ function MultiProjectContent() {
                           ) : <span className="text-xs text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-3 hidden xl:table-cell">
-                          <span className="text-xs text-gray-500 dark:text-gray-400">{p.resolved_7d ?? 0}건</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{tI18n('app_multi_project_page.count_cases', { count: p.resolved_7d ?? 0 })}</span>
                         </td>
                       </tr>
                       {isOpen && (
                         <tr key={`${p.project_id}-detail`}>
                           <td colSpan={9} className="px-0 py-0 bg-gray-50 dark:bg-gray-800/40 border-b dark:border-gray-700">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4">
-                              <DetailStat label="총 SLA 레코드" value={p.total_sla_records.toString()} />
-                              <DetailStat label="진행 중" value={(p.sla_active).toString()} accent="amber" />
-                              <DetailStat label="미해결" value={(p.open_tickets ?? 0).toString()} accent="amber" />
-                              <DetailStat label="전체 준수율" value={p.sla_compliance_rate != null ? `${p.sla_compliance_rate}%` : '—'} />
-                              <DetailStat label="최근 7일 해결" value={`${p.resolved_7d ?? 0}건`} />
-                              <DetailStat label="최근 7일 준수율" value={p.compliance_rate_7d != null ? `${p.compliance_rate_7d}%` : '—'} />
-                              <DetailStat label="MTTR (7일)" value={p.mttr_hours_7d != null ? `${p.mttr_hours_7d}h` : '—'} accent="blue" />
-                              <DetailStat label="활성 담당자 (7일)" value={`${p.active_assignees_7d ?? 0}명`} />
-                              <DetailStat label="누적 기록 시간" value={`${p.total_time_hours}h`} accent="purple" />
-                              <DetailStat label="건강도 점수" value={(p.health_score ?? 0).toString()} accent="indigo" />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_total_sla_records')} value={p.total_sla_records.toString()} />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_in_progress')} value={(p.sla_active).toString()} accent="amber" />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_unresolved')} value={(p.open_tickets ?? 0).toString()} accent="amber" />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_overall_rate')} value={p.sla_compliance_rate != null ? `${p.sla_compliance_rate}%` : '—'} />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_resolved_7d')} value={tI18n('app_multi_project_page.count_cases', { count: p.resolved_7d ?? 0 })} />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_rate_7d')} value={p.compliance_rate_7d != null ? `${p.compliance_rate_7d}%` : '—'} />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_mttr_7d')} value={p.mttr_hours_7d != null ? `${p.mttr_hours_7d}h` : '—'} accent="blue" />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_active_assignees_7d')} value={tI18n('app_multi_project_page.count_people', { count: p.active_assignees_7d ?? 0 })} />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_total_hours')} value={`${p.total_time_hours}h`} accent="purple" />
+                              <DetailStat label={tI18n('app_multi_project_page.detail_health_score')} value={(p.health_score ?? 0).toString()} accent="indigo" />
                             </div>
                             {p.weekly_trend && p.weekly_trend.length > 0 && (
                               <div className="px-4 pb-4">
-                                <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-1.5">최근 4주 주별 준수율 (월요일 기준)</div>
+                                <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-1.5">{tI18n('app_multi_project_page.weekly_trend_title_monday')}</div>
                                 <div className="flex items-end gap-2 h-20">
                                   {p.weekly_trend.map((w, i) => {
                                     const v = w.compliance ?? 0
                                     const color = v >= 90 ? 'bg-emerald-400' : v >= 70 ? 'bg-amber-400' : v > 0 ? 'bg-red-400' : 'bg-gray-200 dark:bg-gray-700'
                                     return (
-                                      <div key={i} className="flex-1 flex flex-col items-center gap-1" title={`${w.week}: ${w.compliance ?? 0}% (${w.total}건)`}>
+                                      <div key={i} className="flex-1 flex flex-col items-center gap-1" title={tI18n('app_multi_project_page.week_tooltip', { week: w.week, rate: w.compliance ?? 0, total: w.total })}>
                                         <div className="text-[10px] text-gray-400">{w.compliance != null ? `${w.compliance}%` : '—'}</div>
                                         <div className="w-full bg-gray-100 dark:bg-gray-700 rounded overflow-hidden" style={{ height: 40 }}>
                                           <div className={`w-full ${color}`} style={{ height: `${v}%`, marginTop: `${100 - v}%` }} />
                                         </div>
                                         <div className="text-[10px] text-gray-400 font-mono">{w.week.slice(5)}</div>
-                                        <div className="text-[9px] text-gray-400">{w.total}건</div>
+                                        <div className="text-[9px] text-gray-400">{tI18n('app_multi_project_page.count_cases', { count: w.total })}</div>
                                       </div>
                                     )
                                   })}
@@ -473,6 +475,7 @@ function MultiProjectContent() {
 }
 
 function SingleProjectNotice({ project }: { project: MultiProjectStats }) {
+  const tI18n = useTranslations()
   const rc = rateColor(project.sla_compliance_rate)
   const hc = healthColor(project.health_grade)
   return (
@@ -485,19 +488,19 @@ function SingleProjectNotice({ project }: { project: MultiProjectStats }) {
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">이 시스템에는 프로젝트가 1개뿐입니다</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">{tI18n('app_multi_project_page.single_title')}</h2>
             <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-              멀티 프로젝트 통합 뷰는 2개 이상의 프로젝트가 있을 때 비교·정렬·건강도 분포가 의미를 가집니다. 단일 프로젝트에서는 아래 전용 대시보드가 더 상세합니다.
+              {tI18n('app_multi_project_page.single_desc')}
             </p>
             <div className="flex flex-wrap gap-2 mt-3">
               <Link href="/sla" className="inline-flex items-center gap-1.5 text-sm bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors">
-                ⏰ SLA 대시보드 →
+                ⏰ {tI18n('app_multi_project_page.link_sla_dashboard')} →
               </Link>
               <Link href="/reports" className="inline-flex items-center gap-1.5 text-sm border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors">
-                📈 분석 리포트 →
+                📈 {tI18n('app_multi_project_page.link_reports')} →
               </Link>
               <Link href="/" className="inline-flex items-center gap-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                🎫 티켓 목록 →
+                🎫 {tI18n('app_multi_project_page.link_ticket_list')} →
               </Link>
             </div>
           </div>
@@ -514,26 +517,26 @@ function SingleProjectNotice({ project }: { project: MultiProjectStats }) {
           <div className="ml-auto flex items-center gap-2">
             <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold ${hc.bg} ${hc.border} ${hc.text}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${hc.dot}`} />
-              건강도 {project.health_score ?? '—'}
+              {tI18n('app_multi_project_page.health')} {project.health_score ?? '—'}
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <DetailStat label="총 SLA" value={`${project.total_sla_records}건`} />
-          <DetailStat label="미해결" value={`${project.open_tickets ?? 0}건`} accent="amber" />
-          <DetailStat label="위반" value={`${project.sla_breached}건`} accent={project.sla_breached > 0 ? 'amber' : undefined} />
-          <DetailStat label="전체 준수율" value={project.sla_compliance_rate != null ? `${project.sla_compliance_rate}%` : '—'} />
-          <DetailStat label="최근 7일 해결" value={`${project.resolved_7d ?? 0}건`} />
-          <DetailStat label="7일 준수율" value={project.compliance_rate_7d != null ? `${project.compliance_rate_7d}%` : '—'} />
-          <DetailStat label="7일 MTTR" value={project.mttr_hours_7d != null ? `${project.mttr_hours_7d}h` : '—'} accent="blue" />
-          <DetailStat label="누적 기록" value={`${project.total_time_hours}h`} accent="purple" />
+          <DetailStat label={tI18n('app_multi_project_page.detail_total_sla')} value={tI18n('app_multi_project_page.count_cases', { count: project.total_sla_records })} />
+          <DetailStat label={tI18n('app_multi_project_page.detail_unresolved')} value={tI18n('app_multi_project_page.count_cases', { count: project.open_tickets ?? 0 })} accent="amber" />
+          <DetailStat label={tI18n('app_multi_project_page.detail_breach')} value={tI18n('app_multi_project_page.count_cases', { count: project.sla_breached })} accent={project.sla_breached > 0 ? 'amber' : undefined} />
+          <DetailStat label={tI18n('app_multi_project_page.detail_overall_rate')} value={project.sla_compliance_rate != null ? `${project.sla_compliance_rate}%` : '—'} />
+          <DetailStat label={tI18n('app_multi_project_page.detail_resolved_7d')} value={tI18n('app_multi_project_page.count_cases', { count: project.resolved_7d ?? 0 })} />
+          <DetailStat label={tI18n('app_multi_project_page.detail_rate_7d_short')} value={project.compliance_rate_7d != null ? `${project.compliance_rate_7d}%` : '—'} />
+          <DetailStat label={tI18n('app_multi_project_page.detail_mttr_7d_short')} value={project.mttr_hours_7d != null ? `${project.mttr_hours_7d}h` : '—'} accent="blue" />
+          <DetailStat label={tI18n('app_multi_project_page.detail_total_hours_short')} value={`${project.total_time_hours}h`} accent="purple" />
         </div>
 
         {project.sla_compliance_rate != null && (
           <div className="mt-4">
             <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-              <span>SLA 준수율</span>
+              <span>{tI18n('app_multi_project_page.sla_compliance_rate')}</span>
               <span className={rc.text}>{project.sla_compliance_rate}%</span>
             </div>
             <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
@@ -544,19 +547,19 @@ function SingleProjectNotice({ project }: { project: MultiProjectStats }) {
 
         {project.weekly_trend && project.weekly_trend.length > 0 && (
           <div className="mt-5">
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">최근 4주 주별 준수율</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">{tI18n('app_multi_project_page.weekly_trend_title')}</div>
             <div className="flex items-end gap-2 h-24">
               {project.weekly_trend.map((w, i) => {
                 const v = w.compliance ?? 0
                 const color = v >= 90 ? 'bg-emerald-400' : v >= 70 ? 'bg-amber-400' : v > 0 ? 'bg-red-400' : 'bg-gray-200 dark:bg-gray-700'
                 return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1" title={`${w.week}: ${w.compliance ?? 0}% (${w.total}건)`}>
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1" title={tI18n('app_multi_project_page.week_tooltip', { week: w.week, rate: w.compliance ?? 0, total: w.total })}>
                     <div className="text-[10px] text-gray-400">{w.compliance != null ? `${w.compliance}%` : '—'}</div>
                     <div className="w-full bg-gray-100 dark:bg-gray-700 rounded overflow-hidden" style={{ height: 48 }}>
                       <div className={`w-full ${color}`} style={{ height: `${v}%`, marginTop: `${100 - v}%` }} />
                     </div>
                     <div className="text-[10px] text-gray-400 font-mono">{w.week.slice(5)}</div>
-                    <div className="text-[9px] text-gray-400">{w.total}건</div>
+                    <div className="text-[9px] text-gray-400">{tI18n('app_multi_project_page.count_cases', { count: w.total })}</div>
                   </div>
                 )
               })}
@@ -566,7 +569,7 @@ function SingleProjectNotice({ project }: { project: MultiProjectStats }) {
       </div>
 
       <div className="text-xs text-gray-400 dark:text-gray-500 text-center">
-        💡 GitLab에서 신규 프로젝트를 추가하면 이 화면이 자동으로 멀티 프로젝트 뷰로 전환됩니다.
+        💡 {tI18n('app_multi_project_page.single_footer_note')}
       </div>
     </div>
   )

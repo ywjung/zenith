@@ -211,7 +211,7 @@ def download_import_template():
 
 
 @export_router.post("/import/csv", status_code=201)
-async def import_tickets_csv(
+def import_tickets_csv(
     file: UploadFile = File(...),
     project_id: Optional[str] = Query(default=None),
     _user: dict = Depends(require_agent),
@@ -235,7 +235,7 @@ async def import_tickets_csv(
     if ct and ct not in {"text/csv", "application/csv", "text/plain", "application/octet-stream"}:
         raise HTTPException(status_code=422, detail="CSV 파일만 업로드 가능합니다.")
 
-    content = await file.read()
+    content = file.file.read()  # sync 핸들러 — 스레드풀에서 실행되어 이벤트 루프 비차단
     if len(content) > _MAX_CSV_SIZE:
         raise HTTPException(status_code=422, detail="CSV 파일은 최대 5MB까지 허용됩니다.")
     try:
@@ -256,6 +256,29 @@ async def import_tickets_csv(
     imported = 0
     failed = []
 
+    # assignee_username → GitLab user_id 사전 일괄 해석.
+    # (행마다 새 httpx.Client로 조회하던 N+1 제거 — 중복 제거 + 단일 클라이언트 재사용)
+    assignee_ids: dict[str, Optional[int]] = {}
+    distinct_usernames = {(r.get("assignee_username") or "").strip() for r in rows}
+    distinct_usernames.discard("")
+    if distinct_usernames:
+        import httpx as _httpx
+        settings = get_settings()
+        with _httpx.Client(timeout=10.0) as c:
+            for uname in distinct_usernames:
+                try:
+                    resp = c.get(
+                        f"{settings.GITLAB_API_URL}/api/v4/users",
+                        headers={"PRIVATE-TOKEN": settings.GITLAB_PROJECT_TOKEN},
+                        params={"username": uname},
+                    )
+                    if resp.is_success:
+                        users = resp.json()
+                        if users:
+                            assignee_ids[uname] = users[0].get("id")
+                except Exception as ae:
+                    logger.warning("CSV import: assignee lookup failed for '%s': %s", uname, ae)
+
     for idx, row in enumerate(rows, start=2):  # 1행 = 헤더
         title = (row.get("title") or "").strip()
         if not title:
@@ -274,25 +297,8 @@ async def import_tickets_csv(
             if category:
                 labels.append(f"cat::{category}")
 
-            # assignee_username → GitLab user_id 조회
-            assignee_id: Optional[int] = None
-            if assignee_username:
-                try:
-                    from ...config import get_settings as _gs
-                    import httpx as _httpx
-                    settings = _gs()
-                    with _httpx.Client(timeout=10.0) as c:
-                        resp = c.get(
-                            f"{settings.GITLAB_API_URL}/api/v4/users",
-                            headers={"PRIVATE-TOKEN": settings.GITLAB_PROJECT_TOKEN},
-                            params={"username": assignee_username},
-                        )
-                        if resp.is_success:
-                            users = resp.json()
-                            if users:
-                                assignee_id = users[0].get("id")
-                except Exception as ae:
-                    logger.warning("CSV import row %d: assignee lookup failed for '%s': %s", idx, assignee_username, ae)
+            # assignee_username → GitLab user_id (사전 일괄 해석 결과 사용)
+            assignee_id: Optional[int] = assignee_ids.get(assignee_username) if assignee_username else None
 
             gitlab_client.create_issue(
                 title=title,

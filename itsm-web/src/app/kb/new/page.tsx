@@ -21,13 +21,14 @@ function NewKBContent() {
   const { isAgent } = useAuth()
   const { serviceTypes } = useServiceTypes()
   const t = useTranslations('kb')
+  const tI18n = useTranslations()
 
   // KB 작성 템플릿
   const KB_TEMPLATES = [
-    { id: 'blank', label: '빈 문서', icon: '📄', content: '' },
-    { id: 'troubleshoot', label: '문제 해결', icon: '🔧', content: '<h2>증상</h2>\n<p>어떤 문제가 발생하는지 설명해주세요.</p>\n\n<h2>원인</h2>\n<p>문제의 근본 원인을 기술합니다.</p>\n\n<h2>해결 방법</h2>\n<ol><li>첫 번째 단계</li><li>두 번째 단계</li></ol>\n\n<h2>관련 문서</h2>\n<p>참고할 수 있는 다른 KB 문서나 외부 링크</p>' },
-    { id: 'faq', label: 'FAQ', icon: '❓', content: '<h2>질문</h2>\n<p>자주 묻는 질문을 작성합니다.</p>\n\n<h2>답변</h2>\n<p>명확하고 간결한 답변을 작성합니다.</p>\n\n<h2>추가 참고</h2>\n<p>더 자세한 내용이 필요하면 이곳에 작성합니다.</p>' },
-    { id: 'howto', label: '절차 가이드', icon: '📝', content: '<h2>개요</h2>\n<p>이 절차의 목적과 대상을 설명합니다.</p>\n\n<h2>사전 조건</h2>\n<ul><li>필요한 권한 또는 도구</li></ul>\n\n<h2>절차</h2>\n<ol><li><strong>1단계:</strong> 설명</li><li><strong>2단계:</strong> 설명</li><li><strong>3단계:</strong> 설명</li></ol>\n\n<h2>확인 사항</h2>\n<p>절차 완료 후 확인할 사항을 기술합니다.</p>' },
+    { id: 'blank', label: tI18n('app_kb_new_page.template_blank_label'), icon: '📄', content: '' },
+    { id: 'troubleshoot', label: tI18n('app_kb_new_page.template_troubleshoot_label'), icon: '🔧', content: tI18n('app_kb_new_page.template_troubleshoot_content') },
+    { id: 'faq', label: 'FAQ', icon: '❓', content: tI18n('app_kb_new_page.template_faq_content') },
+    { id: 'howto', label: tI18n('app_kb_new_page.template_howto_label'), icon: '📝', content: tI18n('app_kb_new_page.template_howto_content') },
   ]
   const [showTemplates, setShowTemplates] = useState(true)
   const [form, setForm] = useState({ title: '', slug: '', content: '', category: '', published: false })
@@ -89,7 +90,7 @@ function NewKBContent() {
       {/* 템플릿 선택 */}
       {showTemplates && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 mb-5">
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">📄 템플릿으로 시작하기</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">📄 {tI18n('app_kb_new_page.start_with_template')}</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {KB_TEMPLATES.map(tmpl => (
               <button
@@ -226,7 +227,7 @@ function NewKBContent() {
               {tags.map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 rounded-full px-2.5 py-1">
                   #{tag}
-                  <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== tag))} className="hover:text-red-500 ml-0.5" aria-label="제거">×</button>
+                  <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== tag))} className="hover:text-red-500 ml-0.5" aria-label={tI18n('app_kb_new_page.remove_tag_aria')}>×</button>
                 </span>
               ))}
             </div>

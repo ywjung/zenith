@@ -50,7 +50,7 @@ function UserMenu({ user, logout, t }: { user: UserShape; logout: () => void; t:
         onClick={() => setOpen(o => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="사용자 메뉴"
+        aria-label={t('components_header.user_menu_aria')}
         className="flex items-center gap-2 cursor-pointer rounded-md px-1 py-0.5 hover:bg-blue-600/40 dark:hover:bg-gray-700 transition-colors"
       >
         <span className="opacity-90 text-sm whitespace-nowrap">{formatName(user.name)}</span>
@@ -218,7 +218,7 @@ export default function Header() {
     },
     {
       href: '/multi-project',
-      label: '멀티뷰',
+      label: t('components_header.nav_multiview'),
       show: isAgent && showMultiProject,
       icon: (
         <svg className="w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -282,7 +282,7 @@ export default function Header() {
               />
               <NavLink
                 href="/changes"
-                label="변경관리"
+                label={t('components_header.nav_changes')}
                 icon={
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -291,7 +291,7 @@ export default function Header() {
               />
               <NavLink
                 href="/problems"
-                label="문제관리"
+                label={t('components_header.nav_problems')}
                 icon={
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -306,7 +306,7 @@ export default function Header() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
-                  현황·분석
+                  {t('components_header.nav_analytics')}
                   <svg className="w-3 h-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
                   </svg>
@@ -381,7 +381,7 @@ export default function Header() {
               <button
                 onClick={cycleTheme}
                 title={`Theme: ${theme} (click to change)`}
-                aria-label={`테마 전환 (현재: ${theme})`}
+                aria-label={t('components_header.theme_toggle_aria', { theme })}
                 className="p-1.5 rounded-md hover:bg-blue-600 dark:hover:bg-gray-700 transition-colors text-sm opacity-80 hover:opacity-100"
               >
                 {themeIcon}
@@ -406,7 +406,7 @@ export default function Header() {
           <button
             onClick={() => setMobileMenuOpen(o => !o)}
             className="p-2 rounded-md hover:bg-blue-600 dark:hover:bg-gray-700 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/80"
-            aria-label={mobileMenuOpen ? '메뉴 닫기' : '메뉴 열기'}
+            aria-label={mobileMenuOpen ? t('components_header.menu_close_aria') : t('components_header.menu_open_aria')}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-nav"
           >
@@ -423,20 +423,20 @@ export default function Header() {
       {/* 모바일 드롭다운 메뉴 */}
       {mobileMenuOpen && user && (
         <div id="mobile-nav" className="md:hidden bg-blue-800 dark:bg-gray-900 border-t border-blue-600 dark:border-gray-800 px-4 py-3 space-y-1 text-sm animate-fadeIn">
-          <p className="text-blue-300 dark:text-gray-500 text-xs uppercase tracking-wide pb-1">핵심 메뉴</p>
+          <p className="text-blue-300 dark:text-gray-500 text-xs uppercase tracking-wide pb-1">{t('components_header.core_menu')}</p>
           <Link href="/" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🎫 {t('nav.tickets')}</Link>
           <Link href="/tickets/new" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>+ {t('ticket.new')}</Link>
           <Link href="/kb" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📚 {t('nav.kb')}</Link>
           <Link href="/kanban" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🗂 {t('nav.kanban')}</Link>
-          <Link href="/changes" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🔄 변경관리</Link>
-          <Link href="/problems" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>⚠️ 문제관리</Link>
+          <Link href="/changes" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🔄 {t('components_header.nav_changes')}</Link>
+          <Link href="/problems" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>⚠️ {t('components_header.nav_problems')}</Link>
 
           <div className="border-t border-blue-600 dark:border-gray-700 pt-2 mt-1">
             <button
               className="flex items-center gap-1 text-blue-300 dark:text-gray-400 text-xs uppercase tracking-wide pb-1 w-full"
               onClick={() => setMobileViewsOpen(o => !o)}
             >
-              <span>📊 현황·분석</span>
+              <span>📊 {t('components_header.nav_analytics')}</span>
               <span className="ml-auto">{mobileViewsOpen ? '▲' : '▼'}</span>
             </button>
             {mobileViewsOpen && (
@@ -445,7 +445,7 @@ export default function Header() {
                 {isAgent && <Link href="/gantt" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📊 {t('nav.gantt')}</Link>}
                 {isAgent && <Link href="/sla" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>⏰ {t('nav.sla')}</Link>}
                 {isAgent && <Link href="/reports" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>📈 {t('nav.reports')}</Link>}
-                {isAgent && showMultiProject && <Link href="/multi-project" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🗂️ 멀티뷰</Link>}
+                {isAgent && showMultiProject && <Link href="/multi-project" className="block py-2 hover:text-blue-200 dark:hover:text-gray-300" onClick={() => setMobileMenuOpen(false)}>🗂️ {t('components_header.nav_multiview')}</Link>}
               </div>
             )}
           </div>

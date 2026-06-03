@@ -1,5 +1,7 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
+
 /**
  * 사용자 아바타 — 이니셜 기반 + username 해시로 일관된 색상 생성.
  * 같은 username은 항상 같은 색상을 갖도록 deterministic.
@@ -75,6 +77,7 @@ export default function Avatar({
   className?: string
   title?: string
 }) {
+  const t = useTranslations()
   const seed = username || name || ''
   const color = pickColor(seed)
   const initials = getInitials(name || username)
@@ -83,7 +86,7 @@ export default function Avatar({
     <span
       className={`inline-flex items-center justify-center rounded-full text-white font-bold select-none shrink-0 ${color} ${sizeCls} ${className}`}
       title={title || name || username || undefined}
-      aria-label={name || username || '사용자'}
+      aria-label={name || username || t('components_avatar.user')}
     >
       {initials}
     </span>

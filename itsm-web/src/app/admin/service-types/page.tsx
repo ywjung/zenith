@@ -142,7 +142,7 @@ function OptionsEditor({
             {contextOptions.map((opt) => (
               <span key={opt} className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full px-2.5 py-1 text-gray-700 dark:text-gray-300">
                 {opt}
-                <button type="button" onClick={() => remove(opt)} className="hover:text-red-500 ml-0.5 leading-none" aria-label="삭제">×</button>
+                <button type="button" onClick={() => remove(opt)} className="hover:text-red-500 ml-0.5 leading-none" aria-label={t('option_remove')}>×</button>
               </span>
             ))}
           </div>
@@ -243,7 +243,7 @@ export default function ServiceTypesPage() {
   }
 
   const handleDelete = async (st: ServiceType) => {
-    if (!(await confirm({ title: t('service_types.delete_confirm', { emoji: st.emoji, label: st.label }), variant: 'danger', confirmLabel: '확인' }))) return
+    if (!(await confirm({ title: t('service_types.delete_confirm', { emoji: st.emoji, label: st.label }), variant: 'danger', confirmLabel: t('service_types.confirm_label') }))) return
     try {
       await deleteServiceType(st.id)
       reload()
@@ -265,8 +265,8 @@ export default function ServiceTypesPage() {
       <div className="flex items-start justify-between mb-5 gap-4">
         <p className="text-sm text-gray-500 dark:text-gray-400">
           {t('service_types.description')}
-          추가·수정 시 GitLab에 <code className="bg-gray-100 dark:bg-gray-700 dark:text-gray-300 px-1 rounded text-xs">cat::{'{'}id{'}'}</code> 라벨이 자동 동기화됩니다.{' '}
-          <a href="/admin/labels" className="text-blue-600 hover:underline text-xs">라벨 동기화 현황 →</a>
+          {t.rich('service_types.sync_hint', { code: () => <code className="bg-gray-100 dark:bg-gray-700 dark:text-gray-300 px-1 rounded text-xs">cat::{'{'}id{'}'}</code> })}{' '}
+          <a href="/admin/labels" className="text-blue-600 hover:underline text-xs">{t('service_types.label_sync_link')}</a>
         </p>
         <button
           onClick={() => { setShowCreate(!showCreate); setCreateForm(EMPTY_FORM) }}
@@ -290,7 +290,7 @@ export default function ServiceTypesPage() {
               <input
                 value={createForm.label}
                 onChange={(e) => setCreateForm(f => ({ ...f, label: e.target.value }))}
-                required placeholder="예: 데이터베이스"
+                required placeholder={t('service_types.label_placeholder')}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
               />
             </div>
@@ -299,7 +299,7 @@ export default function ServiceTypesPage() {
               <input
                 value={createForm.description}
                 onChange={(e) => setCreateForm(f => ({ ...f, description: e.target.value }))}
-                placeholder="예: database"
+                placeholder={t('service_types.description_placeholder')}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
               />
             </div>
@@ -371,7 +371,7 @@ export default function ServiceTypesPage() {
                     <input
                       value={editForm.description ?? ''}
                       onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))}
-                      placeholder="예: hardware"
+                      placeholder={t('service_types.description_placeholder_edit')}
                       className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
                     />
                   </div>
@@ -477,7 +477,7 @@ export default function ServiceTypesPage() {
                       disabled={usageLoading}
                       className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors text-lg leading-none disabled:cursor-not-allowed"
                       title={t('common.delete')}
-                     aria-label="삭제">✕</button>
+                     aria-label={t('service_types.delete_btn')}>✕</button>
                   )}
                 </div>
               </div>

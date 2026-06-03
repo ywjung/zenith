@@ -18,6 +18,7 @@
 stages:
   - lint
   - test
+  - security
   - e2e
   - build
   - deploy
@@ -96,7 +97,7 @@ lint:backend:
 
 lint:frontend:
   stage: lint
-  image: node:20-alpine
+  image: node:22-alpine
   <<: [*node-cache, *rules-lint-test]
   before_script:
     - cd itsm-web
@@ -145,7 +146,7 @@ migrate:check:
   <<: [*python-cache, *rules-lint-test]
   needs: [lint:backend]
   services:
-    - name: postgres:16-alpine
+    - name: postgres:18-alpine
       alias: postgres
   variables:
     POSTGRES_DB: itsm_test
@@ -174,9 +175,39 @@ migrate:check:
     - echo "✅ Alembic 마이그레이션 전체 검증 완료 (미반영 0건)"
   allow_failure: false
 
+# ── 보안 스캔 (배포 경로 게이트) ────────────────────────────────────────────────
+# 배포는 GitLab CI 경로로 이뤄지므로 빌드 전에 의존성 취약점을 스캔한다.
+# 현재 allow_failure:true(가시화·아티팩트)이며, 정책 확정 시 false로 하드 게이트화 가능.
+security:pip-audit:
+  stage: security
+  image: python:3.13-slim
+  <<: *rules-lint-test
+  before_script:
+    - cd itsm-api
+    - pip install pip-audit --quiet
+  script:
+    - pip-audit -r requirements.txt --format json --output pip-audit-results.json || (cat pip-audit-results.json && exit 1)
+  artifacts:
+    when: always
+    paths:
+      - itsm-api/pip-audit-results.json
+    expire_in: 1 week
+  allow_failure: true
+
+security:npm-audit:
+  stage: security
+  image: node:22-alpine
+  <<: [*node-cache, *rules-lint-test]
+  before_script:
+    - cd itsm-web
+    - npm ci --prefer-offline --ignore-scripts
+  script:
+    - npm audit --audit-level=moderate
+  allow_failure: true
+
 test:frontend:
   stage: test
-  image: node:20-alpine
+  image: node:22-alpine
   <<: [*node-cache, *rules-lint-test]
   needs: [lint:frontend]
   before_script:

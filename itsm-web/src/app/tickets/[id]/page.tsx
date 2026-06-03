@@ -828,6 +828,7 @@ function DescriptionWithAttachments({
  * 렌더링된 DOM 높이가 360px 이상이면 접기 상태로 초기 표시.
  */
 function CollapsibleBody({ children }: { children: React.ReactNode }) {
+  const tI18n = useTranslations()
   const [expanded, setExpanded] = useState(false)
   const [overflowing, setOverflowing] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -854,7 +855,7 @@ function CollapsibleBody({ children }: { children: React.ReactNode }) {
           onClick={() => setExpanded(e => !e)}
           className="relative mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
         >
-          {expanded ? '접기 ▲' : '더 보기 ▼'}
+          {expanded ? tI18n('app_tickets__id__page.collapse') : tI18n('app_tickets__id__page.show_more')}
         </button>
       )}
     </div>
@@ -914,6 +915,7 @@ const BUILTIN_QUICK_REPLIES: QuickReply[] = [
 
 function TicketDetailContent() {
   const t = useTranslations('ticket_detail')
+  const tI18n = useTranslations()
   const confirm = useConfirm()
   const params = useParams()
   const router = useRouter()
@@ -1119,7 +1121,7 @@ function TicketDetailContent() {
         // 404 — 티켓이 GitLab에서 삭제된 경우 (예: admin 수동 삭제, orphan cleanup 후).
         // 기본 에러 메시지 대신 명확한 안내로 사용자 혼란 제거.
         if (/404|not.?found|찾을 수 없/i.test(msg)) {
-          setError('이 티켓은 삭제되었거나 더 이상 존재하지 않습니다.')
+          setError(tI18n('app_tickets__id__page.ticket_not_found'))
         } else {
           setError(msg)
         }
@@ -1566,7 +1568,7 @@ function TicketDetailContent() {
             setCommentUploadStatus(s => ({ ...s, [file.name]: { progress: 100, status: 'ok' } }))
             return { file, result: r, error: null as string | null }
           } catch (err) {
-            const msg = err instanceof Error ? err.message : '업로드 실패'
+            const msg = err instanceof Error ? err.message : tI18n('app_tickets__id__page.upload_failed')
             setCommentUploadStatus(s => ({ ...s, [file.name]: { progress: 0, status: 'error', error: msg } }))
             return { file, result: null, error: msg }
           }
@@ -1574,7 +1576,7 @@ function TicketDetailContent() {
         // 하나라도 실패하면 중단 (부분 성공한 파일은 유지 — 사용자가 실패한 것만 재시도 가능)
         const failed = results.filter(r => r.error)
         if (failed.length > 0) {
-          setCommentError(`첨부 실패: ${failed.map(f => f.file.name).join(', ')}`)
+          setCommentError(tI18n('app_tickets__id__page.attach_failed', { files: failed.map(f => f.file.name).join(', ') }))
           setCommenting(false); setCommentUploading(false)
           return
         }
@@ -2592,7 +2594,7 @@ function TicketDetailContent() {
         {/* 유사 과거 티켓 — 중복 조사 제거·해결 방법 재사용 */}
         {isAgent && relatedTickets.length > 0 && (
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">유사 과거 티켓</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">{tI18n('app_tickets__id__page.related_past_tickets')}</h2>
             <div className="space-y-2">
               {relatedTickets.map(rt => (
                 <Link
@@ -2602,7 +2604,7 @@ function TicketDetailContent() {
                 >
                   <p className="text-sm font-medium text-purple-800 dark:text-purple-300 line-clamp-2">#{rt.iid} {rt.title}</p>
                   <p className="text-xs text-purple-500 dark:text-purple-400 mt-0.5">
-                    {rt.status === 'closed' ? '✅ 종료' : '🟢 열림'} · 유사도 {Math.round(rt.score * 100)}%
+                    {rt.status === 'closed' ? tI18n('app_tickets__id__page.status_closed') : tI18n('app_tickets__id__page.status_open')} · {tI18n('app_tickets__id__page.similarity', { pct: Math.round(rt.score * 100) })}
                   </p>
                 </Link>
               ))}

@@ -34,6 +34,7 @@ function formatDate(iso: string | null) {
 }
 
 function PreviewBanner({ title, content, type }: { title: string; content: string; type: string }) {
+  const t = useTranslations('admin.announcements')
   const cfg = TYPE_STYLE[type as keyof typeof TYPE_STYLE] ?? TYPE_STYLE.info
   if (!title && !content) return null
   return (
@@ -43,7 +44,7 @@ function PreviewBanner({ title, content, type }: { title: string; content: strin
         {title && <span className="font-semibold">{title}</span>}
         {content && <span className="ml-2 opacity-80">{content}</span>}
       </div>
-      <button className="shrink-0 opacity-50 text-lg leading-none" disabled aria-label="제거">×</button>
+      <button className="shrink-0 opacity-50 text-lg leading-none" disabled aria-label={t('remove')}>×</button>
     </div>
   )
 }
@@ -170,10 +171,10 @@ export default function AnnouncementsPage() {
             </p>
             <div className="flex gap-3 mt-3 text-sm">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                {t('announcements.total_count')} <strong className="text-gray-900 dark:text-gray-100">{list.length}개</strong>
+                {t('announcements.total_count')} <strong className="text-gray-900 dark:text-gray-100">{list.length}{t('announcements.count_suffix')}</strong>
               </span>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${activeCount > 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
-                {t('announcements.active_count')} <strong>{activeCount}개</strong>
+                {t('announcements.active_count')} <strong>{activeCount}{t('announcements.count_suffix')}</strong>
               </span>
             </div>
           </div>
@@ -220,7 +221,7 @@ export default function AnnouncementsPage() {
             <button
               onClick={() => setShowForm(false)}
               className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none"
-             aria-label="닫기">×</button>
+             aria-label={t('announcements.close')}>×</button>
           </div>
 
           <div className="p-6 space-y-5">

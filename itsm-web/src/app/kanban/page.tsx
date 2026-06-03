@@ -344,7 +344,7 @@ function KanbanContent() {
     } catch (err) {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
       await load()
-      const msg = err instanceof Error && err.message ? err.message : '상태 변경에 실패했습니다.'
+      const msg = err instanceof Error && err.message ? err.message : tr('app_kanban_page.status_change_failed')
       setDragError(msg)
     }
   }
@@ -369,7 +369,7 @@ function KanbanContent() {
     } catch (err) {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
       await load()
-      setDragError(err instanceof Error ? err.message : '상태 변경에 실패했습니다.')
+      setDragError(err instanceof Error ? err.message : tr('app_kanban_page.status_change_failed'))
     }
     setChangeReason('')
   }
@@ -390,7 +390,7 @@ function KanbanContent() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
           </svg>
-          칸반 보드
+          {tr('app_kanban_page.board_title')}
         </h1>
 
         <div className="w-px h-4 bg-gray-200 dark:bg-gray-600 shrink-0" />
@@ -404,7 +404,7 @@ function KanbanContent() {
             type="text"
             value={filterSearch}
             onChange={e => setFilterSearch(e.target.value)}
-            placeholder="티켓 검색…"
+            placeholder={tr('app_kanban_page.search_placeholder')}
             className="pl-7 pr-3 py-1 text-sm border border-gray-200 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700/60 text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-400 w-36 focus:w-48 transition-all"
           />
         </div>
@@ -473,7 +473,7 @@ function KanbanContent() {
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-            초기화
+            {tr('app_kanban_page.reset')}
           </button>
         )}
 
@@ -483,15 +483,15 @@ function KanbanContent() {
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               </svg>
-              동기화 실패
+              {tr('app_kanban_page.sync_failed')}
             </span>
           )}
-          <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">{filtered.length}건</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">{tr('app_kanban_page.ticket_count', { count: filtered.length })}</span>
           <button
             onClick={load}
             disabled={loading}
             className="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 transition-colors"
-            title="새로고침"
+            title={tr('app_kanban_page.refresh')}
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -504,7 +504,7 @@ function KanbanContent() {
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            목록
+            {tr('app_kanban_page.list')}
           </Link>
         </div>
       </div>
@@ -522,7 +522,7 @@ function KanbanContent() {
           <button
             onClick={() => setDragError(null)}
             className="text-amber-500 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 transition-colors"
-            aria-label="닫기"
+            aria-label={tr('app_kanban_page.close')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -543,19 +543,19 @@ function KanbanContent() {
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  상태 전환 이유 입력
+                  {tr('app_kanban_page.reason_modal_title')}
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   <span className="font-medium text-yellow-600 dark:text-yellow-400">
-                    {pendingDrop.dstCol === 'waiting' ? '추가정보 대기' : '재오픈'}
-                  </span> 상태로 전환하려면 이유를 입력해야 합니다.
+                    {pendingDrop.dstCol === 'waiting' ? tr('app_kanban_page.state_waiting') : tr('app_kanban_page.state_reopened')}
+                  </span> {tr('app_kanban_page.reason_modal_desc')}
                 </p>
               </div>
             </div>
             <textarea
               className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 resize-none focus:outline-none focus:ring-2 focus:ring-yellow-400 dark:focus:ring-yellow-500 placeholder-gray-400"
               rows={3}
-              placeholder="이유를 입력하세요…"
+              placeholder={tr('app_kanban_page.reason_placeholder')}
               value={changeReason}
               onChange={e => setChangeReason(e.target.value)}
               autoFocus
@@ -565,14 +565,14 @@ function KanbanContent() {
                 onClick={() => { setPendingDrop(null); setChangeReason('') }}
                 className="px-4 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                취소
+                {tr('app_kanban_page.cancel')}
               </button>
               <button
                 onClick={confirmPendingDrop}
                 disabled={!changeReason.trim()}
                 className="px-4 py-1.5 text-sm rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
               >
-                확인
+                {tr('app_kanban_page.confirm')}
               </button>
             </div>
           </div>
@@ -634,7 +634,7 @@ function KanbanContent() {
                       <button
                         onClick={() => setClosedCollapsed(false)}
                         className={`flex-none flex flex-col items-center justify-center gap-1.5 px-2 py-3 h-full ${col.header} hover:opacity-80 transition-opacity`}
-                        title="종료됨 컬럼 펼치기"
+                        title={tr('app_kanban_page.expand_closed_column')}
                       >
                         <span className="text-xs font-bold tracking-wide text-gray-600 dark:text-gray-300">{tr(`kanban.col_${col.id}`)}</span>
                         <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/70 dark:bg-black/30 text-gray-700 dark:text-gray-200">
@@ -672,7 +672,7 @@ function KanbanContent() {
                     {/* Column header */}
                     <div className={`flex-none flex items-center justify-between px-3 py-2 transition-colors ${overWip ? 'bg-red-100 dark:bg-red-900/40' : col.header}`}>
                       <div className="flex items-center gap-1.5 min-w-0">
-                        {overWip && <span className="text-sm shrink-0" title="WIP 한도 초과 — 작업 분산 필요" aria-label="WIP 초과">🚨</span>}
+                        {overWip && <span className="text-sm shrink-0" title={tr('app_kanban_page.wip_exceeded_title')} aria-label={tr('app_kanban_page.wip_exceeded_label')}>🚨</span>}
                         <span className={`text-xs font-semibold tracking-wide truncate ${overWip ? 'text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-200'}`}>
                           {tr(`kanban.col_${col.id}`)}
                         </span>
@@ -681,7 +681,7 @@ function KanbanContent() {
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                             </svg>
-                            이동 불가
+                            {tr('app_kanban_page.move_blocked')}
                           </span>
                         )}
                       </div>
@@ -698,7 +698,7 @@ function KanbanContent() {
                           <button
                             onClick={() => setClosedCollapsed(true)}
                             className="ml-0.5 w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-black/10 transition-colors"
-                            title="컬럼 접기"
+                            title={tr('app_kanban_page.collapse_column')}
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -729,7 +729,7 @@ function KanbanContent() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                 </svg>
                               </div>
-                              <span className="text-[11px] text-gray-400 dark:text-gray-600">비어 있음</span>
+                              <span className="text-[11px] text-gray-400 dark:text-gray-600">{tr('app_kanban_page.empty')}</span>
                             </div>
                           )}
 
@@ -806,7 +806,7 @@ function KanbanContent() {
                                           className={`shrink-0 w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center leading-none ${
                                             ticket.assignee_name ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-400'
                                           }`}
-                                          title={ticket.assignee_name ?? '미배정'}
+                                          title={ticket.assignee_name ?? tr('app_kanban_page.unassigned')}
                                         >
                                           {getInitials(ticket.assignee_name)}
                                         </span>

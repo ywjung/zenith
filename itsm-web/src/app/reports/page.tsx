@@ -191,7 +191,7 @@ function RatingDetail({ from, to, stats: externalStats }: { from: string; to: st
         <div className="mt-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg overflow-hidden">
           <div className="px-5 py-3 border-b border-red-200 dark:border-red-800 flex items-center gap-2">
             <span className="text-red-500">⚠️</span>
-            <h3 className="text-sm font-semibold text-red-700 dark:text-red-400">낮은 평점 티켓 (1~2점) — {stats.low_ratings.length}건</h3>
+            <h3 className="text-sm font-semibold text-red-700 dark:text-red-400">{t('low_rating_title', { count: stats.low_ratings.length })}</h3>
           </div>
           <div className="divide-y divide-red-100 dark:divide-red-900/30 max-h-56 overflow-y-auto">
             {stats.low_ratings.map((r) => (
@@ -207,7 +207,7 @@ function RatingDetail({ from, to, stats: externalStats }: { from: string; to: st
                   </div>
                   {r.comment && <p className="text-xs text-red-600 dark:text-red-400 mt-0.5 truncate">&ldquo;{r.comment}&rdquo;</p>}
                 </div>
-                <span className="text-sm font-bold text-red-600 dark:text-red-400 shrink-0">{r.score}점</span>
+                <span className="text-sm font-bold text-red-600 dark:text-red-400 shrink-0">{t('score_pts', { n: r.score })}</span>
               </div>
             ))}
           </div>
@@ -310,7 +310,7 @@ function BreakdownSection({ from, to }: { from: string; to: string }) {
             <div className="text-center py-6">
               <div className="text-3xl mb-2 select-none" aria-hidden="true">📊</div>
               <p className="text-sm text-gray-500 dark:text-gray-400">{t('breakdown_no_data')}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">선택한 기간에 티켓이 없습니다. 날짜 범위를 넓혀보세요.</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('no_tickets_widen')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -341,7 +341,7 @@ function BreakdownSection({ from, to }: { from: string; to: string }) {
             <div className="text-center py-6">
               <div className="text-3xl mb-2 select-none" aria-hidden="true">📊</div>
               <p className="text-sm text-gray-500 dark:text-gray-400">{t('breakdown_no_data')}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">선택한 기간에 티켓이 없습니다. 날짜 범위를 넓혀보세요.</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('no_tickets_widen')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -462,13 +462,13 @@ function TrendTable({ from: _from, to: _to }: { from: string; to: string }) {
         <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex-wrap">
           <label className="text-xs text-blue-700 dark:text-blue-400 font-medium">{t('trend_period_label')}</label>
           <input
-            type="date" aria-label={t('trend_period_label') + ' 시작'} value={customFrom}
+            type="date" aria-label={t('trend_from')} value={customFrom}
             onChange={e => setCustomFrom(e.target.value)}
             className="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
           <span className="text-gray-400 text-xs">~</span>
           <input
-            type="date" aria-label={t('trend_period_label') + ' 종료'} value={customTo}
+            type="date" aria-label={t('trend_to')} value={customTo}
             onChange={e => setCustomTo(e.target.value)}
             className="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
@@ -582,6 +582,7 @@ function TrendTable({ from: _from, to: _to }: { from: string; to: string }) {
 // CSAT Trend Chart
 // ---------------------------------------------------------------------------
 function CSATTrendSection({ from, to }: { from: string; to: string }) {
+  const t = useTranslations('reports')
   const [granularity, setGranularity] = useState<'weekly' | 'monthly'>('weekly')
   const [data, setData] = useState<CsatTrendItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -600,7 +601,7 @@ function CSATTrendSection({ from, to }: { from: string; to: string }) {
     <>
       <hr className="my-8 border-gray-200 dark:border-gray-700" />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">CSAT 트렌드</h2>
+        <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">{t('csat_trend_title')}</h2>
         <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
           {(['weekly', 'monthly'] as const).map((g) => (
             <button
@@ -612,7 +613,7 @@ function CSATTrendSection({ from, to }: { from: string; to: string }) {
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
               }`}
             >
-              {g === 'weekly' ? '주별' : '월별'}
+              {g === 'weekly' ? t('weekly') : t('monthly')}
             </button>
           ))}
         </div>
@@ -621,7 +622,7 @@ function CSATTrendSection({ from, to }: { from: string; to: string }) {
       {loading ? (
         <div className="h-48 bg-gray-50 dark:bg-gray-800 rounded-xl animate-pulse" />
       ) : data.length === 0 ? (
-        <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">평가 데이터가 없습니다.</p>
+        <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">{t('no_rating_data')}</p>
       ) : (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-sm">
           {/* 요약 카드 */}
@@ -637,17 +638,17 @@ function CSATTrendSection({ from, to }: { from: string; to: string }) {
                 <>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-teal-600">{latest?.csat_pct != null ? `${latest.csat_pct}%` : '-'}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">최근 기간 CSAT</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('recent_csat')}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-600">{avgCsat != null ? `${avgCsat}%` : '-'}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">기간 평균 CSAT</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('period_avg_csat')}</div>
                   </div>
                   <div className="text-center">
                     <div className={`text-2xl font-bold ${trend == null ? 'text-gray-400' : trend >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                       {trend != null ? `${trend > 0 ? '+' : ''}${trend.toFixed(1)}%` : '-'}
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">전 기간 대비</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('vs_prev')}</div>
                   </div>
                 </>
               )
@@ -675,13 +676,13 @@ function CSATTrendSection({ from, to }: { from: string; to: string }) {
                     </span>
                   </div>
                   <div className="w-20 text-right text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                    {item.count}건 / {item.average?.toFixed(1) ?? '-'}점
+                    {t('count_avg', { count: item.count, avg: item.average?.toFixed(1) ?? '-' })}
                   </div>
                 </div>
               )
             })}
           </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">CSAT = 4점 이상 비율. 색상: 녹색 ≥80% / 파란 ≥60% / 노란 ≥40% / 빨강 &lt;40%</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">{t('csat_legend')}</p>
         </div>
       )}
     </>
@@ -692,6 +693,7 @@ function CSATTrendSection({ from, to }: { from: string; to: string }) {
 // Agent Rating Ranking
 // ---------------------------------------------------------------------------
 function AgentRatingRanking({ from, to }: { from: string; to: string }) {
+  const t = useTranslations('reports')
   const [agents, setAgents] = useState<AgentPerformance[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -721,17 +723,17 @@ function AgentRatingRanking({ from, to }: { from: string; to: string }) {
   return (
     <>
       <hr className="my-8 border-gray-200 dark:border-gray-700" />
-      <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">에이전트 평점 랭킹</h2>
+      <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">{t('agent_ranking_title')}</h2>
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 w-12">순위</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">에이전트</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-yellow-600">평균 평점</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 hidden sm:table-cell">처리 완료</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 hidden md:table-cell">SLA 준수율</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 hidden lg:table-cell">만족도 바</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 w-12">{t('rank_col')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">{t('agent_col')}</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-yellow-600">{t('avg_rating_col')}</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 hidden sm:table-cell">{t('resolved_col')}</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 hidden md:table-cell">{t('sla_rate_col')}</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 hidden lg:table-cell">{t('satisfaction_col')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -802,9 +804,9 @@ function AgentPerformanceSection({ from, to }: { from: string; to: string }) {
       {/* 성과 하이라이트 */}
       {data.length >= 2 && (
         <div className="flex flex-wrap gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
-          {topResolver && <span className="text-xs"><span className="font-medium text-green-600">🏆 최다 해결</span> {formatName(topResolver.agent_name)} ({topResolver.resolved}건)</span>}
-          {topRated && (topRated.avg_rating ?? 0) > 0 && <span className="text-xs"><span className="font-medium text-yellow-500">⭐ 최고 평점</span> {formatName(topRated.agent_name)} ({topRated.avg_rating?.toFixed(1)}점)</span>}
-          {topSla && (topSla.sla_met_rate ?? 0) > 0 && <span className="text-xs"><span className="font-medium text-purple-600">🎯 SLA 최우수</span> {formatName(topSla.agent_name)} ({topSla.sla_met_rate?.toFixed(0)}%)</span>}
+          {topResolver && <span className="text-xs"><span className="font-medium text-green-600">{t('top_resolver')}</span> {formatName(topResolver.agent_name)} ({t('cases', { n: topResolver.resolved })})</span>}
+          {topRated && (topRated.avg_rating ?? 0) > 0 && <span className="text-xs"><span className="font-medium text-yellow-500">{t('top_rated')}</span> {formatName(topRated.agent_name)} ({t('points', { n: topRated.avg_rating?.toFixed(1) ?? '0' })})</span>}
+          {topSla && (topSla.sla_met_rate ?? 0) > 0 && <span className="text-xs"><span className="font-medium text-purple-600">{t('top_sla')}</span> {formatName(topSla.agent_name)} ({topSla.sla_met_rate?.toFixed(0)}%)</span>}
         </div>
       )}
       <table className="w-full text-sm">
@@ -1127,6 +1129,7 @@ function DoraSection({ days }: { days: number }) {
 // ---------------------------------------------------------------------------
 
 function TimeTrackingSection({ from, to }: { from: string; to: string }) {
+  const t = useTranslations('reports')
   const [data, setData] = useState<TimeTrackingReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -1140,12 +1143,12 @@ function TimeTrackingSection({ from, to }: { from: string; to: string }) {
       .finally(() => setLoading(false))
   }, [from, to])
 
-  if (loading) return <div className="py-10 text-center text-gray-400 text-sm animate-pulse">로딩 중...</div>
-  if (error || !data) return <div className="py-10 text-center text-red-400 text-sm">데이터를 불러올 수 없습니다.</div>
+  if (loading) return <div className="py-10 text-center text-gray-400 text-sm animate-pulse">{t('loading')}</div>
+  if (error || !data) return <div className="py-10 text-center text-red-400 text-sm">{t('load_failed')}</div>
   if (data.entry_count === 0) return (
     <div className="py-16 text-center text-gray-400">
       <div className="text-4xl mb-3">⏱️</div>
-      <p>선택한 기간에 기록된 시간이 없습니다.</p>
+      <p>{t('no_time_records')}</p>
     </div>
   )
 
@@ -1156,10 +1159,10 @@ function TimeTrackingSection({ from, to }: { from: string; to: string }) {
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: '총 기록 시간', value: `${data.total_hours}h`, sub: `${data.total_minutes}분` },
-          { label: '기록 건수', value: `${data.entry_count}건`, sub: '' },
-          { label: '참여 인원', value: `${data.agent_count}명`, sub: '' },
-          { label: '인당 평균', value: `${data.agent_count > 0 ? Math.round(data.total_hours / data.agent_count * 10) / 10 : 0}h`, sub: '' },
+          { label: t('total_time_label'), value: `${data.total_hours}h`, sub: t('minutes', { n: data.total_minutes }) },
+          { label: t('entry_count_label'), value: t('cases', { n: data.entry_count }), sub: '' },
+          { label: t('participants_label'), value: t('people', { n: data.agent_count }), sub: '' },
+          { label: t('per_person_label'), value: `${data.agent_count > 0 ? Math.round(data.total_hours / data.agent_count * 10) / 10 : 0}h`, sub: '' },
         ].map(c => (
           <div key={c.label} className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl px-4 py-3 shadow-sm">
             <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{c.label}</p>
@@ -1171,15 +1174,15 @@ function TimeTrackingSection({ from, to }: { from: string; to: string }) {
 
       {/* 팀원별 시간 */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">팀원별 기록 시간</h3>
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t('time_by_member_title')}</h3>
         <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">팀원</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600">총 시간</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">기록 건수</th>
-                <th className="px-4 py-3 hidden md:table-cell text-xs font-semibold text-gray-500 dark:text-gray-400">비율</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">{t('member_col')}</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600">{t('total_time_col')}</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{t('entry_count_col')}</th>
+                <th className="px-4 py-3 hidden md:table-cell text-xs font-semibold text-gray-500 dark:text-gray-400">{t('ratio_col')}</th>
               </tr>
             </thead>
             <tbody className="divide-y dark:divide-gray-800">
@@ -1192,7 +1195,7 @@ function TimeTrackingSection({ from, to }: { from: string; to: string }) {
                       <div className="text-xs text-gray-400">@{agent.agent_id}</div>
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-blue-600">{agent.total_hours}h</td>
-                    <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{agent.ticket_count}건</td>
+                    <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{t('cases', { n: agent.ticket_count })}</td>
                     <td className="px-4 py-3 hidden md:table-cell">
                       <div className="flex items-center gap-2 justify-end">
                         <div className="w-24 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -1212,16 +1215,16 @@ function TimeTrackingSection({ from, to }: { from: string; to: string }) {
       {/* 최근 기록 */}
       {data.recent_entries.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">최근 기록 (최대 50건)</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t('recent_entries_title')}</h3>
           <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">티켓</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 hidden sm:table-cell">팀원</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600">시간</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 hidden md:table-cell">설명</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 hidden lg:table-cell">일시</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">{t('ticket_col')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 hidden sm:table-cell">{t('member_col')}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600">{t('time_col')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 hidden md:table-cell">{t('desc_col')}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 hidden lg:table-cell">{t('datetime_col')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y dark:divide-gray-800">
@@ -1254,6 +1257,7 @@ function TimeTrackingSection({ from, to }: { from: string; to: string }) {
 // ---------------------------------------------------------------------------
 
 function SLAComplianceSection() {
+  const tr = useTranslations('reports')
   const [data, setData] = useState<SLAComplianceReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -1270,8 +1274,8 @@ function SLAComplianceSection() {
 
   const handlePrint = () => window.print()
 
-  if (loading) return <div className="py-10 text-center text-gray-400 text-sm animate-pulse">로딩 중...</div>
-  if (error || !data) return <div className="py-10 text-center text-red-400 text-sm">데이터를 불러올 수 없습니다.</div>
+  if (loading) return <div className="py-10 text-center text-gray-400 text-sm animate-pulse">{tr('loading')}</div>
+  if (error || !data) return <div className="py-10 text-center text-red-400 text-sm">{tr('load_failed')}</div>
 
   const overallColor = data.overall_compliance_rate == null ? 'text-gray-500' :
     data.overall_compliance_rate >= 90 ? 'text-green-600 dark:text-green-400' :
@@ -1284,7 +1288,7 @@ function SLAComplianceSection() {
       {/* 기간 선택 + 인쇄 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600 dark:text-gray-400">기간:</span>
+          <span className="text-sm text-gray-600 dark:text-gray-400">{tr('period_label')}</span>
           {([4, 12, 26, 52] as const).map(w => (
             <button
               key={w}
@@ -1294,24 +1298,24 @@ function SLAComplianceSection() {
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
               }`}
-            >{w}주</button>
+            >{tr('weeks', { w })}</button>
           ))}
         </div>
         <button
           onClick={handlePrint}
           className="text-sm px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1"
         >
-          🖨️ 인쇄/PDF
+          {tr('print_pdf')}
         </button>
       </div>
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: '전체 SLA', value: `${data.total}건`, color: 'text-gray-900 dark:text-white' },
-          { label: 'SLA 준수', value: `${data.met}건`, color: 'text-green-600 dark:text-green-400' },
-          { label: 'SLA 위반', value: `${data.breached}건`, color: data.breached > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' },
-          { label: '전체 준수율', value: data.overall_compliance_rate != null ? `${data.overall_compliance_rate}%` : 'N/A', color: overallColor },
+          { label: tr('total_sla_label'), value: tr('cases', { n: data.total }), color: 'text-gray-900 dark:text-white' },
+          { label: tr('sla_met_label'), value: tr('cases', { n: data.met }), color: 'text-green-600 dark:text-green-400' },
+          { label: tr('sla_breached_label'), value: tr('cases', { n: data.breached }), color: data.breached > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' },
+          { label: tr('overall_rate_label'), value: data.overall_compliance_rate != null ? `${data.overall_compliance_rate}%` : 'N/A', color: overallColor },
         ].map(c => (
           <div key={c.label} className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl px-4 py-3 shadow-sm">
             <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{c.label}</p>
@@ -1323,7 +1327,7 @@ function SLAComplianceSection() {
       {/* 주별 트렌드 */}
       {data.trend.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">주별 SLA 준수율 트렌드</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{tr('weekly_sla_trend_title')}</h3>
           <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl p-4 shadow-sm overflow-x-auto">
             <div className="flex items-end gap-1 min-w-max h-32">
               {data.trend.map((t) => {
@@ -1331,7 +1335,7 @@ function SLAComplianceSection() {
                 const breachPct = t.total > 0 ? Math.round((t.breached / t.total) * 100) : 0
                 const barH = Math.round((t.total / maxTrend) * 100)
                 return (
-                  <div key={t.week} className="flex flex-col items-center gap-1" title={`${t.week}\n준수: ${t.met}건 (${metPct}%)\n위반: ${t.breached}건`}>
+                  <div key={t.week} className="flex flex-col items-center gap-1" title={tr('trend_tooltip', { week: t.week, met: t.met, metPct, breached: t.breached })}>
                     <div
                       className="w-6 rounded-t-sm flex flex-col-reverse overflow-hidden"
                       style={{ height: `${Math.max(barH, 4)}%` }}
@@ -1347,8 +1351,8 @@ function SLAComplianceSection() {
               })}
             </div>
             <div className="flex items-center gap-4 mt-3 text-xs text-gray-500 dark:text-gray-400">
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-green-400" />준수</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-red-400" />위반</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-green-400" />{tr('met_col')}</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-red-400" />{tr('breached_col')}</span>
             </div>
           </div>
         </div>
@@ -1357,16 +1361,16 @@ function SLAComplianceSection() {
       {/* 우선순위별 */}
       {data.by_priority.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">우선순위별 SLA 준수율</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{tr('sla_by_priority_title')}</h3>
           <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">우선순위</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">전체</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-green-600">준수</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-red-500">위반</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600">준수율</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">{tr('priority_col')}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{tr('total_col')}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-green-600">{tr('met_col')}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-red-500">{tr('breached_col')}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600">{tr('rate_col')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y dark:divide-gray-800">
@@ -1395,7 +1399,7 @@ function SLAComplianceSection() {
       {data.total === 0 && (
         <div className="py-16 text-center text-gray-400">
           <div className="text-4xl mb-3">📊</div>
-          <p>해당 기간에 SLA 기록이 없습니다.</p>
+          <p>{tr('no_sla_records')}</p>
         </div>
       )}
     </div>
@@ -1511,8 +1515,8 @@ function ReportsContent() {
           { key: 'overview', label: t('tab_overview') },
           { key: 'agents', label: t('tab_agents') },
           { key: 'dora', label: t('tab_dora') },
-          { key: 'time', label: '⏱️ 시간 추적' },
-          { key: 'sla', label: '📋 SLA 리포트' },
+          { key: 'time', label: t('tab_time') },
+          { key: 'sla', label: t('tab_sla') },
         ] as const).map(({ key, label }) => (
           <button
             key={key}
@@ -1555,14 +1559,14 @@ function ReportsContent() {
 
       {tab === 'time' && (
         <div className="report-tab-panel print-section">
-          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">⏱️ 시간 추적 리포트</h2>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">{t('time_report_title')}</h2>
           <TimeTrackingSection from={from} to={to} />
         </div>
       )}
 
       {tab === 'sla' && (
         <div className="report-tab-panel print-section">
-          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">📋 SLA 준수율 리포트</h2>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">{t('sla_report_title')}</h2>
           <SLAComplianceSection />
         </div>
       )}

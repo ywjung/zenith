@@ -20,7 +20,7 @@ import RouteProgressBar from '@/components/RouteProgressBar'
 import MobileFab from '@/components/MobileFab'
 import ScrollToTop from '@/components/ScrollToTop'
 import { ConfirmProvider } from '@/components/ConfirmProvider'
-import { getTranslations } from 'next-intl/server'
+import { getTranslations, getLocale, getMessages } from 'next-intl/server'
 
 export const metadata: Metadata = {
   title: 'ZENITH',
@@ -50,8 +50,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // H2: middleware에서 생성된 nonce를 읽어 인라인 스크립트에 적용
   const nonce = (await headers()).get('x-nonce') ?? ''
   const tc = await getTranslations('common')
+  // cookie 기반 locale(i18n/request.ts) — <html lang>·IntlProvider를 서버에서 일치시킴
+  const locale = await getLocale()
+  const messages = await getMessages()
   return (
-    <html lang="ko">
+    <html lang={locale}>
       <head>
         {/*
           다크 모드 FOUC 방지: hydration 전에 동기적으로 dark 클래스 적용.
@@ -68,7 +71,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200">
         <ThemeProvider>
-        <IntlProvider>
+        <IntlProvider locale={locale} messages={messages}>
         <AuthProvider>
           <RoleLabelsProvider>
           <ServiceTypesProvider>

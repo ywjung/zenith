@@ -38,10 +38,17 @@ x-logging: &default-logging
     max-size: "20m"
     max-file: "5"
 
+# ---------------------------------------------------------------------------
+# 공통 보안 옵션 앵커 — setuid/setgid 권한 상승 차단.
+# (GitLab omnibus는 runit su 기반 자체 권한 모델이라 제외)
+# ---------------------------------------------------------------------------
+x-security-opt: &default-security-opt
+  - "no-new-privileges:true"
+
 services:
 
   gitlab:
-    image: gitlab/gitlab-ce:18.11.1-ce.0
+    image: gitlab/gitlab-ce:18.11.4-ce.0
     container_name: gitlab
     restart: unless-stopped
     shm_size: "256m"
@@ -49,6 +56,10 @@ services:
       - "8929:8929"
       - "2224:22"
     environment:
+      # 컨테이너 재기동 시 omnibus 엔트리포인트가 번들 PostgreSQL 자동 업그레이드(16→17)를
+      # 시도하다 macOS Docker Desktop bind-mount 소켓 chmod 제약으로 크래시 루프에 빠지는 것을 방지.
+      # GitLab 18.11.4는 PG16에서 정상 동작하며, 19.0 업그레이드는 Linux/프로덕션에서 수행.
+      GITLAB_SKIP_PG_UPGRADE: "true"
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://localhost:8929'
         gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
@@ -76,6 +87,7 @@ services:
           memory: 2g
 
   postgres:
+    security_opt: *default-security-opt
     image: postgres:18
     container_name: itsm-postgres
     restart: unless-stopped
@@ -125,7 +137,8 @@ services:
           memory: 512m
 
   redis:
-    image: redis:8.4-alpine
+    security_opt: *default-security-opt
+    image: redis:8.8-alpine
     restart: unless-stopped
     command: >
       redis-server
@@ -158,7 +171,8 @@ services:
           memory: 256m
 
   clamav:
-    image: clamav/clamav:1.4
+    security_opt: *default-security-opt
+    image: clamav/clamav:1.5
     platform: linux/amd64
     restart: unless-stopped
     volumes:
@@ -184,6 +198,7 @@ services:
   # CI 배포:  IMAGE_API / IMAGE_API_TAG 환경변수로 레지스트리 이미지 사용
   # ---------------------------------------------------------------------------
   itsm-api:
+    security_opt: *default-security-opt
     image: ${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}
     restart: unless-stopped
     # gunicorn --graceful-timeout 60s + 백그라운드 스레드 55s 대기 → 최대 ~70s 필요.
@@ -255,6 +270,7 @@ services:
   # celery-worker — 이메일·Telegram·웹훅 알림을 비동기로 처리
   # ---------------------------------------------------------------------------
   celery-worker:
+    security_opt: *default-security-opt
     image: ${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}
     restart: unless-stopped
     command: celery -A app.celery_app:celery_app worker --loglevel=info --concurrency=4 --max-tasks-per-child=200 --max-memory-per-child=600000
@@ -287,6 +303,7 @@ services:
   # beat는 broker(redis)/DB만 필요. worker healthy 대기 불필요
   # ---------------------------------------------------------------------------
   celery-beat:
+    security_opt: *default-security-opt
     image: ${IMAGE_API:-itsm-api}:${IMAGE_API_TAG:-latest}
     restart: unless-stopped
     # 스케줄 파일을 named volume에 저장 — 컨테이너 재시작 후 마지막 실행 시각 유지
@@ -321,6 +338,7 @@ services:
   # FLOWER_USER / FLOWER_PASSWORD 를 .env 에 반드시 설정 필요
   # ---------------------------------------------------------------------------
   flower:
+    security_opt: *default-security-opt
     image: mher/flower:2.0.1
     restart: unless-stopped
     # basic_auth를 커맨드에서 환경변수로 이동 — ps aux 노출 방지
@@ -355,6 +373,7 @@ services:
   # NEXT_PUBLIC_* 변수는 빌드 시 바이너리에 삽입됨 (런타임 변경 불가)
   # ---------------------------------------------------------------------------
   itsm-web:
+    security_opt: *default-security-opt
     image: ${IMAGE_WEB:-itsm-web}:${IMAGE_WEB_TAG:-latest}
     restart: unless-stopped
     environment:
@@ -378,7 +397,8 @@ services:
           memory: 128m
 
   nginx:
-    image: nginx:1.29-alpine
+    security_opt: *default-security-opt
+    image: nginx:1.31-alpine
     restart: unless-stopped
     ulimits:
       nofile:
@@ -411,6 +431,7 @@ services:
           memory: 32m
 
   minio:
+    security_opt: *default-security-opt
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -437,7 +458,8 @@ services:
           memory: 128m
 
   prometheus:
-    image: prom/prometheus:v3.11.0
+    security_opt: *default-security-opt
+    image: prom/prometheus:v3.12.0
     restart: unless-stopped
     ports:
       - "127.0.0.1:9090:9090"
@@ -467,6 +489,7 @@ services:
           memory: 128m
 
   grafana:
+    security_opt: *default-security-opt
     image: grafana/grafana:12.4.3
     restart: unless-stopped
     ports:
@@ -507,7 +530,8 @@ services:
   # OpenTelemetry Collector (profiles: ["tracing"] — 선택적 활성화)
   # ---------------------------------------------------------------------------
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.150.1
+    security_opt: *default-security-opt
+    image: otel/opentelemetry-collector-contrib:0.153.0
     profiles: ["tracing"]
     restart: unless-stopped
     command: ["--config=/etc/otel-collector-config.yaml"]
@@ -525,7 +549,7 @@ services:
     logging: *default-logging
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.30.0
     profiles: ["ollama"]
     restart: unless-stopped
     volumes:
@@ -540,6 +564,7 @@ services:
     logging: *default-logging
 
   pg-backup:
+    security_opt: *default-security-opt
     image: postgres:18
     restart: unless-stopped
     environment:

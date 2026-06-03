@@ -37,7 +37,15 @@ interface SystemUser {
 const TRIGGER_KEY: Record<string, string> = { warning: 'trigger_warning', breach: 'trigger_breach' }
 const ACTION_KEY: Record<string, string> = { notify: 'action_notify', reassign: 'action_reassign', upgrade_priority: 'action_upgrade' }
 const PRIORITY_KEY: Record<string, string> = { critical: 'prio_critical', high: 'prio_high', medium: 'prio_medium', low: 'prio_low' }
-const ROLE_LABELS_DEFAULT: Record<string, string> = { admin: '시스템관리자', agent: 'IT 관리자', pl: 'PL', developer: '개발자', user: '일반 사용자' }
+function buildRoleLabelsDefault(tI18n: (key: string) => string): Record<string, string> {
+  return {
+    admin: tI18n('app_admin_escalation_policies_page.role_admin'),
+    agent: tI18n('app_admin_escalation_policies_page.role_agent'),
+    pl: tI18n('app_admin_escalation_policies_page.role_pl'),
+    developer: tI18n('app_admin_escalation_policies_page.role_developer'),
+    user: tI18n('app_admin_escalation_policies_page.role_user'),
+  }
+}
 const ROLE_COLORS: Record<string, string> = { admin: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300', agent: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300', developer: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300', user: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' }
 
 const EMPTY_FORM = {
@@ -150,9 +158,10 @@ function UserSelector({
 
 function EscalationContent() {
   const t = useTranslations('admin.escalation')
+  const tI18n = useTranslations()
   const confirm = useConfirm()
   const { isAdmin } = useAuth()
-  const ROLE_LABELS = { ...ROLE_LABELS_DEFAULT, ...useRoleLabels() }
+  const ROLE_LABELS = { ...buildRoleLabelsDefault(tI18n), ...useRoleLabels() }
   const [policies, setPolicies] = useState<EscalationPolicy[]>([])
   const [users, setUsers] = useState<SystemUser[]>([])
   const [loading, setLoading] = useState(true)

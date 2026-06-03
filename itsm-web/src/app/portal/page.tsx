@@ -129,7 +129,7 @@ export default function PortalPage() {
         ) : null}
         <div className="mt-4">
           <a href="/portal" className="text-sm text-gray-500 dark:text-gray-400 hover:underline">
-            {t('portal.submit_another') || '새 요청 제출'}
+            {t('portal.submit_another') || t('app_portal_page.submit_another')}
           </a>
         </div>
       </div>
@@ -158,7 +158,7 @@ export default function PortalPage() {
           {/* 카탈로그 로드 실패 안내 */}
           {catalogError && (
             <div className="mb-3 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs rounded-lg flex items-center gap-2">
-              <span>⚠️ 서비스 카탈로그를 불러오지 못했습니다.</span>
+              <span>⚠️ {t('app_portal_page.catalog_load_failed')}</span>
               <button
                 type="button"
                 onClick={() => {
@@ -170,7 +170,7 @@ export default function PortalPage() {
                 }}
                 className="underline hover:text-amber-900 dark:hover:text-amber-200"
               >
-                다시 시도
+                {t('app_portal_page.retry')}
               </button>
             </div>
           )}
@@ -259,7 +259,7 @@ export default function PortalPage() {
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 required
-                placeholder="홍길동"
+                placeholder={t('app_portal_page.name_placeholder')}
                 className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
