@@ -79,7 +79,7 @@ jobs:
           echo "E2E_ADMIN_TOKEN=$TOKEN" >> $GITHUB_ENV
 
       # ── 프론트엔드 빌드 & 서버 시작 ──
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
