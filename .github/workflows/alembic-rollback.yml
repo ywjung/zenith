@@ -32,7 +32,7 @@ jobs:
       SECRET_KEY: ci_test_secret_key_32chars_at_least
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Install
